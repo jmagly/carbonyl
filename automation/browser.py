@@ -2,8 +2,15 @@
 """
 Carbonyl browser automation layer.
 
-Spawns Carbonyl in a PTY via Docker, sends keystrokes, and returns the
-rendered screen as plain text using a pyte terminal emulator.
+Spawns Carbonyl in a PTY (local binary or Docker fallback), sends
+keystrokes, and returns the rendered screen as plain text via pyte.
+
+Local binary (preferred):
+    build/pre-built/x86_64-unknown-linux-gnu/carbonyl
+    Built by: scripts/build-local.sh
+
+Docker fallback (if no local binary):
+    docker run fathyb/carbonyl
 
 Usage:
     python automation/browser.py search "search term"
@@ -11,10 +18,13 @@ Usage:
 """
 
 import argparse
+import os
 import re
+import subprocess
 import sys
 import time
 import unicodedata
+from pathlib import Path
 
 import pexpect
 import pyte
@@ -22,6 +32,18 @@ import pyte
 # Terminal dimensions Carbonyl will render to
 COLS = 220
 ROWS = 50
+
+# Repo root — two levels up from this file (automation/browser.py)
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+def _local_binary() -> Path | None:
+    """Return path to local carbonyl binary if it exists and is executable."""
+    triple = subprocess.run(
+        ["bash", "scripts/platform-triple.sh"],
+        capture_output=True, text=True, cwd=_REPO_ROOT,
+    ).stdout.strip()
+    candidate = _REPO_ROOT / "build" / "pre-built" / triple / "carbonyl"
+    return candidate if candidate.is_file() and os.access(candidate, os.X_OK) else None
 
 # Unicode ranges that are graphical block/box characters Carbonyl uses for
 # pixel-level rendering. These are not page text — strip them for agents.
@@ -76,17 +98,28 @@ class CarbonylBrowser:
         self._child: pexpect.spawn | None = None
 
     def open(self, url: str) -> None:
-        # -t allocates a TTY inside the container so Carbonyl sees isatty(stdout)
-        cmd = (
-            f"docker run --rm -it "
-            f"fathyb/carbonyl --fps=5 {url}"
-        )
-        self._child = pexpect.spawn(
-            "bash", ["-c", cmd],
-            dimensions=(self.rows, self.cols),
-            timeout=90,
-            encoding=None,  # raw bytes — pyte needs bytes
-        )
+        binary = _local_binary()
+        if binary:
+            lib_dir = str(binary.parent)
+            env = {**os.environ, "LD_LIBRARY_PATH": lib_dir}
+            log(f"using local binary: {binary}")
+            self._child = pexpect.spawn(
+                str(binary), ["--fps=5", "--no-sandbox", url],
+                dimensions=(self.rows, self.cols),
+                timeout=90,
+                encoding=None,
+                env=env,
+                cwd=str(binary.parent),
+            )
+        else:
+            log("local binary not found, falling back to Docker image")
+            cmd = f"docker run --rm -it fathyb/carbonyl --fps=5 {url}"
+            self._child = pexpect.spawn(
+                "bash", ["-c", cmd],
+                dimensions=(self.rows, self.cols),
+                timeout=90,
+                encoding=None,
+            )
 
     def drain(self, seconds: float) -> None:
         """Read output for `seconds`, feeding bytes into the screen buffer."""
