@@ -2,6 +2,7 @@
 node_modules/
 .codex
 .claude
+.venv
 
 /.ccache
 /.git_cache
