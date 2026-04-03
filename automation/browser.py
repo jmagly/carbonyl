@@ -129,6 +129,13 @@ class CarbonylBrowser:
                      the session's profile directory is passed as
                      ``--user-data-dir`` to Chromium, preserving cookies,
                      localStorage, and IndexedDB across browser restarts.
+
+                     If a daemon is already running for this session (started
+                     via ``automation/daemon.py start <session>``), ``open()``
+                     will reconnect to the live process over a Unix socket
+                     instead of spawning a new browser. Call ``disconnect()``
+                     to release the socket while leaving the browser running.
+
                      Create/manage sessions with ``automation/session.py``
                      or ``SessionManager``.
         """
@@ -138,8 +145,33 @@ class CarbonylBrowser:
         self._screen = pyte.Screen(cols, rows)
         self._stream = pyte.ByteStream(self._screen)
         self._child: pexpect.spawn | None = None
+        self._daemon_client = None   # set when connected to a live daemon
 
     def open(self, url: str) -> None:
+        # If a daemon is already running for this session, reconnect to it
+        # instead of spawning a new browser process.
+        if self._session:
+            try:
+                from automation.daemon import is_daemon_live, DaemonClient
+            except ImportError:
+                import importlib.util as _ilu
+                _spec = _ilu.spec_from_file_location(
+                    "daemon", Path(__file__).parent / "daemon.py"
+                )
+                _mod = _ilu.module_from_spec(_spec)
+                _spec.loader.exec_module(_mod)
+                is_daemon_live = _mod.is_daemon_live
+                DaemonClient = _mod.DaemonClient
+
+            if is_daemon_live(self._session):
+                log(f"reconnecting to live daemon for session {self._session!r}")
+                client = DaemonClient(self._session)
+                client.connect()
+                self._daemon_client = client
+                # Navigate to the requested URL in the running browser
+                client.navigate(url)
+                return
+
         binary = _local_binary()
         args = ["--fps=5", "--no-sandbox"] + _HEADLESS_FLAGS
 
@@ -191,6 +223,9 @@ class CarbonylBrowser:
 
     def drain(self, seconds: float) -> None:
         """Read output for `seconds`, feeding bytes into the screen buffer."""
+        if self._daemon_client:
+            self._daemon_client.drain(seconds)
+            return
         deadline = time.time() + seconds
         while time.time() < deadline:
             try:
@@ -203,10 +238,16 @@ class CarbonylBrowser:
 
     def send(self, text: str) -> None:
         """Type text into the browser (encodes as UTF-8 bytes)."""
+        if self._daemon_client:
+            self._daemon_client.send(text)
+            return
         self._child.send(text.encode("utf-8"))
 
     def click(self, col: int, row: int) -> None:
         """Send a left-click at terminal cell (col, row) using SGR mouse protocol."""
+        if self._daemon_client:
+            self._daemon_client.click(col, row)
+            return
         press   = f"\x1b[<0;{col};{row}M".encode()
         release = f"\x1b[<0;{col};{row}m".encode()
         self._child.send(press)
@@ -228,6 +269,9 @@ class CarbonylBrowser:
 
     def send_key(self, key: str) -> None:
         """Send a named key sequence."""
+        if self._daemon_client:
+            self._daemon_client.send_key(key)
+            return
         keys = {
             "enter":     b"\r",
             "tab":       b"\t",
@@ -258,6 +302,9 @@ class CarbonylBrowser:
         Clicking at terminal (col, row=1) with col >= 12 focuses the URL bar.
         Arrow keys (via ANSI sequences) move the cursor within the URL.
         """
+        if self._daemon_client:
+            self._daemon_client.navigate(url)
+            return
         # 1. Click at col=12 row=1 → Carbonyl x=11 → cursor pos 0 in URL field
         self.click(12, 1)
         # 2. Jump cursor to end of current URL (Down arrow = \x1b[B = 0x12 internally)
@@ -271,22 +318,61 @@ class CarbonylBrowser:
 
     def nav_bar_url(self) -> str:
         """Extract the URL shown in Carbonyl's navigation bar, if visible."""
+        if self._daemon_client:
+            return self._daemon_client.nav_bar_url()
         text = self.page_text()
         m = re.search(r"https?://[^\s\]]+", text)
         return m.group(0) if m else ""
 
     def page_text(self) -> str:
         """Return current screen as clean readable text."""
+        if self._daemon_client:
+            return self._daemon_client.page_text()
         return extract_text(self._screen)
 
-    def close(self) -> None:
+    def disconnect(self) -> None:
+        """
+        Disconnect from a live daemon without stopping it.
+        The browser keeps running; the next ``open()`` with the same session
+        will reconnect. Use ``close()`` to actually stop the browser.
+        """
+        if self._daemon_client:
+            self._daemon_client.disconnect()
+            self._daemon_client = None
+            log(f"disconnected from daemon (session {self._session!r} still running)")
+
+    def close(self, graceful_timeout: float = 5.0) -> None:
+        """
+        Shut down the browser.
+
+        If connected to a daemon, sends a ``close`` command which stops
+        the daemon process and the browser it holds.
+
+        For directly-spawned browsers, sends SIGTERM first (when a session
+        is in use) to let Chromium flush session cookies to disk, then
+        SIGKILL if it doesn't exit within ``graceful_timeout`` seconds.
+        """
+        if self._daemon_client:
+            self._daemon_client.close_daemon()
+            self._daemon_client = None
+            return
         if self._child:
             try:
-                import signal, os
+                import signal as _signal
                 if self._child.isalive():
-                    # Kill the entire process group so Chromium child processes die too
+                    pgid = os.getpgid(self._child.pid)
+                    if self._session and graceful_timeout > 0:
+                        # Graceful shutdown: SIGTERM → wait → SIGKILL
+                        try:
+                            os.killpg(pgid, _signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                        deadline = time.time() + graceful_timeout
+                        while time.time() < deadline and self._child.isalive():
+                            time.sleep(0.2)
+                    # Force kill anything still alive
                     try:
-                        os.killpg(os.getpgid(self._child.pid), signal.SIGKILL)
+                        os.killpg(pgid, _signal.SIGKILL)
                     except ProcessLookupError:
                         pass
                     self._child.terminate(force=True)
