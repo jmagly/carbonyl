@@ -46,6 +46,18 @@ _HEADLESS_FLAGS = [
     "--use-mock-keychain",
     # Suppress navigator.webdriver=true so bot-detection scripts don't flag us.
     "--disable-blink-features=AutomationControlled",
+    # Spoof a standard Firefox User-Agent.
+    # The Carbonyl binary appends " (Carbonyl)" to whatever product name is compiled
+    # in, which Akamai and similar bot-detection engines immediately flag.  Overriding
+    # here with a genuine Firefox UA removes both the Chrome identifier and the
+    # "(Carbonyl)" marker.  This affects both navigator.userAgent (JS) and the
+    # HTTP User-Agent request header.
+    "--user-agent=Mozilla/5.0 (X11; Linux x86_64; rv:122.0) Gecko/20100101 Firefox/122.0",
+    # Force HTTP/1.1 by disabling HTTP/2.
+    # Chromium's HTTP/2 SETTINGS frame (window sizes, max streams, header table size)
+    # differs measurably from Firefox's and is a secondary fingerprint used by Akamai's
+    # server-side bot classifier.  Falling back to HTTP/1.1 removes this signal entirely.
+    "--disable-http2",
 ]
 
 def _session_manager():
