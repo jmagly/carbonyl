@@ -36,6 +36,32 @@ ROWS = 50
 # Repo root — two levels up from this file (automation/browser.py)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# Chromium flags to suppress first-run noise, sync, and keychain prompts.
+# Applied to every Carbonyl launch regardless of session.
+_HEADLESS_FLAGS = [
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-sync",
+    "--password-store=basic",
+    "--use-mock-keychain",
+]
+
+def _session_manager():
+    """Import and return a SessionManager, handling both package and script contexts."""
+    try:
+        from automation.session import SessionManager
+    except ImportError:
+        # Running as a script directly (python automation/browser.py)
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "session", Path(__file__).parent / "session.py"
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        SessionManager = _mod.SessionManager
+    return SessionManager()
+
+
 def _local_binary() -> Path | None:
     """Return path to local carbonyl binary if it exists and is executable."""
     triple = subprocess.run(
@@ -90,21 +116,50 @@ def extract_text(screen: pyte.Screen) -> str:
 
 
 class CarbonylBrowser:
-    def __init__(self, cols: int = COLS, rows: int = ROWS):
+    def __init__(
+        self,
+        cols: int = COLS,
+        rows: int = ROWS,
+        session: str | None = None,
+    ):
+        """
+        Args:
+            cols, rows: Terminal dimensions Carbonyl renders to.
+            session: Named session to use for persistent state. If given,
+                     the session's profile directory is passed as
+                     ``--user-data-dir`` to Chromium, preserving cookies,
+                     localStorage, and IndexedDB across browser restarts.
+                     Create/manage sessions with ``automation/session.py``
+                     or ``SessionManager``.
+        """
         self.cols = cols
         self.rows = rows
+        self._session = session
         self._screen = pyte.Screen(cols, rows)
         self._stream = pyte.ByteStream(self._screen)
         self._child: pexpect.spawn | None = None
 
     def open(self, url: str) -> None:
         binary = _local_binary()
+        args = ["--fps=5", "--no-sandbox"] + _HEADLESS_FLAGS
+
+        if self._session:
+            sm = _session_manager()
+            if not sm.exists(self._session):
+                sm.create(self._session)
+            sm.clean_stale_lock(self._session)
+            profile = sm.profile_dir(self._session)
+            args.append(f"--user-data-dir={profile}")
+            log(f"session: {self._session!r}  profile: {profile}")
+
+        args.append(url)
+
         if binary:
             lib_dir = str(binary.parent)
             env = {**os.environ, "LD_LIBRARY_PATH": lib_dir}
             log(f"using local binary: {binary}")
             self._child = pexpect.spawn(
-                str(binary), ["--fps=5", "--no-sandbox", url],
+                str(binary), args,
                 dimensions=(self.rows, self.cols),
                 timeout=90,
                 encoding=None,
@@ -113,7 +168,20 @@ class CarbonylBrowser:
             )
         else:
             log("local binary not found, falling back to Docker image")
-            cmd = f"docker run --rm -it fathyb/carbonyl --fps=5 {url}"
+            # Docker: mount session profile if provided; ignore _HEADLESS_FLAGS
+            # (they're already baked into the image entrypoint)
+            flag_str = " ".join(
+                a for a in args
+                if not a.startswith("--user-data-dir")
+                and a not in _HEADLESS_FLAGS
+            )
+            vol = ""
+            if self._session:
+                sm = _session_manager()
+                profile = sm.profile_dir(self._session)
+                vol = f"-v {profile}:/data/profile "
+                flag_str += " --user-data-dir=/data/profile"
+            cmd = f"docker run --rm -it {vol}fathyb/carbonyl {flag_str}"
             self._child = pexpect.spawn(
                 "bash", ["-c", cmd],
                 dimensions=(self.rows, self.cols),
@@ -137,6 +205,27 @@ class CarbonylBrowser:
         """Type text into the browser (encodes as UTF-8 bytes)."""
         self._child.send(text.encode("utf-8"))
 
+    def click(self, col: int, row: int) -> None:
+        """Send a left-click at terminal cell (col, row) using SGR mouse protocol."""
+        press   = f"\x1b[<0;{col};{row}M".encode()
+        release = f"\x1b[<0;{col};{row}m".encode()
+        self._child.send(press)
+        self._child.send(release)
+
+    def click_on(self, text: str, offset_col: int = 0) -> bool:
+        """
+        Find `text` in the current screen buffer and click just after it.
+        Returns True if found and clicked, False if not found.
+        """
+        for row_idx in sorted(self._screen.buffer.keys()):
+            row = self._screen.buffer[row_idx]
+            line = "".join(char.data for char in row.values())
+            col = line.find(text)
+            if col != -1:
+                self.click(col + len(text) + 1 + offset_col, row_idx + 1)
+                return True
+        return False
+
     def send_key(self, key: str) -> None:
         """Send a named key sequence."""
         keys = {
@@ -154,6 +243,32 @@ class CarbonylBrowser:
             raise ValueError(f"Unknown key: {key!r}. Valid: {list(keys)}")
         self._child.send(seq)
 
+    def navigate(self, url: str) -> None:
+        """
+        Navigate to `url` by editing the Carbonyl address bar directly.
+
+        Carbonyl nav bar layout (row 0 in Carbonyl = terminal row 1):
+          col 0-2   [❮] back   → mouse_down x in 0..=2
+          col 3-5   [❯] forward → mouse_down x in 3..=5
+          col 6-8   [↻] refresh → mouse_down x in 6..=8
+          col 9     [
+          col 10    space
+          col 11+   URL field  → cursor = x - 11
+
+        Clicking at terminal (col, row=1) with col >= 12 focuses the URL bar.
+        Arrow keys (via ANSI sequences) move the cursor within the URL.
+        """
+        # 1. Click at col=12 row=1 → Carbonyl x=11 → cursor pos 0 in URL field
+        self.click(12, 1)
+        # 2. Jump cursor to end of current URL (Down arrow = \x1b[B = 0x12 internally)
+        self._child.send(b"\x1b[B")
+        # 3. Backspace entire URL (200 chars is more than any URL we'd see)
+        self._child.send(b"\x7f" * 250)
+        # 4. Type new URL
+        self._child.send(url.encode("ascii"))
+        # 5. Press Enter to navigate
+        self._child.send(b"\r")
+
     def nav_bar_url(self) -> str:
         """Extract the URL shown in Carbonyl's navigation bar, if visible."""
         text = self.page_text()
@@ -165,8 +280,18 @@ class CarbonylBrowser:
         return extract_text(self._screen)
 
     def close(self) -> None:
-        if self._child and self._child.isalive():
-            self._child.terminate(force=True)
+        if self._child:
+            try:
+                import signal, os
+                if self._child.isalive():
+                    # Kill the entire process group so Chromium child processes die too
+                    try:
+                        os.killpg(os.getpgid(self._child.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    self._child.terminate(force=True)
+            except Exception:
+                pass
 
 
 def search_duckduckgo(
