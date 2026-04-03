@@ -159,7 +159,7 @@ class DaemonClient:
         return self._rpc({"cmd": "url"})["result"]
 
     def find_text(self, text: str) -> list[dict]:
-        """Return list of {col, row} for all occurrences of text in the raw screen."""
+        """Return [{col, row, end_col}, ...] for all occurrences (all 1-indexed)."""
         return self._rpc({"cmd": "find_text", "text": text})["result"]
 
     def raw_lines(self) -> list[dict]:
@@ -229,7 +229,8 @@ class _BrowserHandler(socketserver.StreamRequestHandler):
             elif cmd == "url":
                 return {"ok": True, "result": browser.nav_bar_url()}
             elif cmd == "find_text":
-                # Find text in raw screen buffer; return [{col, row}, ...] of all matches
+                # Find text in raw screen buffer; return [{col, row, end_col}, ...]
+                # All values are 1-indexed (col of first char, end_col inclusive).
                 needle = req.get("text", "")
                 matches = []
                 for row_idx in sorted(browser._screen.buffer.keys()):
@@ -237,11 +238,15 @@ class _BrowserHandler(socketserver.StreamRequestHandler):
                     line = "".join(c.data for c in row.values())
                     start = 0
                     while True:
-                        col = line.find(needle, start)
-                        if col == -1:
+                        idx = line.find(needle, start)
+                        if idx == -1:
                             break
-                        matches.append({"col": col, "row": row_idx + 1})
-                        start = col + 1
+                        matches.append({
+                            "col": idx + 1,
+                            "row": row_idx + 1,
+                            "end_col": idx + len(needle),
+                        })
+                        start = idx + 1
                 return {"ok": True, "result": matches}
             elif cmd == "raw_lines":
                 # Return raw screen lines as [{row, text}, ...] for coord-based search

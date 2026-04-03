@@ -18,9 +18,13 @@ Usage:
     # Highlight a rectangular region
     si.print_grid(regions=[(0, 28, 160, 32)])
 
-    # Find text and mark all occurrences
+    # Find text and mark all occurrences (find_text returns 1-indexed, matching ScreenInspector)
     matches = browser.find_text("Sign In")
     si.print_grid(marks=[(m["col"], m["row"]) for m in matches])
+
+    # Or: click the first occurrence directly
+    browser.click_text("Sign In")              # click center of text
+    browser.click_at_row("Submit", row=42)     # click on a specific row
 
     # Get annotated text for an agent to reason about
     annotated = si.annotate(marks=[(46, 45)], context_rows=3)

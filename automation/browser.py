@@ -288,19 +288,58 @@ class CarbonylBrowser:
         self._child.send(press)
         self._child.send(release)
 
-    def click_on(self, text: str, offset_col: int = 0) -> bool:
+    def click_on(self, text: str, offset_col: int = 0, occurrence: int = 0) -> tuple[int, int] | None:
         """
-        Find `text` in the current screen buffer and click just after it.
-        Returns True if found and clicked, False if not found.
+        Find ``text`` on screen and click its center (or offset from center).
+
+        Works in both direct and daemon-connected modes.
+
+        Args:
+            text:        Text to search for.
+            offset_col:  Column offset relative to the center of the found text
+                         (positive = right, negative = left).
+            occurrence:  Which occurrence to click (0 = first, 1 = second, …).
+
+        Returns:
+            ``(col, row)`` of the click point (1-indexed), or ``None`` if not found.
         """
-        for row_idx in sorted(self._screen.buffer.keys()):
-            row = self._screen.buffer[row_idx]
-            line = "".join(char.data for char in row.values())
-            col = line.find(text)
-            if col != -1:
-                self.click(col + len(text) + 1 + offset_col, row_idx + 1)
-                return True
-        return False
+        matches = self.find_text(text)
+        if not matches or occurrence >= len(matches):
+            return None
+        m = matches[occurrence]
+        # Click center of matched text span
+        center = m["col"] + (len(text) - 1) // 2 + offset_col
+        self.click(center, m["row"])
+        return (center, m["row"])
+
+    # click_text is the preferred name; click_on is kept for compatibility.
+    click_text = click_on
+
+    def find_at_row(self, text: str, row: int) -> dict | None:
+        """
+        Find ``text`` on a specific row (1-indexed).
+
+        Returns the first ``{"col", "row", "end_col"}`` match on that row,
+        or ``None`` if not found. Useful when the same text appears multiple
+        times but you know which row the target element is on.
+        """
+        for m in self.find_text(text):
+            if m["row"] == row:
+                return m
+        return None
+
+    def click_at_row(self, text: str, row: int, offset_col: int = 0) -> tuple[int, int] | None:
+        """
+        Find ``text`` on a specific row and click its center.
+
+        Returns ``(col, row)`` of the click point, or ``None`` if not found.
+        """
+        m = self.find_at_row(text, row)
+        if m is None:
+            return None
+        center = m["col"] + (len(text) - 1) // 2 + offset_col
+        self.click(center, m["row"])
+        return (center, m["row"])
 
     def send_key(self, key: str) -> None:
         """Send a named key sequence."""
@@ -368,7 +407,17 @@ class CarbonylBrowser:
     def find_text(self, text: str) -> list[dict]:
         """
         Find all occurrences of ``text`` in the raw terminal buffer.
-        Returns a list of ``{"col": int, "row": int}`` dicts (1-indexed).
+
+        Returns a list of dicts (all values 1-indexed, matching terminal/SGR
+        convention so coordinates can be passed directly to ``click()``):
+
+        .. code-block:: python
+
+            [{"col": int, "row": int, "end_col": int}, ...]
+
+        ``col`` is the column of the first character of the match.
+        ``end_col`` is the column of the last character (inclusive).
+
         Works in both direct and daemon-connected modes.
         """
         if self._daemon_client:
@@ -379,11 +428,15 @@ class CarbonylBrowser:
             line = "".join(c.data for c in row.values())
             start = 0
             while True:
-                col = line.find(text, start)
-                if col == -1:
+                idx = line.find(text, start)
+                if idx == -1:
                     break
-                results.append({"col": col, "row": row_idx + 1})
-                start = col + 1
+                results.append({
+                    "col": idx + 1,               # 1-indexed start col
+                    "row": row_idx + 1,            # 1-indexed row
+                    "end_col": idx + len(text),    # 1-indexed end col (inclusive)
+                })
+                start = idx + 1
         return results
 
     def raw_lines(self) -> list[dict]:
