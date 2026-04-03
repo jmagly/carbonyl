@@ -1,7 +1,7 @@
-From cc9c37adb3ad2613a114bd37e1fde43f83951d88 Mon Sep 17 00:00:00 2001
+From 9584bc331b45159eeec48ff3271c4ad7c4c32ad0 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:00:43 +0100
-Subject: [PATCH 06/14] Setup display DPI
+Subject: [PATCH 06/15] Setup display DPI
 
 ---
  .../lib/browser/headless_browser_impl_aura.cc | 11 ++--
@@ -10,19 +10,19 @@ Subject: [PATCH 06/14] Setup display DPI
  3 files changed, 35 insertions(+), 33 deletions(-)
 
 diff --git a/headless/lib/browser/headless_browser_impl_aura.cc b/headless/lib/browser/headless_browser_impl_aura.cc
-index 81261215c702f..508660db32151 100644
+index 7f0223b4fb24d..7d27dce7dea8f 100644
 --- a/headless/lib/browser/headless_browser_impl_aura.cc
 +++ b/headless/lib/browser/headless_browser_impl_aura.cc
-@@ -19,6 +19,8 @@
- #include "ui/events/devices/device_data_manager.h"
+@@ -18,6 +18,8 @@
  #include "ui/gfx/geometry/rect.h"
+ #include "ui/gfx/native_widget_types.h"
  
 +#include "carbonyl/src/browser/bridge.h"
 +
  namespace headless {
  
  void HeadlessBrowserImpl::PlatformInitialize() {
-@@ -57,13 +59,8 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+@@ -51,13 +53,8 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
      const gfx::Rect& bounds) {
    // Browser's window bounds should contain all web contents, so that we're sure
    // that we will actually produce visible damage when taking a screenshot.
@@ -62,7 +62,7 @@ index 28f1a65f6dce5..8bf00ef5e036a 100644
  }
  
 diff --git a/ui/display/display.cc b/ui/display/display.cc
-index 466ef1fd1fe6e..1d71f3b4c9857 100644
+index 5200e03316701..ba6b47b9bae29 100644
 --- a/ui/display/display.cc
 +++ b/ui/display/display.cc
 @@ -21,6 +21,8 @@
@@ -126,7 +126,7 @@ index 466ef1fd1fe6e..1d71f3b4c9857 100644
  }
  
  // static
-@@ -273,15 +275,15 @@ void Display::SetScaleAndBounds(float device_scale_factor,
+@@ -255,15 +257,15 @@ void Display::SetScaleAndBounds(float device_scale_factor,
  }
  
  void Display::SetScale(float device_scale_factor) {

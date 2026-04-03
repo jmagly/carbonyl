@@ -1,7 +1,7 @@
-From 6862e372717eff278470453e800dc693f33b873c Mon Sep 17 00:00:00 2001
+From 068cf380231171d73b1f88bafb2174c0b7eefb4f Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 02:20:32 +0100
-Subject: [PATCH 12/14] Create separate bridge for Blink
+Subject: [PATCH 12/15] Create separate bridge for Blink
 
 ---
  .../blink/renderer/core/css/resolver/style_resolver.cc    | 4 ++--
@@ -10,10 +10,10 @@ Subject: [PATCH 12/14] Create separate bridge for Blink
  3 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 7129982acf4a6..cb116ee07c8f6 100644
+index 126eb38ee3539..8b8e5909a7b54 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -116,7 +116,7 @@
+@@ -119,7 +119,7 @@
  #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
  #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
  
@@ -22,8 +22,8 @@ index 7129982acf4a6..cb116ee07c8f6 100644
  
  namespace blink {
  
-@@ -1043,7 +1043,7 @@ scoped_refptr<ComputedStyle> StyleResolver::ResolveStyle(
-     UseCounter::Count(GetDocument(), WebFeature::kHasGlyphRelativeUnits);
+@@ -1142,7 +1142,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+     GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
 -  if (!carbonyl::Bridge::BitmapMode()) {
@@ -32,23 +32,23 @@ index 7129982acf4a6..cb116ee07c8f6 100644
      FontFamily family;
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 63fc13e44b5ae..ceb41d781acf6 100644
+index 3f8b63fb2b000..25dfb7c0507e2 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1678,7 +1678,7 @@ component("platform") {
+@@ -1697,7 +1697,7 @@ component("platform") {
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
      "//build:chromeos_buildflags",
 -    "//carbonyl/src/browser:carbonyl",
 +    "//carbonyl/src/browser:blink",
+     "//cc",
      "//cc/ipc",
      "//cc/mojo_embedder",
-     "//components/paint_preview/common",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 4625300729523..3d1b463e9651c 100644
+index 5d3987f772c46..73e39cab085c3 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -49,7 +49,7 @@
+@@ -46,7 +46,7 @@
  #include "third_party/skia/include/core/SkTextBlob.h"
  #include "ui/gfx/geometry/rect_f.h"
  
@@ -57,16 +57,16 @@ index 4625300729523..3d1b463e9651c 100644
  
  namespace blink {
  
-@@ -158,7 +158,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
+@@ -155,7 +155,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
                 const ShapeResultBloberizer::BlobBuffer& blobs,
                 const gfx::PointF& point,
-                cc::NodeId node_id = cc::kInvalidNodeId) {  
+                cc::NodeId node_id = cc::kInvalidNodeId) {
 -  if (!carbonyl::Bridge::BitmapMode()) {
 +  if (!carbonyl::blink::BitmapMode()) {
      return;
    }
  
-@@ -237,7 +237,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -231,7 +231,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -75,7 +75,7 @@ index 4625300729523..3d1b463e9651c 100644
      auto string = StringView(
        run_info.run.ToStringView(),
        run_info.from,
-@@ -285,7 +285,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -278,7 +278,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

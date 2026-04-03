@@ -1,7 +1,7 @@
-From 0ed9a390f25d73492ce1170ce229b95772fd458d Mon Sep 17 00:00:00 2001
+From 5f7bb69c6361e730845a4bdac6cba2a1dc8c4ebd Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:20:50 +0100
-Subject: [PATCH 01/14] Add Carbonyl library
+Subject: [PATCH 01/15] Add Carbonyl library
 
 ---
  carbonyl/build    |  1 +
@@ -28,18 +28,18 @@ index 0000000000000..dabb0e15a991e
 +../../../src
 \ No newline at end of file
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index bfae1e3290de0..8018111ed9898 100644
+index 1fc8258845aae..68c508f1cbeb4 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -453,6 +453,7 @@ component("headless_non_renderer") {
-     "//build:branding_buildflags",
+@@ -416,6 +416,7 @@ component("headless_non_renderer") {
+     "//base:base_static",
      "//build:branding_buildflags",
      "//build:chromeos_buildflags",
 +    "//carbonyl/src/browser:carbonyl",
      "//components/cookie_config",
      "//components/crash/core/common:common",
-     "//components/embedder_support",
-@@ -993,13 +994,25 @@ static_library("headless_shell_lib") {
+     "//components/devtools/devtools_pipe",
+@@ -944,13 +945,25 @@ static_library("headless_shell_lib") {
  }
  
  executable("headless_shell") {

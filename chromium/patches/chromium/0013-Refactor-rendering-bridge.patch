@@ -1,7 +1,7 @@
-From 3b67b346ec26a47b50178124d715a8320f612d4d Mon Sep 17 00:00:00 2001
+From bfaf33d5c42e9102cbece36cf2deedd2b19895cb Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Mon, 13 Feb 2023 16:28:50 +0100
-Subject: [PATCH 13/14] Refactor rendering bridge
+Subject: [PATCH 13/15] Refactor rendering bridge
 
 ---
  components/viz/service/BUILD.gn               |   3 +
@@ -17,12 +17,12 @@ Subject: [PATCH 13/14] Refactor rendering bridge
  headless/BUILD.gn                             |  10 +-
  headless/app/headless_shell.cc                |   6 +-
  headless/app/headless_shell_main.cc           |   4 +-
- headless/lib/browser/headless_browser_impl.cc |  12 +-
+ headless/lib/browser/headless_browser_impl.cc |  11 +-
  .../lib/browser/headless_browser_impl_aura.cc |   2 +-
- .../lib/browser/headless_browser_impl_mac.mm  |   9 +-
- .../headless_browser_main_parts_mac.mm        |   9 +
- headless/lib/browser/headless_screen.cc       |  28 +++-
- headless/lib/browser/headless_screen.h        |   8 +-
+ .../lib/browser/headless_browser_impl_mac.mm  |   6 +
+ .../headless_browser_main_parts_mac.mm        |  27 +++
+ headless/lib/browser/headless_screen.cc       |  29 +++-
+ headless/lib/browser/headless_screen.h        |   9 +-
  .../lib/browser/headless_web_contents_impl.cc |   8 +-
  printing/printing_context_mac.mm              |   2 +
  third_party/blink/renderer/core/BUILD.gn      |   1 +
@@ -31,15 +31,16 @@ Subject: [PATCH 13/14] Refactor rendering bridge
  .../blink/renderer/platform/fonts/font.cc     |   8 +-
  ui/display/BUILD.gn                           |   1 +
  ui/display/display.cc                         |  51 +-----
- 27 files changed, 351 insertions(+), 84 deletions(-)
+ 27 files changed, 368 insertions(+), 83 deletions(-)
  create mode 100644 components/viz/service/display_embedder/software_output_device_proxy.cc
  create mode 100644 components/viz/service/display_embedder/software_output_device_proxy.h
+ create mode 100644 headless/lib/browser/headless_browser_main_parts_mac.mm
 
 diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
-index fb793e98d5939..e1b4dfa4cd49f 100644
+index 9e66224b5cdb1..09954f71a180b 100644
 --- a/components/viz/service/BUILD.gn
 +++ b/components/viz/service/BUILD.gn
-@@ -139,6 +139,8 @@ viz_component("service") {
+@@ -145,6 +145,8 @@ viz_component("service") {
      "display_embedder/skia_render_copy_results.h",
      "display_embedder/software_output_surface.cc",
      "display_embedder/software_output_surface.h",
@@ -48,16 +49,16 @@ index fb793e98d5939..e1b4dfa4cd49f 100644
      "display_embedder/vsync_parameter_listener.cc",
      "display_embedder/vsync_parameter_listener.h",
      "frame_sinks/begin_frame_tracker.cc",
-@@ -229,6 +231,7 @@ viz_component("service") {
+@@ -237,6 +239,7 @@ viz_component("service") {
      "//build:chromeos_buildflags",
      "//cc/base",
      "//cc/paint",
 +    "//carbonyl/src/browser:viz",
      "//components/crash/core/common:crash_key",
-     "//components/power_scheduler",
+     "//components/startup_metric_utils",
  
 diff --git a/components/viz/service/display_embedder/output_surface_provider_impl.cc b/components/viz/service/display_embedder/output_surface_provider_impl.cc
-index 2929ebd3887c2..cd6f81dfa8b1d 100644
+index 0937bb2a6eadf..a3f902c9d65fe 100644
 --- a/components/viz/service/display_embedder/output_surface_provider_impl.cc
 +++ b/components/viz/service/display_embedder/output_surface_provider_impl.cc
 @@ -16,7 +16,6 @@
@@ -335,10 +336,10 @@ index 0000000000000..4f0a64830b18b
 +
 +#endif  // CARBONYL_SRC_BROWSER_SOFTWARE_OUTPUT_DEVICE_PROXY_H_
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index aff547e8e5ed0..d2645a0be3008 100644
+index 4c66836806fcd..ff72b7b41718c 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
-@@ -69,6 +69,8 @@ source_set("browser") {
+@@ -67,6 +67,8 @@ source_set("browser") {
      "//build:chromecast_buildflags",
      "//build:chromeos_buildflags",
      "//build/config/compiler:compiler_buildflags",
@@ -348,10 +349,10 @@ index aff547e8e5ed0..d2645a0be3008 100644
      "//cc/animation",
      "//cc/mojo_embedder",
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index 4eb891c32b474..6ae4005040371 100644
+index 756946ba25eef..b639210847544 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -1650,7 +1650,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
+@@ -1769,7 +1769,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
    // Mac display info may originate from a remote process hosting the NSWindow;
    // this local process display::Screen signal should not trigger updates.
    // TODO(crbug.com/1169291): Unify screen info plumbing, caching, etc.
@@ -360,9 +361,9 @@ index 4eb891c32b474..6ae4005040371 100644
    // This updates Screen attributes and fires Screen.change events as needed,
    // propagating to all widgets through the VisualProperties update waterfall.
    // This is triggered by system changes, not renderer IPC, so explicitly check
-@@ -1662,7 +1662,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
-     if (!view->IsRenderWidgetHostViewChildFrame())
+@@ -1782,7 +1782,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
        view->UpdateScreenInfo();
+     }
    }
 -#endif  // !BUILDFLAG(IS_MAC)
 +// #endif  // !BUILDFLAG(IS_MAC)
@@ -370,10 +371,10 @@ index 4eb891c32b474..6ae4005040371 100644
  
  void WebContentsImpl::OnScreenOrientationChange() {
 diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
-index 3f0ecf8749e44..196c3174e20f1 100644
+index a42970282ae28..8439779a365fd 100644
 --- a/content/browser/web_contents/web_contents_impl.h
 +++ b/content/browser/web_contents/web_contents_impl.h
-@@ -265,7 +265,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
+@@ -274,7 +274,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
  
    // Called on screen information changes; |is_multi_screen_changed| is true iff
    // the plurality of connected screens changed (e.g. 1 screen <-> 2 screens).
@@ -383,10 +384,10 @@ index 3f0ecf8749e44..196c3174e20f1 100644
    void OnScreenOrientationChange();
  
 diff --git a/content/public/browser/web_contents.h b/content/public/browser/web_contents.h
-index 1fd156150b6b5..60be0bf1bda48 100644
+index 3707858d0af59..cc29138330113 100644
 --- a/content/public/browser/web_contents.h
 +++ b/content/public/browser/web_contents.h
-@@ -344,6 +344,9 @@ class WebContents : public PageNavigator,
+@@ -370,6 +370,9 @@ class WebContents : public PageNavigator,
  
    ~WebContents() override = default;
  
@@ -397,10 +398,10 @@ index 1fd156150b6b5..60be0bf1bda48 100644
  
    // Gets/Sets the delegate.
 diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
-index 2a2410d4a46c1..1900c294f2f65 100644
+index 697fa7c5e98e7..084e9b272bc83 100644
 --- a/content/renderer/BUILD.gn
 +++ b/content/renderer/BUILD.gn
-@@ -229,6 +229,9 @@ target(link_target_type, "renderer") {
+@@ -237,6 +237,9 @@ target(link_target_type, "renderer") {
      "//base:i18n",
      "//build:chromecast_buildflags",
      "//build:chromeos_buildflags",
@@ -411,10 +412,10 @@ index 2a2410d4a46c1..1900c294f2f65 100644
      "//cc/animation",
      "//cc/mojo_embedder",
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 891efd6a9d796..379cf6c58b2b0 100644
+index 5698dcdd359d9..f2a81a0fc123a 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -285,6 +285,7 @@
+@@ -290,6 +290,7 @@
  #include "third_party/skia/include/svg/SkSVGCanvas.h"
  #include "third_party/skia/include/utils/SkBase64.h"
  #include "third_party/skia/src/text/GlyphRun.h"
@@ -422,7 +423,7 @@ index 891efd6a9d796..379cf6c58b2b0 100644
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
  #include "third_party/skia/src/core/SkFontPriv.h"
-@@ -2243,6 +2244,10 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2315,6 +2316,10 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    );
  
    host->ObserveTerminalRender(render_callback_);
@@ -434,20 +435,20 @@ index 891efd6a9d796..379cf6c58b2b0 100644
  
  void RenderFrameImpl::GetInterface(
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index 8018111ed9898..17120c83ee13e 100644
+index 68c508f1cbeb4..a9623f7720de5 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -349,6 +349,8 @@ component("headless_non_renderer") {
+@@ -327,6 +327,8 @@ component("headless_non_renderer") {
      "lib/browser/headless_platform_event_source.h",
      "lib/browser/headless_request_context_manager.cc",
      "lib/browser/headless_request_context_manager.h",
 +    "lib/browser/headless_screen.cc",
 +    "lib/browser/headless_screen.h",
-     "lib/browser/headless_select_file_dialog_factory.cc",
-     "lib/browser/headless_select_file_dialog_factory.h",
      "lib/browser/headless_web_contents_impl.cc",
-@@ -416,8 +418,6 @@ component("headless_non_renderer") {
-       "lib/browser/headless_clipboard.h",
+     "lib/browser/headless_web_contents_impl.h",
+     "lib/browser/headless_window_tree_host.h",
+@@ -383,8 +385,6 @@ component("headless_non_renderer") {
+       "lib/browser/headless_browser_impl_aura.cc",
        "lib/browser/headless_focus_client.cc",
        "lib/browser/headless_focus_client.h",
 -      "lib/browser/headless_screen.cc",
@@ -455,8 +456,8 @@ index 8018111ed9898..17120c83ee13e 100644
        "lib/browser/headless_window_parenting_client.cc",
        "lib/browser/headless_window_parenting_client.h",
        "lib/browser/headless_window_tree_host.cc",
-@@ -453,7 +453,8 @@ component("headless_non_renderer") {
-     "//build:branding_buildflags",
+@@ -416,7 +416,8 @@ component("headless_non_renderer") {
+     "//base:base_static",
      "//build:branding_buildflags",
      "//build:chromeos_buildflags",
 -    "//carbonyl/src/browser:carbonyl",
@@ -464,16 +465,16 @@ index 8018111ed9898..17120c83ee13e 100644
 +    "//carbonyl/src/browser:renderer",
      "//components/cookie_config",
      "//components/crash/core/common:common",
-     "//components/embedder_support",
-@@ -474,6 +475,7 @@ component("headless_non_renderer") {
+     "//components/devtools/devtools_pipe",
+@@ -438,6 +439,7 @@ component("headless_non_renderer") {
+     "//components/prefs",
      "//components/profile_metrics",
-     "//components/profile_metrics:profile_metrics",
      "//components/security_state/core",
 +    "//components/zoom",
+     "//components/version_info",
      "//content/public/app",
-     "//content/public/app:app",
      "//content/public/browser",
-@@ -1011,7 +1013,7 @@ executable("headless_shell") {
+@@ -962,7 +964,7 @@ executable("headless_shell") {
  
    deps = [
      ":headless_shell_lib",
@@ -483,19 +484,19 @@ index 8018111ed9898..17120c83ee13e 100644
  
    if (!headless_use_embedded_resources) {
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index b6a52857e8f90..6aed55bd6062d 100644
+index 8be8618ea5089..dd788f23e205a 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -4,7 +4,7 @@
  
- #include "headless/app/headless_shell.h"
+ #include "headless/public/headless_shell.h"
  
 -#include "carbonyl/src/browser/bridge.h"
 +#include "carbonyl/src/browser/renderer.h"
  
  #include <memory>
  
-@@ -93,9 +93,9 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -108,9 +108,9 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
    HeadlessBrowserContext::Builder context_builder =
        browser_->CreateBrowserContextBuilder();
  
@@ -505,10 +506,10 @@ index b6a52857e8f90..6aed55bd6062d 100644
 -  context_builder.SetWindowSize(carbonyl::Bridge::GetCurrent()->GetSize());
 +  context_builder.SetWindowSize(carbonyl::Renderer::GetCurrent()->GetSize());
  
-   // Retrieve the locale set by InitApplicationLocale() in
-   // headless_content_main_delegate.cc in a way that is free of side-effects.
+   // Create browser  context and set it as the default. The default browser
+   // context is used by the Target.createTarget() DevTools command when no other
 diff --git a/headless/app/headless_shell_main.cc b/headless/app/headless_shell_main.cc
-index 739df1ae1bd58..1f6184af60ef0 100644
+index e8dc41abba686..5947c77209c21 100644
 --- a/headless/app/headless_shell_main.cc
 +++ b/headless/app/headless_shell_main.cc
 @@ -14,10 +14,10 @@
@@ -522,33 +523,26 @@ index 739df1ae1bd58..1f6184af60ef0 100644
 -  carbonyl::Bridge::Main();
 +  carbonyl::Renderer::Main();
  
+   content::ContentMainParams params(nullptr);
  #if BUILDFLAG(IS_WIN)
-   sandbox::SandboxInterfaceInfo sandbox_info = {nullptr};
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 1df3ffe72c93d..5aa0bdc25e409 100644
+index ab6f0989fd682..49840d5b9d2e1 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -15,6 +15,7 @@
- #include "base/memory/ptr_util.h"
- #include "base/run_loop.h"
- #include "base/threading/thread_task_runner_handle.h"
+@@ -17,10 +17,12 @@
+ #include "base/task/single_thread_task_runner.h"
+ #include "components/embedder_support/user_agent_utils.h"
+ #include "components/version_info/version_info.h"
 +#include "components/zoom/zoom_controller.h"
- #include "content/public/app/content_main.h"
  #include "content/public/browser/browser_task_traits.h"
  #include "content/public/browser/browser_thread.h"
-@@ -24,9 +25,11 @@
+ #include "content/public/common/user_agent.h"
  #include "headless/lib/browser/headless_browser_context_impl.h"
- #include "headless/lib/browser/headless_browser_main_parts.h"
- #include "headless/lib/browser/headless_devtools_agent_host_client.h"
 +#include "headless/lib/browser/headless_screen.h"
  #include "headless/lib/browser/headless_web_contents_impl.h"
- #include "net/http/http_util.h"
- #include "services/network/public/cpp/network_switches.h"
-+#include "ui/compositor/compositor.h"
- #include "ui/events/devices/device_data_manager.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
  
- #include "content/public/browser/render_frame_host.h"
-@@ -34,6 +37,7 @@
+@@ -52,6 +54,7 @@
  #include "content/public/browser/render_widget_host.h"
  #include "content/public/browser/web_contents.h"
  #include "carbonyl/src/browser/bridge.h"
@@ -556,7 +550,7 @@ index 1df3ffe72c93d..5aa0bdc25e409 100644
  #include "third_party/blink/public/common/input/web_mouse_event.h"
  #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
  #include "ui/events/keycodes/keyboard_codes.h"
-@@ -119,7 +123,7 @@ void HeadlessBrowserImpl::set_browser_main_parts(
+@@ -370,7 +373,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
  }
  
  void HeadlessBrowserImpl::Resize() {
@@ -565,7 +559,7 @@ index 1df3ffe72c93d..5aa0bdc25e409 100644
    auto rect = gfx::Rect(0, 0, size.width(), size.height());
  
    for (auto* ctx: GetAllBrowserContexts()) {
-@@ -133,8 +137,6 @@ void HeadlessBrowserImpl::Resize() {
+@@ -384,8 +387,6 @@ void HeadlessBrowserImpl::Resize() {
        PlatformSetWebContentsBounds(impl, rect);
      }
    }
@@ -574,7 +568,7 @@ index 1df3ffe72c93d..5aa0bdc25e409 100644
  }
  
  void HeadlessBrowserImpl::OnShutdownInput() {
-@@ -436,7 +438,7 @@ void HeadlessBrowserImpl::RunOnStartCallback() {
+@@ -696,7 +697,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    input_thread_ = std::thread([=]() {
      carbonyl::browser = this;
  
@@ -583,7 +577,7 @@ index 1df3ffe72c93d..5aa0bdc25e409 100644
        .shutdown = []() {
          if (carbonyl::browser) {
            carbonyl::browser->OnShutdownInput();
-@@ -500,7 +502,7 @@ void HeadlessBrowserImpl::RunOnStartCallback() {
+@@ -760,7 +761,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
        }
      };
  
@@ -593,10 +587,10 @@ index 1df3ffe72c93d..5aa0bdc25e409 100644
  }
  
 diff --git a/headless/lib/browser/headless_browser_impl_aura.cc b/headless/lib/browser/headless_browser_impl_aura.cc
-index 80340d9f1b3b3..91be528753cdd 100644
+index 4d1419ace6099..7a255f7ee3a75 100644
 --- a/headless/lib/browser/headless_browser_impl_aura.cc
 +++ b/headless/lib/browser/headless_browser_impl_aura.cc
-@@ -59,7 +59,7 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+@@ -53,7 +53,7 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
      const gfx::Rect& bounds) {
    // Browser's window bounds should contain all web contents, so that we're sure
    // that we will actually produce visible damage when taking a screenshot.
@@ -606,41 +600,41 @@ index 80340d9f1b3b3..91be528753cdd 100644
  
    gfx::NativeView native_view = web_contents->web_contents()->GetNativeView();
 diff --git a/headless/lib/browser/headless_browser_impl_mac.mm b/headless/lib/browser/headless_browser_impl_mac.mm
-index e2cb88fbcf708..397b2585f3d0f 100644
+index 1d0d2b37f3e18..e4eb937494d97 100644
 --- a/headless/lib/browser/headless_browser_impl_mac.mm
 +++ b/headless/lib/browser/headless_browser_impl_mac.mm
-@@ -6,6 +6,8 @@
- 
- #import "base/mac/scoped_objc_class_swizzler.h"
+@@ -7,6 +7,8 @@
+ #import "base/apple/scoped_objc_class_swizzler.h"
+ #include "base/memory/weak_ptr.h"
  #include "base/no_destructor.h"
 +#include "carbonyl/src/browser/bridge.h"
 +#include "content/browser/renderer_host/render_widget_host_view_mac.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
  #include "content/public/browser/render_widget_host_view.h"
- #include "content/public/browser/web_contents.h"
- #include "headless/lib/browser/headless_web_contents_impl.h"
-@@ -95,8 +97,13 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
- 
-   content::RenderWidgetHostView* host_view =
-       web_contents->web_contents()->GetRenderWidgetHostView();
--  if (host_view)
-+  if (host_view) {
-     host_view->SetWindowFrameInScreen(bounds);
+@@ -113,6 +115,10 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+                   content_web_contents->GetRenderWidgetHostView();
+               if (host_view) {
+                 host_view->SetWindowFrameInScreen(bounds);
 +
-+    static_cast<content::RenderWidgetHostViewMac*>(host_view)->SetCurrentDeviceScaleFactor(
-+      carbonyl::Bridge::GetDPI()
-+    );
-+  }
- }
- 
- ui::Compositor* HeadlessBrowserImpl::PlatformGetCompositor(
++                static_cast<content::RenderWidgetHostViewMac*>(host_view)->SetCurrentDeviceScaleFactor(
++                  carbonyl::Bridge::GetDPI()
++                );
+               }
+             }
+           },
 diff --git a/headless/lib/browser/headless_browser_main_parts_mac.mm b/headless/lib/browser/headless_browser_main_parts_mac.mm
-index 718e37ef8bd3e..8ca30b9d88d5b 100644
---- a/headless/lib/browser/headless_browser_main_parts_mac.mm
+new file mode 100644
+index 0000000000000..99b1c4e25bce4
+--- /dev/null
 +++ b/headless/lib/browser/headless_browser_main_parts_mac.mm
-@@ -6,6 +6,14 @@
- 
- #import <Cocoa/Cocoa.h>
- 
+@@ -0,0 +1,27 @@
++// Copyright 2017 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#import <Cocoa/Cocoa.h>
++
 +#include "base/command_line.h"
 +#include "build/build_config.h"
 +#include "build/chromeos_buildflags.h"
@@ -649,27 +643,30 @@ index 718e37ef8bd3e..8ca30b9d88d5b 100644
 +#include "content/public/browser/browser_thread.h"
 +#include "device/bluetooth/dbus/bluez_dbus_manager.h"
 +#include "headless/app/headless_shell_switches.h"
- #include "headless/lib/browser/headless_shell_application_mac.h"
- #include "services/device/public/cpp/geolocation/geolocation_manager_impl_mac.h"
- 
-@@ -16,6 +24,7 @@ void HeadlessBrowserMainParts::PreCreateMainMessageLoop() {
-   [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
-   if (!geolocation_manager_)
-     geolocation_manager_ = device::GeolocationManagerImpl::Create();
++#include "headless/lib/browser/headless_shell_application_mac.h"
++#include "services/device/public/cpp/geolocation/geolocation_manager_impl_mac.h"
 +
- }
- 
- }  // namespace headless
++namespace headless {
++
++void HeadlessBrowserMainParts::PreCreateMainMessageLoop() {
++  [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
++  if (!geolocation_manager_)
++    geolocation_manager_ = device::GeolocationManagerImpl::Create();
++
++}
++
++}  // namespace headless
 diff --git a/headless/lib/browser/headless_screen.cc b/headless/lib/browser/headless_screen.cc
-index 89c5ccc8d7759..047d741638df2 100644
+index 89c5ccc8d7759..07bb951fca8cc 100644
 --- a/headless/lib/browser/headless_screen.cc
 +++ b/headless/lib/browser/headless_screen.cc
-@@ -6,14 +6,18 @@
+@@ -6,14 +6,19 @@
  
  #include <stdint.h>
  
 -#include "ui/aura/env.h"
 -#include "ui/aura/window.h"
++#include "build/build_config.h"
  #include "ui/base/ime/input_method.h"
  #include "ui/gfx/geometry/rect_conversions.h"
  #include "ui/gfx/geometry/size_conversions.h"
@@ -685,7 +682,7 @@ index 89c5ccc8d7759..047d741638df2 100644
  
  namespace headless {
  
-@@ -24,6 +28,7 @@ HeadlessScreen* HeadlessScreen::Create(const gfx::Size& size) {
+@@ -24,6 +29,7 @@ HeadlessScreen* HeadlessScreen::Create(const gfx::Size& size) {
  
  HeadlessScreen::~HeadlessScreen() = default;
  
@@ -693,7 +690,7 @@ index 89c5ccc8d7759..047d741638df2 100644
  gfx::Point HeadlessScreen::GetCursorScreenPoint() {
    return aura::Env::GetInstance()->last_mouse_location();
  }
-@@ -31,6 +36,7 @@ gfx::Point HeadlessScreen::GetCursorScreenPoint() {
+@@ -31,6 +37,7 @@ gfx::Point HeadlessScreen::GetCursorScreenPoint() {
  bool HeadlessScreen::IsWindowUnderCursor(gfx::NativeWindow window) {
    return GetWindowAtScreenPoint(GetCursorScreenPoint()) == window;
  }
@@ -701,12 +698,12 @@ index 89c5ccc8d7759..047d741638df2 100644
  
  gfx::NativeWindow HeadlessScreen::GetWindowAtScreenPoint(
      const gfx::Point& point) {
-@@ -48,12 +54,22 @@ display::Display HeadlessScreen::GetDisplayNearestWindow(
+@@ -48,12 +55,22 @@ display::Display HeadlessScreen::GetDisplayNearestWindow(
    return GetPrimaryDisplay();
  }
  
 +void HeadlessScreen::Resize() {
-+  float dpi = carbonyl::Bridge::GetDPI();  
++  float dpi = carbonyl::Bridge::GetDPI();
 +  auto size = carbonyl::Renderer::GetCurrent()->GetSize();
 +  auto rect = gfx::Rect(0, 0, size.width() * dpi, size.height() * dpi);
 +
@@ -729,18 +726,19 @@ index 89c5ccc8d7759..047d741638df2 100644
  
  }  // namespace headless
 diff --git a/headless/lib/browser/headless_screen.h b/headless/lib/browser/headless_screen.h
-index 5ec78e5fe4685..23c073b1c86b3 100644
+index 5ec78e5fe4685..da12b4d677933 100644
 --- a/headless/lib/browser/headless_screen.h
 +++ b/headless/lib/browser/headless_screen.h
-@@ -6,7 +6,6 @@
+@@ -6,7 +6,7 @@
  #define HEADLESS_LIB_BROWSER_HEADLESS_SCREEN_H_
  
  #include "base/compiler_specific.h"
 -#include "ui/aura/window_observer.h"
++#include "build/build_config.h"
  #include "ui/display/display.h"
  #include "ui/display/screen_base.h"
  
-@@ -26,10 +25,15 @@ class HeadlessScreen : public display::ScreenBase {
+@@ -26,10 +26,15 @@ class HeadlessScreen : public display::ScreenBase {
  
    ~HeadlessScreen() override;
  
@@ -756,7 +754,7 @@ index 5ec78e5fe4685..23c073b1c86b3 100644
    gfx::NativeWindow GetWindowAtScreenPoint(const gfx::Point& point) override;
    gfx::NativeWindow GetLocalProcessWindowAtPoint(
        const gfx::Point& point,
-@@ -39,6 +43,8 @@ class HeadlessScreen : public display::ScreenBase {
+@@ -39,6 +44,8 @@ class HeadlessScreen : public display::ScreenBase {
  
   private:
    explicit HeadlessScreen(const gfx::Rect& screen_bounds);
@@ -766,7 +764,7 @@ index 5ec78e5fe4685..23c073b1c86b3 100644
  
  }  // namespace headless
 diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
-index a166a08f6ea15..091bde787d47c 100644
+index ba004f666e301..7088fb0211719 100644
 --- a/headless/lib/browser/headless_web_contents_impl.cc
 +++ b/headless/lib/browser/headless_web_contents_impl.cc
 @@ -22,7 +22,8 @@
@@ -779,7 +777,7 @@ index a166a08f6ea15..091bde787d47c 100644
  #include "content/public/browser/browser_thread.h"
  #include "content/public/browser/child_process_termination_info.h"
  #include "content/public/browser/devtools_agent_host.h"
-@@ -335,6 +336,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
+@@ -334,6 +335,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
  #if BUILDFLAG(ENABLE_PRINTING)
    HeadlessPrintManager::CreateForWebContents(web_contents_.get());
  #endif
@@ -787,7 +785,7 @@ index a166a08f6ea15..091bde787d47c 100644
    UpdatePrefsFromSystemSettings(web_contents_->GetMutableRendererPrefs());
    web_contents_->GetMutableRendererPrefs()->accept_languages =
        browser_context->options()->accept_language();
-@@ -400,7 +402,7 @@ void HeadlessWebContentsImpl::TitleWasSet(content::NavigationEntry* entry) {
+@@ -380,7 +382,7 @@ void HeadlessWebContentsImpl::TitleWasSet(content::NavigationEntry* entry) {
    if (!web_contents() || !web_contents()->GetPrimaryMainFrame()->IsActive())
      return;
  
@@ -796,7 +794,7 @@ index a166a08f6ea15..091bde787d47c 100644
  }
  
  void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* handle) {
-@@ -411,7 +413,7 @@ void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* han
+@@ -391,7 +393,7 @@ void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* han
  
    auto& nav = web_contents()->GetController();
  
@@ -806,10 +804,10 @@ index a166a08f6ea15..091bde787d47c 100644
      nav.CanGoBack(),
      nav.CanGoForward()
 diff --git a/printing/printing_context_mac.mm b/printing/printing_context_mac.mm
-index 9dd650de9a9a3..8cfb6e9015c3f 100644
+index b051381ebf164..8ab0e77579ead 100644
 --- a/printing/printing_context_mac.mm
 +++ b/printing/printing_context_mac.mm
-@@ -400,6 +400,7 @@ bool PrintingContextMac::SetDuplexModeInPrintSettings(mojom::DuplexMode mode) {
+@@ -687,6 +687,7 @@ bool PrintingContextMac::SetDuplexModeInPrintSettings(mojom::DuplexMode mode) {
  bool PrintingContextMac::SetOutputColor(int color_mode) {
    const mojom::ColorModel color_model = ColorModeToColorModel(color_mode);
  
@@ -817,31 +815,31 @@ index 9dd650de9a9a3..8cfb6e9015c3f 100644
    if (!base::FeatureList::IsEnabled(features::kCupsIppPrintingBackend)) {
      std::string color_setting_name;
      std::string color_value;
-@@ -412,6 +413,7 @@ bool PrintingContextMac::SetOutputColor(int color_mode) {
+@@ -699,6 +700,7 @@ bool PrintingContextMac::SetOutputColor(int color_mode) {
                     GetIppColorModelForModel(color_model))) {
      return false;
    }
 +#endif
  
-   struct PpdColorSetting {
-     constexpr PpdColorSetting(base::StringPiece name,
+   // Even when interfacing with printer settings using CUPS IPP, the print job
+   // may still expect PPD color values if the printer was added to the system
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index c29495a7060d7..654438b8d7424 100644
+index 2e6598b26ca41..ac9edc9fbec9b 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
-@@ -312,6 +312,7 @@ component("core") {
-     ":generate_eventhandler_names",
+@@ -349,6 +349,7 @@ component("core") {
      ":generated_settings_macros",
+     ":make_deprecation_info",
      "//build:chromeos_buildflags",
 +    "//carbonyl/src/browser:bridge",
      "//components/attribution_reporting",
      "//components/attribution_reporting:mojom_blink",
      "//components/paint_preview/common",
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index cb116ee07c8f6..7129982acf4a6 100644
+index 8b8e5909a7b54..126eb38ee3539 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -116,7 +116,7 @@
+@@ -119,7 +119,7 @@
  #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
  #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
  
@@ -850,8 +848,8 @@ index cb116ee07c8f6..7129982acf4a6 100644
  
  namespace blink {
  
-@@ -1043,7 +1043,7 @@ scoped_refptr<ComputedStyle> StyleResolver::ResolveStyle(
-     UseCounter::Count(GetDocument(), WebFeature::kHasGlyphRelativeUnits);
+@@ -1142,7 +1142,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+     GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
 -  if (!carbonyl::blink::BitmapMode()) {
@@ -860,23 +858,23 @@ index cb116ee07c8f6..7129982acf4a6 100644
      FontFamily family;
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index ceb41d781acf6..bc6428f4f5c0d 100644
+index 25dfb7c0507e2..39ee3bb4b8907 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1678,7 +1678,7 @@ component("platform") {
+@@ -1697,7 +1697,7 @@ component("platform") {
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
      "//build:chromeos_buildflags",
 -    "//carbonyl/src/browser:blink",
 +    "//carbonyl/src/browser:bridge",
+     "//cc",
      "//cc/ipc",
      "//cc/mojo_embedder",
-     "//components/paint_preview/common",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 3d1b463e9651c..4625300729523 100644
+index 73e39cab085c3..5d3987f772c46 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -49,7 +49,7 @@
+@@ -46,7 +46,7 @@
  #include "third_party/skia/include/core/SkTextBlob.h"
  #include "ui/gfx/geometry/rect_f.h"
  
@@ -885,16 +883,16 @@ index 3d1b463e9651c..4625300729523 100644
  
  namespace blink {
  
-@@ -158,7 +158,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
+@@ -155,7 +155,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
                 const ShapeResultBloberizer::BlobBuffer& blobs,
                 const gfx::PointF& point,
-                cc::NodeId node_id = cc::kInvalidNodeId) {  
+                cc::NodeId node_id = cc::kInvalidNodeId) {
 -  if (!carbonyl::blink::BitmapMode()) {
 +  if (!carbonyl::Bridge::BitmapMode()) {
      return;
    }
  
-@@ -237,7 +237,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -231,7 +231,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -903,7 +901,7 @@ index 3d1b463e9651c..4625300729523 100644
      auto string = StringView(
        run_info.run.ToStringView(),
        run_info.from,
-@@ -285,7 +285,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -278,7 +278,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -913,19 +911,19 @@ index 3d1b463e9651c..4625300729523 100644
        text_info.text,
        text_info.from,
 diff --git a/ui/display/BUILD.gn b/ui/display/BUILD.gn
-index aadf9f2a52fd6..9b3aefc4d3b04 100644
+index a8c6d49637a53..8215ce918f765 100644
 --- a/ui/display/BUILD.gn
 +++ b/ui/display/BUILD.gn
-@@ -101,6 +101,7 @@ component("display") {
+@@ -113,6 +113,7 @@ component("display") {
      "//base",
      "//base:i18n",
      "//build:chromeos_buildflags",
 +    "//carbonyl/src/browser:bridge",
+     "//components/device_event_log",
      "//mojo/public/cpp/bindings:struct_traits",
      "//ui/display/mojom:mojom_shared_cpp_sources",
-     "//ui/display/util",
 diff --git a/ui/display/display.cc b/ui/display/display.cc
-index 1d71f3b4c9857..d670831de4ca4 100644
+index ba6b47b9bae29..775698c623c18 100644
 --- a/ui/display/display.cc
 +++ b/ui/display/display.cc
 @@ -26,39 +26,10 @@
