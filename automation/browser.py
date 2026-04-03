@@ -247,6 +247,37 @@ class CarbonylBrowser:
             return
         self._child.send(text.encode("utf-8"))
 
+    def mouse_move(self, col: int, row: int) -> None:
+        """
+        Send a mouse-move event at terminal cell (col, row).
+
+        Uses SGR button code 32 (0x20 = MouseMove mask, no button pressed).
+        Carbonyl translates this into a DOM ``mousemove`` event delivered to
+        the page — essential for sites that require mouse-movement entropy
+        before accepting interaction (e.g. Akamai Bot Manager sensor).
+        """
+        if self._daemon_client:
+            self._daemon_client.mouse_move(col, row)
+            return
+        self._child.send(f"\x1b[<32;{col};{row}M".encode())
+
+    def mouse_path(
+        self,
+        points: list[tuple[int, int]],
+        delay: float = 0.05,
+    ) -> None:
+        """
+        Move the mouse through a list of (col, row) waypoints with a short
+        delay between each, producing organic-looking movement telemetry.
+
+        Example::
+
+            browser.mouse_path([(10,10),(50,20),(80,15),(120,30)], delay=0.06)
+        """
+        for col, row in points:
+            self.mouse_move(col, row)
+            time.sleep(delay)
+
     def click(self, col: int, row: int) -> None:
         """Send a left-click at terminal cell (col, row) using SGR mouse protocol."""
         if self._daemon_client:

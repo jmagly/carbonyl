@@ -137,6 +137,9 @@ class DaemonClient:
     def send(self, text: str) -> None:
         self._rpc({"cmd": "send", "text": text})
 
+    def mouse_move(self, col: int, row: int) -> None:
+        self._rpc({"cmd": "mouse_move", "col": col, "row": row})
+
     def click(self, col: int, row: int) -> None:
         self._rpc({"cmd": "click", "col": col, "row": row})
 
@@ -211,6 +214,8 @@ class _BrowserHandler(socketserver.StreamRequestHandler):
         try:
             if cmd == "send":
                 browser.send(req["text"])
+            elif cmd == "mouse_move":
+                browser.mouse_move(req["col"], req["row"])
             elif cmd == "click":
                 browser.click(req["col"], req["row"])
             elif cmd == "key":
