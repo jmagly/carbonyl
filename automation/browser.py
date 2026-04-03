@@ -44,6 +44,8 @@ _HEADLESS_FLAGS = [
     "--disable-sync",
     "--password-store=basic",
     "--use-mock-keychain",
+    # Suppress navigator.webdriver=true so bot-detection scripts don't flag us.
+    "--disable-blink-features=AutomationControlled",
 ]
 
 def _session_manager():
