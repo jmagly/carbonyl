@@ -37,11 +37,9 @@ rtc_use_x11_extensions = false
 # Disable unused features
 enable_pdf = false
 enable_nacl = false
-enable_ppapi = false
 enable_printing = false
 enable_print_content_analysis = false
 enable_plugins = false
-enable_rust_json = false
 enable_tagged_pdf = false
 enable_media_remoting = false
 enable_speech_service = false

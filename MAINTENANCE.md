@@ -89,14 +89,56 @@ Updating it requires:
 
 The `scripts/patches.sh` script uses hardcoded upstream base commits:
 
-| Repo | Base commit |
-|------|-------------|
-| Chromium | `92da8189788b1b373cbd3348f73d695dfdc521b6` |
-| Skia | `486deb23bc2a4d3d09c66fef52c2ad64d8b4f761` |
-| WebRTC | `727080cbacd58a2f303ed8a03f0264fe1493e47a` |
+| Repo | Base commit | Chromium version |
+|------|-------------|-----------------|
+| Chromium | `92da8189788b1b373cbd3348f73d695dfdc521b6` | M111 (current) |
+| Skia | `486deb23bc2a4d3d09c66fef52c2ad64d8b4f761` | M111 (current) |
+| WebRTC | `727080cbacd58a2f303ed8a03f0264fe1493e47a` | M111 (current) |
+
+**M135 target commits** (update `scripts/patches.sh` when rebasing to M135):
+
+| Repo | Base commit | Source |
+|------|-------------|--------|
+| Skia | `6e445bdea696eb6b6a46681dfc1a63edaa517edb` | DEPS @ 135.0.7049.84 |
+| WebRTC | `9e5db68b15087eccd8d2493b4e8539c1657e0f75` | DEPS @ 135.0.7049.84 |
 
 When updating Chromium, update these to the new Chromium's third-party base
 commits before running `patches.sh apply`.
+
+### Patch 07 re-anchor (M135)
+
+Patch 07 (`Disable-text-effects.patch`) currently targets:
+- `third_party/blink/renderer/core/paint/ng/ng_text_painter_base.cc`
+
+In M135, the `ng/` subdirectory was dissolved (~M120). The `ng_text_painter_base.cc` file
+was merged into `third_party/blink/renderer/core/paint/text_painter_base.cc`, then further
+consolidated. In M135, only `text_painter.cc` and `painter_base.cc` exist in that directory.
+
+**Action before Phase 1:** Confirm which M135 file contains `PaintUnderOrOverLineDecorations`
+(likely `text_painter.cc`) and re-target the patch accordingly.
+
+### Patch 13 rewrite context (M135)
+
+Patch 13 (`Refactor-rendering-bridge.patch`) creates `software_output_device_proxy.cc` which
+uses the `LayeredWindowUpdater` Mojo interface (removed ~M137) for shared-memory pixel capture.
+
+In M135, the hook point is `components/viz/service/display_embedder/software_output_device_ozone.cc`.
+The `SoftwareOutputDeviceOzone` class interface:
+
+```cpp
+class SoftwareOutputDeviceOzone : public SoftwareOutputDevice {
+  SoftwareOutputDeviceOzone(std::unique_ptr<ui::PlatformWindowSurface>,
+                             std::unique_ptr<ui::SurfaceOzoneCanvas>);
+  SkCanvas* BeginPaint(const gfx::Rect& damage_rect);
+  void EndPaint();
+  void Resize(const gfx::Size& viewport_pixel_size, float scale_factor);
+  void OnSwapBuffers(SwapBuffersCallback, gfx::FrameData data);
+};
+```
+
+Rewrite strategy: subclass `SoftwareOutputDeviceOzone` and override `EndPaint()` to
+intercept the rendered `SkCanvas` pixels via `SkCanvas::readPixels()` into a shared memory
+buffer, then signal the Carbonyl Rust bridge.
 
 ## Automation Layer
 
