@@ -155,6 +155,14 @@ class DaemonClient:
     def nav_bar_url(self) -> str:
         return self._rpc({"cmd": "url"})["result"]
 
+    def find_text(self, text: str) -> list[dict]:
+        """Return list of {col, row} for all occurrences of text in the raw screen."""
+        return self._rpc({"cmd": "find_text", "text": text})["result"]
+
+    def raw_lines(self) -> list[dict]:
+        """Return [{row, text}, ...] for the full raw screen buffer."""
+        return self._rpc({"cmd": "raw_lines"})["result"]
+
     def close_daemon(self) -> None:
         """Send close command (shuts down daemon + browser)."""
         try:
@@ -215,6 +223,29 @@ class _BrowserHandler(socketserver.StreamRequestHandler):
                 return {"ok": True, "result": browser.page_text()}
             elif cmd == "url":
                 return {"ok": True, "result": browser.nav_bar_url()}
+            elif cmd == "find_text":
+                # Find text in raw screen buffer; return [{col, row}, ...] of all matches
+                needle = req.get("text", "")
+                matches = []
+                for row_idx in sorted(browser._screen.buffer.keys()):
+                    row = browser._screen.buffer[row_idx]
+                    line = "".join(c.data for c in row.values())
+                    start = 0
+                    while True:
+                        col = line.find(needle, start)
+                        if col == -1:
+                            break
+                        matches.append({"col": col, "row": row_idx + 1})
+                        start = col + 1
+                return {"ok": True, "result": matches}
+            elif cmd == "raw_lines":
+                # Return raw screen lines as [{row, text}, ...] for coord-based search
+                lines = []
+                for row_idx in sorted(browser._screen.buffer.keys()):
+                    row = browser._screen.buffer[row_idx]
+                    lines.append({"row": row_idx + 1,
+                                  "text": "".join(c.data for c in row.values())})
+                return {"ok": True, "result": lines}
             elif cmd == "close":
                 # Signal main thread to shut down
                 self.server.shutdown_requested = True

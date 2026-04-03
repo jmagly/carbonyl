@@ -168,8 +168,10 @@ class CarbonylBrowser:
                 client = DaemonClient(self._session)
                 client.connect()
                 self._daemon_client = client
-                # Navigate to the requested URL in the running browser
-                client.navigate(url)
+                # Navigate to the requested URL in the running browser.
+                # Skip navigate for sentinel values used purely to reconnect.
+                if url and url not in ("about:blank", ""):
+                    client.navigate(url)
                 return
 
         binary = _local_binary()
@@ -329,6 +331,66 @@ class CarbonylBrowser:
         if self._daemon_client:
             return self._daemon_client.page_text()
         return extract_text(self._screen)
+
+    def find_text(self, text: str) -> list[dict]:
+        """
+        Find all occurrences of ``text`` in the raw terminal buffer.
+        Returns a list of ``{"col": int, "row": int}`` dicts (1-indexed).
+        Works in both direct and daemon-connected modes.
+        """
+        if self._daemon_client:
+            return self._daemon_client.find_text(text)
+        results = []
+        for row_idx in sorted(self._screen.buffer.keys()):
+            row = self._screen.buffer[row_idx]
+            line = "".join(c.data for c in row.values())
+            start = 0
+            while True:
+                col = line.find(text, start)
+                if col == -1:
+                    break
+                results.append({"col": col, "row": row_idx + 1})
+                start = col + 1
+        return results
+
+    def raw_lines(self) -> list[dict]:
+        """
+        Return the raw screen buffer as ``[{"row": int, "text": str}, ...]``.
+        Works in both direct and daemon-connected modes.
+        """
+        if self._daemon_client:
+            return self._daemon_client.raw_lines()
+        lines = []
+        for row_idx in sorted(self._screen.buffer.keys()):
+            row = self._screen.buffer[row_idx]
+            lines.append({"row": row_idx + 1,
+                          "text": "".join(c.data for c in row.values())})
+        return lines
+
+    def inspector(self):
+        """
+        Return a ``ScreenInspector`` for the current screen state.
+
+        Convenience wrapper around ``raw_lines()`` — imports
+        ``automation.screen_inspector`` lazily so browser.py has no hard dep.
+
+        Example::
+
+            si = browser.inspector()
+            si.print_grid(marks=[(46, 45)])
+            print(si.annotate(marks=[(46, 45)]))
+        """
+        from automation.screen_inspector import ScreenInspector
+        return ScreenInspector(self.raw_lines())
+
+    def reconnect(self) -> bool:
+        """
+        Connect to a live daemon for this session without navigating.
+        Returns True if a daemon was found and connected, False otherwise.
+        Use this instead of ``open()`` when you want to observe the current
+        browser state without changing the URL.
+        """
+        return bool(self._session) and not not self.open("about:blank")  # triggers daemon check
 
     def disconnect(self) -> None:
         """
