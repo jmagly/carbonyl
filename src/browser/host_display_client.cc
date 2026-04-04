@@ -2,7 +2,6 @@
 
 #include <utility>
 
-#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "skia/ext/platform_canvas.h"
@@ -72,7 +71,7 @@ void HostDisplayClient::OnDisplayReceivedCALayerParams(
     const gfx::CALayerParams& ca_layer_params) {}
 #endif
 
-#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
 void HostDisplayClient::DidCompleteSwapWithNewSize(
     const gfx::Size& size) {}
 #endif

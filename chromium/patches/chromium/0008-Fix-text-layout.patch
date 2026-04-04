@@ -1,7 +1,7 @@
 From dc00ffd30609b24baf68d3f4d266f0bc99639094 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:32:14 +0100
-Subject: [PATCH 08/15] Fix text layout
+Subject: [PATCH 08/17] Fix text layout
 
 ---
  .../core/css/resolver/style_resolver.cc         | 17 ++++++++++++++++-

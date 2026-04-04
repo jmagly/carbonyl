@@ -5,6 +5,7 @@
 #include <functional>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "carbonyl/src/browser/export.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -68,7 +69,8 @@ public:
 private:
     Renderer(struct carbonyl_renderer* ptr);
 
-    struct carbonyl_renderer* ptr_;
+    // RAW_PTR_EXCLUSION: C FFI opaque pointer allocated by Rust, not PartitionAlloc
+    RAW_PTR_EXCLUSION struct carbonyl_renderer* ptr_;
 };
 
 }

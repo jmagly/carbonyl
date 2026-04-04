@@ -1,7 +1,7 @@
 From bb325edb034d2bdc0d6b5c08da9ad6d98959bb88 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:31:17 +0100
-Subject: [PATCH 07/15] Disable text effects
+Subject: [PATCH 07/17] Disable text effects
 
 ---
  .../renderer/core/paint/text_painter_base.cc  | 30 ++++++++--------

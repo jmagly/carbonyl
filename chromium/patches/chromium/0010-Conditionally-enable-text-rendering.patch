@@ -1,7 +1,7 @@
 From 1f470fec39285ccdd80ee9d1765792af29b79a63 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 00:55:33 +0100
-Subject: [PATCH 10/15] Conditionally enable text rendering
+Subject: [PATCH 10/17] Conditionally enable text rendering
 
 ---
  cc/trees/layer_tree_host.cc                   |  21 ++

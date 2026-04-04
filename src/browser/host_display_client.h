@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "carbonyl/src/browser/export.h"
 #include "components/viz/host/host_display_client.h"
@@ -59,7 +59,7 @@ class CARBONYL_VIZ_EXPORT HostDisplayClient : public viz::HostDisplayClient {
       mojo::PendingReceiver<viz::mojom::LayeredWindowUpdater> receiver)
       override;
 
-#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
   void DidCompleteSwapWithNewSize(const gfx::Size& size) override;
 #endif
 
