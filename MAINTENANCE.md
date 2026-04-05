@@ -46,15 +46,15 @@ To bump a specific crate to a new major version, edit `Cargo.toml` then run
 
 ### Chromium version (involved — do when security patches are needed)
 
-Chromium is pinned in `chromium/.gclient` at `111.0.5511.1` (Feb 2023).
-Updating it requires:
+Chromium is currently at `120.0.6099.109` (M120, upgraded Apr 2026 from M111).
+The target is M135. Updating it requires:
 
 1. **Choose a new Chromium version**: check https://chromiumdash.appspot.com/releases
    for a stable branch release.
 
 2. **Update `.gclient`**: change the `@111.0.5511.1` ref to the new version.
 
-3. **Rebase patches**: the 14 Chromium patches + 2 Skia + 1 WebRTC need to apply
+3. **Rebase patches**: the 21 Chromium patches + 2 Skia + 1 WebRTC need to apply
    cleanly on the new base. This is the hard part.
 
    ```bash

@@ -1,6 +1,11 @@
 headless_enable_commands = false
 headless_use_embedded_resources = true
 
+# Non-component build required: carbonyl's TextCaptureDevice inherits from
+# internal Skia classes (SkDevice, SkClipStackDevice) whose symbols are not
+# exported from the Skia shared library in a component build.
+is_component_build = false
+
 # Enable proprietary codecs such as H.264
 ffmpeg_branding = "Chrome"
 proprietary_codecs = true

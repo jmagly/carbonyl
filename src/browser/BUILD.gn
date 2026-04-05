@@ -54,6 +54,18 @@ config("lib") {
   lib_dirs = ["//carbonyl/build/$target/release"]
 }
 
+if (is_linux) {
+  # libcarbonyl.so is built on the host and may reference GLIBC symbols
+  # newer than Chromium's Debian Bullseye sysroot (GLIBC 2.31). This
+  # public_config propagates --allow-shlib-undefined to the final
+  # headless_shell link so lld does not reject libcarbonyl.so's versioned
+  # symbol references. Those symbols are satisfied at runtime by the
+  # user's system GLIBC.
+  config("lib_ldflags") {
+    ldflags = [ "-Wl,--allow-shlib-undefined" ]
+  }
+}
+
 component("renderer") {
   output_name = "carbonyl_renderer"
   defines = [ "CARBONYL_RENDERER_IMPLEMENTATION" ]
@@ -65,6 +77,9 @@ component("renderer") {
   ]
 
   configs += [ ":lib" ]
+  if (is_linux) {
+    public_configs = [ ":lib_ldflags" ]
+  }
   deps = [
     ":mojom",
     ":bridge",

@@ -23,6 +23,19 @@ It's snappy, starts in less than a second, runs at 60 FPS, and idles at 0% CPU u
 
 Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
 
+## Active Fork — Continued Maintenance
+
+The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) has been inactive since early 2023. This fork is actively maintained for use in headless browser automation and agentic pipelines.
+
+**What's different in this fork:**
+
+- **Chromium M120** — upgraded from M111 (21 patches, all applying cleanly). Upgrade to M135 is in progress.
+- **Python automation layer** (`automation/`) — `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction. Designed for agent-driven web interaction.
+- **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
+- **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.
+
+**Maintenance commitment:** Security-relevant Chromium versions will be tracked on a best-effort basis. The automation API is under active development. Issues and PRs welcome.
+
 ## Usage
 
 > Carbonyl on Linux without Docker requires the same dependencies as Chromium.
