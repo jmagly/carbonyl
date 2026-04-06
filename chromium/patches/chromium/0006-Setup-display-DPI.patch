@@ -1,16 +1,16 @@
-From 9584bc331b45159eeec48ff3271c4ad7c4c32ad0 Mon Sep 17 00:00:00 2001
+From 3f6b03cd8f2e1aa767cc9cb1cd800a31bdb177e5 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:00:43 +0100
-Subject: [PATCH 06/17] Setup display DPI
+Subject: [PATCH 06/21] Setup display DPI
 
 ---
  .../lib/browser/headless_browser_impl_aura.cc | 11 ++--
- headless/lib/browser/headless_screen.cc       |  5 +-
+ headless/lib/browser/headless_screen.cc       |  7 ++-
  ui/display/display.cc                         | 52 ++++++++++---------
- 3 files changed, 35 insertions(+), 33 deletions(-)
+ 3 files changed, 36 insertions(+), 34 deletions(-)
 
 diff --git a/headless/lib/browser/headless_browser_impl_aura.cc b/headless/lib/browser/headless_browser_impl_aura.cc
-index 7f0223b4fb24d..7d27dce7dea8f 100644
+index b3e077db0b626..91bc354d5d362 100644
 --- a/headless/lib/browser/headless_browser_impl_aura.cc
 +++ b/headless/lib/browser/headless_browser_impl_aura.cc
 @@ -18,6 +18,8 @@
@@ -22,7 +22,7 @@ index 7f0223b4fb24d..7d27dce7dea8f 100644
  namespace headless {
  
  void HeadlessBrowserImpl::PlatformInitialize() {
-@@ -51,13 +53,8 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+@@ -52,13 +54,8 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
      const gfx::Rect& bounds) {
    // Browser's window bounds should contain all web contents, so that we're sure
    // that we will actually produce visible damage when taking a screenshot.
@@ -39,33 +39,35 @@ index 7f0223b4fb24d..7d27dce7dea8f 100644
    gfx::NativeView native_view = web_contents->web_contents()->GetNativeView();
    native_view->SetBounds(bounds);
 diff --git a/headless/lib/browser/headless_screen.cc b/headless/lib/browser/headless_screen.cc
-index 28f1a65f6dce5..8bf00ef5e036a 100644
+index 2c5076048daf4..38985fd4ceb39 100644
 --- a/headless/lib/browser/headless_screen.cc
 +++ b/headless/lib/browser/headless_screen.cc
-@@ -13,6 +13,8 @@
- #include "ui/gfx/geometry/size_conversions.h"
- #include "ui/gfx/native_widget_types.h"
+@@ -6,6 +6,8 @@
+ 
+ #include "base/check_deref.h"
  
 +#include "carbonyl/src/browser/bridge.h"
 +
  namespace headless {
  
  // static
-@@ -49,7 +51,8 @@ display::Display HeadlessScreen::GetDisplayNearestWindow(
- HeadlessScreen::HeadlessScreen(const gfx::Rect& screen_bounds) {
+@@ -44,8 +46,9 @@ HeadlessScreen::HeadlessScreen(const gfx::Rect& bounds, float scale_factor)
+     : natural_portrait_(bounds.height() > bounds.width()) {
    static int64_t synthesized_display_id = 2000;
    display::Display display(synthesized_display_id++);
--  display.SetScaleAndBounds(1.0f, screen_bounds);
+-  display.SetScaleAndBounds(scale_factor, bounds);
+-  ProcessDisplayChanged(display, /*is_primary=*/true);
 +  float dpi = carbonyl::Renderer::GetDPI();
-+  display.SetScaleAndBounds(dpi, ScaleToEnclosedRect(screen_bounds, dpi));
-   ProcessDisplayChanged(display, true /* is_primary */);
++  display.SetScaleAndBounds(dpi, ScaleToEnclosedRect(bounds, dpi));
++  ProcessDisplayChanged(display, true /* is_primary */);
  }
  
+ // static
 diff --git a/ui/display/display.cc b/ui/display/display.cc
-index 5200e03316701..ba6b47b9bae29 100644
+index 7abe765326cf0..82680b3083494 100644
 --- a/ui/display/display.cc
 +++ b/ui/display/display.cc
-@@ -21,6 +21,8 @@
+@@ -22,6 +22,8 @@
  #include "ui/gfx/geometry/transform.h"
  #include "ui/gfx/icc_profile.h"
  
@@ -74,7 +76,7 @@ index 5200e03316701..ba6b47b9bae29 100644
  namespace display {
  namespace {
  
-@@ -39,22 +41,22 @@ float g_forced_device_scale_factor = -1.0;
+@@ -40,22 +42,22 @@ float g_forced_device_scale_factor = -1.0;
  constexpr float kDisplaySizeAllowanceEpsilon = 0.01f;
  
  bool HasForceDeviceScaleFactorImpl() {
@@ -126,7 +128,7 @@ index 5200e03316701..ba6b47b9bae29 100644
  }
  
  // static
-@@ -255,15 +257,15 @@ void Display::SetScaleAndBounds(float device_scale_factor,
+@@ -258,15 +260,15 @@ void Display::SetScaleAndBounds(float device_scale_factor,
  }
  
  void Display::SetScale(float device_scale_factor) {

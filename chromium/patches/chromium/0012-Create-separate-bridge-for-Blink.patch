@@ -1,7 +1,7 @@
-From 068cf380231171d73b1f88bafb2174c0b7eefb4f Mon Sep 17 00:00:00 2001
+From f8a5851383b9ab0bdce1ddaae68f600a60a17455 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 02:20:32 +0100
-Subject: [PATCH 12/17] Create separate bridge for Blink
+Subject: [PATCH 12/21] Create separate bridge for Blink
 
 ---
  .../blink/renderer/core/css/resolver/style_resolver.cc    | 4 ++--
@@ -10,10 +10,10 @@ Subject: [PATCH 12/17] Create separate bridge for Blink
  3 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 126eb38ee3539..8b8e5909a7b54 100644
+index a53f4f3796480..60daa58192839 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -119,7 +119,7 @@
+@@ -131,7 +131,7 @@
  #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
  #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
  
@@ -22,7 +22,7 @@ index 126eb38ee3539..8b8e5909a7b54 100644
  
  namespace blink {
  
-@@ -1142,7 +1142,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1394,7 +1394,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -32,10 +32,10 @@ index 126eb38ee3539..8b8e5909a7b54 100644
      FontFamily family;
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 3f8b63fb2b000..25dfb7c0507e2 100644
+index 7124070b3e140..bfb07249d98f7 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1697,7 +1697,7 @@ component("platform") {
+@@ -1760,7 +1760,7 @@ component("platform") {
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
      "//build:chromeos_buildflags",
@@ -45,10 +45,10 @@ index 3f8b63fb2b000..25dfb7c0507e2 100644
      "//cc/ipc",
      "//cc/mojo_embedder",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 5d3987f772c46..73e39cab085c3 100644
+index afcd70e063491..60942e3910750 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -46,7 +46,7 @@
+@@ -53,7 +53,7 @@
  #include "third_party/skia/include/core/SkTextBlob.h"
  #include "ui/gfx/geometry/rect_f.h"
  
@@ -57,7 +57,7 @@ index 5d3987f772c46..73e39cab085c3 100644
  
  namespace blink {
  
-@@ -155,7 +155,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
+@@ -108,7 +108,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
                 const ShapeResultBloberizer::BlobBuffer& blobs,
                 const gfx::PointF& point,
                 cc::NodeId node_id = cc::kInvalidNodeId) {
@@ -66,7 +66,7 @@ index 5d3987f772c46..73e39cab085c3 100644
      return;
    }
  
-@@ -231,7 +231,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -184,7 +184,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -75,7 +75,7 @@ index 5d3987f772c46..73e39cab085c3 100644
      auto string = StringView(
        run_info.run.ToStringView(),
        run_info.from,
-@@ -278,7 +278,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -231,7 +231,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

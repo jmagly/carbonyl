@@ -1,7 +1,7 @@
-From ae9c8f95684471dedbb70e7108e1caaa6d3bece2 Mon Sep 17 00:00:00 2001
+From 9490c815aa002be39da7d789a6acac77a4ca1e61 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 21:51:24 -0400
-Subject: [PATCH 1/4] fix(m120): fix compile errors in render_frame_impl and
+Subject: [PATCH 18/21] fix(m120): fix compile errors in render_frame_impl and
  headless_browser_impl
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -11,9 +11,15 @@ Content-Transfer-Encoding: 8bit
 - render_frame_impl.cc: fix SkEncodedImageFormat path (core→codec), replace SkBase64 with base::Base64Decode (src/base not public in M120)
 - headless_browser_impl.h: add missing did_shutdown_ member variable
 - headless_browser_impl.cc: set did_shutdown_ = true in Shutdown()
+---
+ content/renderer/render_frame_impl.cc         | 20 +++++--------------
+ content/renderer/render_frame_impl.h          |  1 +
+ headless/lib/browser/headless_browser_impl.cc |  1 +
+ headless/lib/browser/headless_browser_impl.h  |  1 +
+ 4 files changed, 8 insertions(+), 15 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 5698dcdd359d9..804799654641b 100644
+index d9fdbc37751d3..d8f18811a672d 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -281,14 +281,14 @@
@@ -33,7 +39,7 @@ index 5698dcdd359d9..804799654641b 100644
  #include "third_party/skia/src/text/GlyphRun.h"
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
-@@ -2169,25 +2169,15 @@ protected:
+@@ -2190,25 +2190,15 @@ protected:
  
        base64[runSize] = '\0';
  
@@ -63,10 +69,10 @@ index 5698dcdd359d9..804799654641b 100644
            paint.getColor()
          )
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index d3a536189df8a..3168a63bedb9b 100644
+index 92255d5cb15b6..ed7fa455ac50e 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -116,6 +116,7 @@
+@@ -124,6 +124,7 @@
  #include "url/gurl.h"
  #include "url/origin.h"
  #include "v8/include/v8-forward.h"
@@ -75,10 +81,10 @@ index d3a536189df8a..3168a63bedb9b 100644
  #if BUILDFLAG(ENABLE_PPAPI)
  #include "content/common/pepper_plugin.mojom.h"
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 49840d5b9d2e1..00835da895f7b 100644
+index 2dfc8cee05b4c..4fd973c4fbed9 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -241,6 +241,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
+@@ -256,6 +256,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
  void HeadlessBrowserImpl::Shutdown() {
    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
  
@@ -87,17 +93,14 @@ index 49840d5b9d2e1..00835da895f7b 100644
    // Make sure GetAllBrowserContexts is sane if called after this point.
    auto tmp = std::move(browser_contexts_);
 diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
-index 2897367687250..73624c6773e16 100644
+index 74bcd5ee177de..893a3e5eac9be 100644
 --- a/headless/lib/browser/headless_browser_impl.h
 +++ b/headless/lib/browser/headless_browser_impl.h
-@@ -154,6 +154,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
-   absl::optional<HeadlessBrowser::Options> options_;
+@@ -149,6 +149,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+   std::optional<HeadlessBrowser::Options> options_;
  
    int exit_code_ = 0;
 +  bool did_shutdown_ = false;
  
    base::flat_map<std::string, std::unique_ptr<HeadlessBrowserContextImpl>>
        browser_contexts_;
--- 
-2.43.0
-

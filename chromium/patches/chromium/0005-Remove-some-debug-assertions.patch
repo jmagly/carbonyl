@@ -1,46 +1,36 @@
-From 4e05bad8452672b05ecbd9c70b55f83b6cdb2751 Mon Sep 17 00:00:00 2001
+From 290b5057e5a4f80bfbb7a4cbc6b5dca459e30b3b Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:28:35 +0100
-Subject: [PATCH 05/17] Remove some debug assertions
+Subject: [PATCH 05/21] Remove some debug assertions
 
 ---
- .../browser/web_contents/web_contents_impl.cc |  1 -
- .../core/v8/script_promise_resolver.cc        | 44 +++++++++----------
- .../compositing/paint_artifact_compositor.cc  |  2 -
- .../platform/graphics/graphics_context.cc     | 16 +++----
- 4 files changed, 30 insertions(+), 33 deletions(-)
+ .../core/v8/script_promise_resolver.cc         | 18 +++---------------
+ .../compositing/paint_artifact_compositor.cc   |  2 --
+ .../platform/graphics/graphics_context.cc      | 16 ++++++++--------
+ 3 files changed, 11 insertions(+), 25 deletions(-)
 
-diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index 63eafd910dad5..756946ba25eef 100644
---- a/content/browser/web_contents/web_contents_impl.cc
-+++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -6438,7 +6438,6 @@ void WebContentsImpl::DidNavigateMainFramePreCommit(
-   if (IsFullscreen()) {
-     ExitFullscreen(false);
-   }
--  DCHECK(!IsFullscreen());
- 
-   if (base::FeatureList::IsEnabled(
-           features::kInvalidateLocalSurfaceIdPreCommit)) {
 diff --git a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
-index 4055936f47eef..3a51961e812e0 100644
+index d74b08477d7b4..ebf17d30376b0 100644
 --- a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
 +++ b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
-@@ -60,28 +60,28 @@ ScriptPromiseResolver::ScriptPromiseResolver(
- ScriptPromiseResolver::~ScriptPromiseResolver() = default;
+@@ -34,27 +34,15 @@ ScriptPromiseResolverBase::ScriptPromiseResolverBase(
  
- void ScriptPromiseResolver::Dispose() {
+ ScriptPromiseResolverBase::~ScriptPromiseResolverBase() = default;
+ 
 -#if DCHECK_IS_ON()
++// carbonyl: disabled spurious detach check (fires in headless mode)
++#if 0 // DCHECK_IS_ON()
+ void ScriptPromiseResolverBase::Dispose() {
 -  // This assertion fails if:
 -  //  - promise() is called at least once and
 -  //  - this resolver is destructed before it is resolved, rejected,
 -  //    detached, the V8 isolate is terminated or the associated
 -  //    ExecutionContext is stopped.
--  const bool is_properly_detached =
--      state_ == kDetached || !is_promise_called_ ||
--      !GetScriptState()->ContextIsValid() || !GetExecutionContext() ||
--      GetExecutionContext()->IsContextDestroyed();
--  if (!is_properly_detached && !suppress_detach_check_) {
+   const bool is_properly_detached = state_ == kDone || !is_promise_called_ ||
+                                     !GetScriptState()->ContextIsValid() ||
+                                     !GetExecutionContext() ||
+                                     GetExecutionContext()->IsContextDestroyed();
+   if (!is_properly_detached && !suppress_detach_check_) {
 -    // This is here to make it easier to track down which promise resolvers are
 -    // being abandoned. See https://crbug.com/873980.
 -    static crash_reporter::CrashKeyString<1024> trace_key(
@@ -48,40 +38,17 @@ index 4055936f47eef..3a51961e812e0 100644
 -    crash_reporter::SetCrashKeyStringToStackTrace(&trace_key,
 -                                                  create_stack_trace_);
 -    DCHECK(false)
--        << "ScriptPromiseResolver was not properly detached; created at\n"
+-        << "ScriptPromiseResolverBase was not properly detached; created at\n"
 -        << create_stack_trace_.ToString();
--  }
--#endif
-+// #if DCHECK_IS_ON()
-+//   // This assertion fails if:
-+//   //  - promise() is called at least once and
-+//   //  - this resolver is destructed before it is resolved, rejected,
-+//   //    detached, the V8 isolate is terminated or the associated
-+//   //    ExecutionContext is stopped.
-+//   const bool is_properly_detached =
-+//       state_ == kDetached || !is_promise_called_ ||
-+//       !GetScriptState()->ContextIsValid() || !GetExecutionContext() ||
-+//       GetExecutionContext()->IsContextDestroyed();
-+//   if (!is_properly_detached && !suppress_detach_check_) {
-+//     // This is here to make it easier to track down which promise resolvers are
-+//     // being abandoned. See https://crbug.com/873980.
-+//     static crash_reporter::CrashKeyString<1024> trace_key(
-+//         "scriptpromiseresolver-trace");
-+//     crash_reporter::SetCrashKeyStringToStackTrace(&trace_key,
-+//                                                   create_stack_trace_);
-+//     DCHECK(false)
-+//         << "ScriptPromiseResolver was not properly detached; created at\n"
-+//         << create_stack_trace_.ToString();
-+//   }
-+// #endif
-   deferred_resolve_task_.Cancel();
++    DCHECK(false);
+   }
  }
- 
+ #endif
 diff --git a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-index bf1e8454a01a6..7433288ad7168 100644
+index 4952082b87f80..543dd4e4ff890 100644
 --- a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
 +++ b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-@@ -307,7 +307,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
+@@ -403,7 +403,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
      // properties are changed, which would indicate a missing call to
      // SetNeedsUpdate.
      if (previous.properties != repainted.properties) {
@@ -89,7 +56,7 @@ index bf1e8454a01a6..7433288ad7168 100644
        return true;
      }
  
-@@ -377,7 +376,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
+@@ -472,7 +471,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
    // properties are changed, which would indicate a missing call to
    // SetNeedsUpdate.
    if (previous.properties != repainted.properties) {
@@ -98,10 +65,10 @@ index bf1e8454a01a6..7433288ad7168 100644
    }
  
 diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/third_party/blink/renderer/platform/graphics/graphics_context.cc
-index d53942a761885..7415291530079 100644
+index 8503c0d22d68f..86bd48128ddb9 100644
 --- a/third_party/blink/renderer/platform/graphics/graphics_context.cc
 +++ b/third_party/blink/renderer/platform/graphics/graphics_context.cc
-@@ -141,14 +141,14 @@ GraphicsContext::GraphicsContext(PaintController& paint_controller)
+@@ -122,14 +122,14 @@ GraphicsContext::GraphicsContext(PaintController& paint_controller)
  }
  
  GraphicsContext::~GraphicsContext() {

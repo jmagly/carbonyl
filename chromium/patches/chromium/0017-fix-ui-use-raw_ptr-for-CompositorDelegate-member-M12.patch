@@ -1,7 +1,7 @@
-From 431e30b2390548fbe49b1491017a4fef625b46ce Mon Sep 17 00:00:00 2001
+From e2ba375faf5e93389495def486c64245c269732f Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 04:00:35 -0400
-Subject: [PATCH 17/17] fix(ui): use raw_ptr for CompositorDelegate member
+Subject: [PATCH 17/21] fix(ui): use raw_ptr for CompositorDelegate member
  (M120 raw pointer check)
 
 ---
@@ -9,12 +9,12 @@ Subject: [PATCH 17/17] fix(ui): use raw_ptr for CompositorDelegate member
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/ui/compositor/compositor.h b/ui/compositor/compositor.h
-index 7f5d34b63d294..59d437e25be86 100644
+index 6aecebe0b7d97..497f3299ba459 100644
 --- a/ui/compositor/compositor.h
 +++ b/ui/compositor/compositor.h
-@@ -547,7 +547,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
- 
-   std::unique_ptr<PendingBeginFrameArgs> pending_begin_frame_args_;
+@@ -576,7 +576,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
+       simple_begin_frame_observers_;
+   std::unique_ptr<ui::HostBeginFrameObserver> host_begin_frame_observer_;
  
 -  CompositorDelegate* delegate_ = nullptr;
 +  raw_ptr<CompositorDelegate> delegate_ = nullptr;

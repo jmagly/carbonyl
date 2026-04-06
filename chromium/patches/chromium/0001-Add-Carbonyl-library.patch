@@ -1,7 +1,7 @@
-From 5f7bb69c6361e730845a4bdac6cba2a1dc8c4ebd Mon Sep 17 00:00:00 2001
+From ee85ee838309c8ee7eee2824a9360fdcaec37eec Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:20:50 +0100
-Subject: [PATCH 01/17] Add Carbonyl library
+Subject: [PATCH 01/21] Add Carbonyl library
 
 ---
  carbonyl/build    |  1 +
@@ -28,10 +28,10 @@ index 0000000000000..dabb0e15a991e
 +../../../src
 \ No newline at end of file
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index 1fc8258845aae..68c508f1cbeb4 100644
+index fc7caff42d2b1..d6ea8d0d9829a 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -416,6 +416,7 @@ component("headless_non_renderer") {
+@@ -348,6 +348,7 @@ component("headless_non_renderer") {
      "//base:base_static",
      "//build:branding_buildflags",
      "//build:chromeos_buildflags",
@@ -39,7 +39,7 @@ index 1fc8258845aae..68c508f1cbeb4 100644
      "//components/cookie_config",
      "//components/crash/core/common:common",
      "//components/devtools/devtools_pipe",
-@@ -944,13 +945,25 @@ static_library("headless_shell_lib") {
+@@ -920,13 +921,25 @@ if (should_strip_binary) {
  }
  
  executable("headless_shell") {
@@ -64,5 +64,5 @@ index 1fc8258845aae..68c508f1cbeb4 100644
 +    "//carbonyl/src/browser:carbonyl",
 +  ]
  
-   if (!headless_use_embedded_resources) {
-     data = [
+   if (proprietary_codecs) {
+     deps += [ ":generate_headless_shell_license_file" ]

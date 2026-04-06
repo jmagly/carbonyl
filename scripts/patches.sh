@@ -6,7 +6,7 @@ source "$CARBONYL_ROOT/scripts/env.sh"
 
 cd "$CHROMIUM_SRC"
 
-chromium_upstream="3419140ab665596f21b385ce136419fde0924272"
+chromium_upstream="a8187117c7ea88d5d027c48d2086c917052bd4c8"
 skia_upstream="349c1179c43ef46f2804404952b9460dc007d76a"
 webrtc_upstream="b0cc68e61205fd11a7256a6e85307ec17ad95790"
 

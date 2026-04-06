@@ -1,17 +1,20 @@
-From d637b080f024cac5dddc5f195285c9837c3ba98c Mon Sep 17 00:00:00 2001
+From 716ff29cbcc2f0cfd532114ba5a252954409e666 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sun, 5 Apr 2026 01:32:54 -0400
-Subject: [PATCH 3/4] fix(m120): fix Blink font API changes in
+Subject: [PATCH 20/21] fix(m120): fix Blink font API changes in
  style_resolver.cc
 
 - SetFamily() requires explicit AtomicString, not const char*
 - ExtraExpandedWidthValue() renamed to kExtraExpandedWidthValue constant
+---
+ .../blink/renderer/core/css/resolver/style_resolver.cc        | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 126eb38ee3539..37489cc50dd29 100644
+index a53f4f3796480..6a1660fbd8aca 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -1146,9 +1146,9 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1398,9 +1398,9 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      auto font = state.StyleBuilder().GetFontDescription();
      FontFamily family;
  
@@ -23,6 +26,3 @@ index 126eb38ee3539..37489cc50dd29 100644
      font.SetKerning(FontDescription::kNoneKerning);
      font.SetComputedSize(13.25 / 4.0);
      font.SetGenericFamily(FontDescription::kMonospaceFamily);
--- 
-2.43.0
-

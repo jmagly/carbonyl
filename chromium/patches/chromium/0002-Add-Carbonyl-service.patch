@@ -1,7 +1,7 @@
-From b4ef31aae9e25bdb60de9a81f68f3e53f642451d Mon Sep 17 00:00:00 2001
+From 84b23d78f161fa02c70dca1c1c780506e03febd5 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:21:59 +0100
-Subject: [PATCH 02/17] Add Carbonyl service
+Subject: [PATCH 02/21] Add Carbonyl service
 
 ---
  .../renderer_host/render_frame_host_impl.h    |  2 +
@@ -11,10 +11,10 @@ Subject: [PATCH 02/17] Add Carbonyl service
  4 files changed, 69 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 63b1e93e5de36..0c299d35c3c56 100644
+index 650fbf7ba702f..2118c4a247e38 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -5231,6 +5231,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -5247,6 +5247,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // to change across MPArch activations like prerendering.
    const base::UnguessableToken devtools_frame_token_;
  
@@ -24,13 +24,13 @@ index 63b1e93e5de36..0c299d35c3c56 100644
    // RenderFrameHostImpl exposes document-scoped Mojo services to the currently
    // active document in the corresponding RenderFrame.
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index be58abae55bd4..acb89d80f706c 100644
+index a0e45dfcf20ed..a9eab8f6dce4b 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -1987,6 +1987,10 @@ RenderFrameImpl::~RenderFrameImpl() {
-   base::trace_event::TraceLog::GetInstance()->RemoveProcessLabel(routing_id_);
-   g_routing_id_frame_map.Get().erase(routing_id_);
-   agent_scheduling_group_->RemoveRoute(routing_id_);
+@@ -2008,6 +2008,10 @@ RenderFrameImpl::~RenderFrameImpl() {
+                                             routing_id_
+ #endif
+   );
 +
 +  if (auto& callback = *render_callback_.get()) {
 +    callback = nullptr;
@@ -39,10 +39,10 @@ index be58abae55bd4..acb89d80f706c 100644
  
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index 7a49bed638125..d3a536189df8a 100644
+index 0980dad73ed2d..92255d5cb15b6 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -1484,6 +1484,8 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1559,6 +1559,8 @@ class CONTENT_EXPORT RenderFrameImpl
    scoped_refptr<network::SharedURLLoaderFactory>
        url_loader_factory_override_for_test_;
  
@@ -51,7 +51,7 @@ index 7a49bed638125..d3a536189df8a 100644
    // When the browser asks the renderer to commit a navigation, it should always
    // result in a committed navigation reported via DidCommitProvisionalLoad().
    // This is important because DidCommitProvisionalLoad() is responsible for
-@@ -1560,6 +1562,10 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1635,6 +1637,10 @@ class CONTENT_EXPORT RenderFrameImpl
    // false, but set to true by some tests.
    bool send_content_state_immediately_ = false;
  
@@ -63,10 +63,10 @@ index 7a49bed638125..d3a536189df8a 100644
    //
    // 1. The associated WebFrameWidget and its compositor is initialized at
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 46136bb488233..b02225646b0c5 100644
+index 8c4165bab3911..4a929ef6278a3 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -148,11 +148,17 @@ bool Font::operator==(const Font& other) const {
+@@ -101,11 +101,17 @@ bool Font::operator==(const Font& other) const {
  
  namespace {
  
@@ -84,7 +84,7 @@ index 46136bb488233..b02225646b0c5 100644
    for (const auto& blob_info : blobs) {
      DCHECK(blob_info.blob);
      cc::PaintCanvasAutoRestore auto_restore(canvas, false);
-@@ -197,8 +203,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
+@@ -150,8 +156,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
        }
      }
      if (node_id != cc::kInvalidNodeId) {
@@ -94,7 +94,7 @@ index 46136bb488233..b02225646b0c5 100644
      } else {
        canvas->drawTextBlob(blob_info.blob, point.x(), point.y(), flags);
      }
-@@ -226,6 +231,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -179,6 +184,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -126,7 +126,7 @@ index 46136bb488233..b02225646b0c5 100644
    CachingWordShaper word_shaper(*this);
    ShapeResultBuffer buffer;
    word_shaper.FillResultBuffer(run_info, &buffer);
-@@ -248,6 +278,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -201,6 +231,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
