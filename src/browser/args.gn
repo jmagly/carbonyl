@@ -40,18 +40,11 @@ rtc_use_x11_extensions = false
 # use_system_minigbm = false
 
 # Disable unused features
-enable_pdf = false
+# Note (M135): Most feature flags below are left at their platform defaults.
+# Setting them false in M135 triggers GN assert failures in test BUILD.gn
+# files that are transitively loaded during gn gen (via the gn_all root group).
+# headless_shell has its own if-guards and is unaffected by these defaults.
+# Flags that are safe to disable (no file-level asserts in M135):
 enable_nacl = false
-enable_printing = false
-enable_print_content_analysis = false
-enterprise_local_content_analysis = false
-enterprise_cloud_content_analysis = false
-enable_plugins = false
-enable_tagged_pdf = false
 enable_media_remoting = false
-enable_speech_service = false
-enable_component_updater = false
-enable_screen_ai_service = false
 enable_system_notifications = false
-enable_browser_speech_service = false
-enable_webui_certificate_viewer = false

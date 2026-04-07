@@ -1,0 +1,141 @@
+# build-runtime.yml — Full Chromium build and runtime upload
+#
+# Builds headless_shell + libcarbonyl.so, packages as a runtime tarball, and
+# uploads to Gitea releases tagged `runtime-<hash>`.
+#
+# IMPORTANT: This job requires the Chromium source checkout to be present on
+# the runner at the path specified by CHROMIUM_SRC (set in scripts/env.sh).
+# The checkout is ~30 GB and is maintained on the build host, not in CI.
+#
+# Triggered by:
+#   - workflow_dispatch (manual — primary way to trigger a runtime build)
+#   - push to main when patch files or gclient config change
+#
+# After a successful build the runtime tarball is uploaded to Gitea releases
+# tagged `runtime-<hash>`. build-local.sh on developer machines will then
+# pull the new runtime automatically.
+
+name: Build Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Target architecture (amd64 or arm64)'
+        required: false
+        default: 'amd64'
+  push:
+    branches: [main]
+    paths:
+      - 'chromium/.gclient'
+      - 'chromium/patches/**'
+      - 'src/bridge/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-runtime:
+    name: Build Chromium Runtime (${{ github.event.inputs.arch || 'amd64' }})
+    runs-on: titan
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout carbonyl
+        run: |
+          git clone --depth 1 --branch ${GITHUB_REF_NAME:-main} \
+            https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git .
+          git checkout ${GITHUB_SHA:-HEAD}
+
+      - name: Setup environment
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          source scripts/env.sh
+          echo "CHROMIUM_SRC=${CHROMIUM_SRC}" >> $GITHUB_ENV
+          echo "Triple: $(scripts/platform-triple.sh)"
+          echo "Runtime hash: $(scripts/runtime-hash.sh)"
+
+      - name: Apply patches to Chromium source
+        run: |
+          source scripts/env.sh
+          echo "Applying carbonyl patches to ${CHROMIUM_SRC}..."
+          bash scripts/patches.sh apply
+
+      - name: Build libcarbonyl (Rust)
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          bash scripts/build.sh Default ${CPU} CARBONYL_SKIP_CARGO_BUILD=
+
+          # Copy so into out/Default for the ninja link step
+          TRIPLE=$(scripts/platform-triple.sh)
+          cp build/${TRIPLE}/release/libcarbonyl.so chromium/src/out/Default/
+
+      - name: Build headless_shell (Chromium)
+        run: |
+          source scripts/env.sh
+          echo "Running: ninja -C ${CHROMIUM_SRC}/out/Default headless:headless_shell"
+          ninja -C "${CHROMIUM_SRC}/out/Default" headless:headless_shell
+
+      - name: Copy runtime binaries
+        run: |
+          CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          bash scripts/copy-binaries.sh Default "${CPU}"
+          TRIPLE=$(scripts/platform-triple.sh "${CPU}")
+          echo "TRIPLE=${TRIPLE}" >> $GITHUB_ENV
+          ls -lh build/pre-built/${TRIPLE}/
+
+      - name: Smoke test binary
+        run: |
+          source scripts/env.sh
+          TRIPLE="${{ env.TRIPLE }}"
+          BINARY="build/pre-built/${TRIPLE}/carbonyl"
+          LD_LIBRARY_PATH="build/pre-built/${TRIPLE}" ${BINARY} --version
+
+      - name: Upload runtime to Gitea releases
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          bash scripts/runtime-push.sh "${CPU}"
+
+      - name: Upload tarball as workflow artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: runtime-${{ env.TRIPLE }}
+          path: build/pre-built/${{ env.TRIPLE }}.tgz
+          retention-days: 7
+
+  build-builder:
+    name: Build & Push Builder Image
+    runs-on: titan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        run: |
+          git clone --depth 1 --branch ${GITHUB_REF_NAME:-main} \
+            https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git .
+          git checkout ${GITHUB_SHA:-HEAD}
+
+      - name: Log in to Gitea registry
+        run: |
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net -u ${{ gitea.actor }} --password-stdin
+
+      - name: Build and push builder image
+        run: |
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          docker build \
+            -f build/Dockerfile.builder \
+            --build-arg BUILD_DATE=${BUILD_DATE} \
+            -t ${IMAGE}:latest \
+            -t ${IMAGE}:sha-${SHORT_SHA} \
+            .
+
+          docker push ${IMAGE}:latest
+          docker push ${IMAGE}:sha-${SHORT_SHA}
+
+          echo "Pushed: ${IMAGE}:latest, :sha-${SHORT_SHA}"

@@ -1,0 +1,56 @@
+# check.yml — Fast CI: cargo check + clippy + lib tests
+#
+# Runs on every push and PR. No Chromium source required.
+# Uses the Rust toolchain already present on the runner.
+#
+# Triggered by: push to main, pull_request to main, workflow_dispatch
+
+name: Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build/Dockerfile.builder'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Check & Lint
+    runs-on: titan
+    steps:
+      - name: Checkout
+        run: |
+          git clone --depth 1 --branch ${GITHUB_REF_NAME:-main} \
+            https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git .
+          git checkout ${GITHUB_SHA:-HEAD}
+
+      - name: Setup Rust
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          rustc --version
+          cargo --version
+
+      - name: cargo check
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          cargo check --target x86_64-unknown-linux-gnu
+
+      - name: cargo clippy
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          cargo clippy --target x86_64-unknown-linux-gnu -- -D warnings
+
+      - name: cargo test (lib)
+        run: |
+          source ~/.cargo/env 2>/dev/null || true
+          cargo test --lib --target x86_64-unknown-linux-gnu

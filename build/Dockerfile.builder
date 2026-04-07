@@ -1,0 +1,70 @@
+# Dockerfile.builder — Carbonyl CI builder image
+#
+# Contains all build dependencies for:
+#   - Chromium patches / GN toolchain (ninja, gn, clang, python3, depot_tools)
+#   - Rust toolchain (rustup, cargo)
+#   - Runtime packaging (tar, strip, curl, jq)
+#
+# The Chromium source checkout (~30 GB) is NOT baked into this image.
+# It lives at a fixed path on the build runner host (e.g. /srv/chromium/src)
+# and is bind-mounted into the container by the CI runner.
+#
+# Usage (manual):
+#   docker build -f build/Dockerfile.builder -t roctinam/carbonyl-builder:latest .
+#
+# CI usage:
+#   Registered as Gitea Actions runner 'carbonyl-builder' via gitea-act-runner.
+#   Jobs use `runs-on: carbonyl-builder`.
+
+FROM ubuntu:22.04
+
+ARG BUILD_DATE
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.title="carbonyl-builder" \
+      org.opencontainers.image.description="Carbonyl CI build environment" \
+      org.opencontainers.image.source="https://git.integrolabs.net/roctinam/carbonyl"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ── System packages ───────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y \
+    # Build essentials
+    build-essential \
+    python3 python3-pip \
+    ninja-build \
+    curl wget git \
+    # Clang (Chromium uses its own bundled clang, but system clang is a fallback)
+    clang lld \
+    # Cross-compilation support
+    g++-aarch64-linux-gnu libc6-dev-arm64-cross \
+    # Chromium runtime dependencies (for smoke-testing the binary)
+    libasound2 libexpat1 libfontconfig1 libnss3 \
+    libdbus-1-dev libglib2.0-dev \
+    # Tooling
+    jq \
+    ca-certificates \
+    xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Rust toolchain ────────────────────────────────────────────────────────────
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl -sSf https://sh.rustup.rs | sh -s -- -y \
+        --no-modify-path \
+        --default-toolchain stable \
+        --profile minimal && \
+    rustup target add aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu && \
+    # Cross-compilation linkers
+    echo '[target.aarch64-unknown-linux-gnu]' >> /usr/local/cargo/config.toml && \
+    echo 'linker = "aarch64-linux-gnu-gcc"' >> /usr/local/cargo/config.toml && \
+    rustc --version && cargo --version
+
+# ── Verify tools ──────────────────────────────────────────────────────────────
+RUN ninja --version && \
+    python3 --version && \
+    curl --version | head -1 && \
+    jq --version
+
+WORKDIR /workspace
