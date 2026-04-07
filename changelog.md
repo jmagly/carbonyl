@@ -2,6 +2,96 @@
 
 All notable changes to this project will be documented in this file.
 
+---
+
+## [Unreleased] — jmagly/carbonyl fork
+
+This section covers work done in the `jmagly/carbonyl` fork since the upstream
+(`fathyb/carbonyl`) became inactive in February 2023. The fork maintains
+Carbonyl for use in automated agent testing pipelines and upgrades the
+Chromium base through M135.
+
+### Chromium Upgrade: M111 → M135 (Apr 2026)
+
+A four-phase rebase of all 21 Chromium patches across four milestones:
+
+| Phase | Milestone | Commit |
+|-------|-----------|--------|
+| Pre-flight audit | — | `2a01eef` |
+| Phase 1 | M120 (120.0.6099.109) | `88d2d4d` |
+| Phase 2 | M132 (132.0.6834.109) | `2293579` |
+| Phase 3 | M135 (135.0.7049.84) | `c40955f` |
+
+Key technical changes across the rebase:
+
+- **`headless_screen.{h,cc}`**: migrated to M135's `HeadlessScreenInfo`
+  multi-display constructor while preserving Carbonyl DPI injection via
+  `carbonyl::Bridge::GetDPI()`
+- **`SoftwareOutputDeviceProxy`**: removed from upstream in M135; patch 13
+  restores it into `components/viz/service/display_embedder/`. A Carbonyl-owned
+  replacement (`carbonyl/src/viz/CarbonylSoftwareOutputDevice`) is also added
+  for forward compatibility.
+- **Skia patches dropped** (M120): both former Skia patches superseded by
+  in-tree changes; WebRTC GIO patch replaced by `rtc_use_pipewire=false`
+- **`//build:chromeos_buildflags`** removed across M120+: dropped from all
+  patch diffs
+- **`compositor.h`**: M135 added `ExternalBeginFrameControllerClientFactory`;
+  kept alongside Carbonyl's `CompositorDelegate`
+- **GN args**: `enable_ppapi` and `enable_rust_json` removed (no longer exist
+  in M135)
+
+### Runtime Distribution Migration (Apr 2026) — `eb285c6`
+
+- Migrated runtime distribution from dead CDN (`carbonyl.fathy.fr`) to
+  Gitea releases API on `roctinam/carbonyl`
+- `scripts/runtime-push.sh`: rewritten to create/update Gitea releases via
+  `curl`, tagged `runtime-<hash>`, idempotent re-upload
+- `scripts/runtime-pull.sh`: rewritten to download from Gitea releases with
+  redirect support
+
+### Automation Layer (Apr 2026)
+
+A Python browser automation layer for agent testing pipelines, built on PTY +
+`pyte` terminal emulation:
+
+#### 🚀 Features
+
+- **`automation/browser.py`** — `CarbonylBrowser` class: spawns carbonyl via
+  PTY, feeds bytes to `pyte` screen buffer, returns clean text (`f1ae590`)
+- **Session management** (`automation/session.py`): persistent Chromium
+  user-data-dir sessions with fork, snapshot/restore, and live-instance
+  detection (`565b81d`)
+- **Persistent daemon** (`automation/daemon.py`): background browser process
+  with Unix domain socket; callers reconnect without restarting Chromium,
+  preserving auth cookies and page state (`72590a2`)
+- **`ScreenInspector`** (`automation/screen_inspector.py`): coordinate
+  visualization toolkit with rulers, annotation, crosshair, dot-map, and
+  LLM-friendly region summaries (`6331195`)
+- **Mouse path simulation** — `mouse_move()` + `mouse_path()` for bot-sensor
+  entropy (Akamai Bot Manager mousemove requirement) (`15f0aa8`)
+- **USPS PO Box smoke test** (`automation/usps_pobox.py`): end-to-end login
+  and account data retrieval (`eb285c6`)
+
+#### 🐛 Bug Fixes
+
+- Suppress `navigator.webdriver` via `AutomationControlled` flag (`c3e08f8`)
+- Spoof Firefox User-Agent and disable HTTP/2 to defeat Akamai server-side
+  bot classifier (`cba5bd4`)
+- Fix `click_on()` — was broken in daemon mode; now uses `find_text()` and
+  clicks center of matched text (`8e4fb3e`)
+
+### Build (Apr 2026)
+
+- **`scripts/build-local.sh`**: pull pre-built Chromium runtime (~75 MB) and
+  compile `libcarbonyl.so` from Rust (~10 s); no full Chromium build needed
+  (`567f40e`)
+- GN args: remove `enable_ppapi` and `enable_rust_json` (obsolete in M135)
+  (`2a01eef`)
+- Add `third_party/google_benchmark/buildconfig.gni` (missing from `gclient
+  sync`, required by WebRTC `rtc_base`) (`2583377`)
+
+---
+
 ## [0.0.3] - 2023-02-18
 
 ### 🚀 Features

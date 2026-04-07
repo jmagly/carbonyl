@@ -46,26 +46,42 @@ To bump a specific crate to a new major version, edit `Cargo.toml` then run
 
 ### Chromium version (involved — do when security patches are needed)
 
-Chromium is currently at `120.0.6099.109` (M120, upgraded Apr 2026 from M111).
-The target is M135. Updating it requires:
+Chromium is currently at `135.0.7049.84` (M135, upgraded Apr 2026 from M132).
+The upgrade path was: M111 → M120 → M132 → M135. Updating it requires:
 
 1. **Choose a new Chromium version**: check https://chromiumdash.appspot.com/releases
    for a stable branch release.
 
-2. **Update `.gclient`**: change the `@111.0.5511.1` ref to the new version.
-
-3. **Rebase patches**: the 21 Chromium patches + 2 Skia + 1 WebRTC need to apply
-   cleanly on the new base. This is the hard part.
-
+2. **Update `.gclient`**: change the `@<version>` ref and set `"managed": False`.
+   Then manually check out the tag before syncing:
    ```bash
-   # Sync Chromium source (requires depot_tools and ~100 GB disk)
+   git -C chromium/src fetch origin refs/tags/<version>
+   git -C chromium/src checkout <version>
    bash scripts/gclient.sh sync
-   bash scripts/patches.sh apply   # will show conflicts if any
+   chromium_upstream=$(git -C chromium/src rev-parse HEAD)
    ```
 
-4. **Fix conflicts**: each patch in `chromium/patches/chromium/` touches
-   Chromium internals for display routing and rendering. Conflicts are
-   usually small — adjust line numbers, API changes.
+3. **Update `scripts/patches.sh`**: set `chromium_upstream`, `skia_upstream`,
+   and `webrtc_upstream` to the new base commits. Get skia/webrtc from DEPS:
+   ```bash
+   python3 -c "exec(open('chromium/src/DEPS').read()); print(vars['skia_revision'])"
+   python3 -c "exec(open('chromium/src/DEPS').read()); print(vars['webrtc_revision'])"
+   ```
+
+4. **Rebase patches** using `--3way` (plain `git am` will fail on context drift):
+   ```bash
+   bash scripts/patches.sh apply   # fails on first conflict
+   # then for each conflict:
+   git am --abort
+   git am --3way --committer-date-is-author-date chromium/patches/chromium/000N-*.patch
+   # resolve conflict markers, git add, git am --continue
+   ```
+   Common conflict patterns to expect:
+   - `//build:chromeos_buildflags` removed in M120+ — drop from patch diffs
+   - `headless_screen.{h,cc}`: M135 switched to `HeadlessScreenInfo` multi-display
+     constructor — keep M135 signature, inject `Bridge::GetDPI()` into new path
+   - `compositor.h`: M135 added `ExternalBeginFrameControllerClientFactory` — keep both
+   - `layer_tree_host.h`: M135 added `PropertyTreeDelegate` — keep both fields
 
 5. **Rebuild runtime** (requires Docker, ~2 hours):
    ```bash
@@ -76,69 +92,63 @@ The target is M135. Updating it requires:
 6. **Save updated patches**:
    ```bash
    bash scripts/patches.sh save
-   git add chromium/patches/
-   git commit -m "chore(chromium): update to M<version>"
+   git add chromium/patches/ scripts/patches.sh chromium/.gclient
+   git commit -m "chore(chromium): rebase patches on M<version> (<version>)"
    ```
 
-7. **Upload new runtime** (optional — makes `build-local.sh` fast for others):
+7. **Upload new runtime** to Gitea releases (makes `build-local.sh` fast for others):
+
+   Runtimes are distributed via Gitea releases on `roctinam/carbonyl`. Each release is
+   tagged `runtime-<hash>` where the hash is computed from the Chromium version, patches,
+   and bridge files. Run for each target platform:
+
    ```bash
-   CDN_ACCESS_KEY_ID=... CDN_SECRET_ACCESS_KEY=... bash scripts/runtime-push.sh Default
+   # linux/amd64 (run on the build host after docker-build.sh)
+   GITEA_TOKEN=<token> bash scripts/runtime-push.sh
+
+   # linux/arm64 (if cross-compiled or built on arm64)
+   GITEA_TOKEN=<token> bash scripts/runtime-push.sh arm64
+
+   # macos/amd64 and macos/arm64 (run on a Mac after docker-build.sh)
+   GITEA_TOKEN=<token> bash scripts/runtime-push.sh
+   GITEA_TOKEN=<token> bash scripts/runtime-push.sh arm64
    ```
+
+   The token needs `write:release` scope on the `roctinam/carbonyl` repo.
+
+   If the tarball (~75 MB) exceeds the Gitea upload limit, increase
+   `APP_MAX_ATTACHMENT_SIZE` in Gitea's `app.ini`.
 
 ### Patch reference commits
 
-The `scripts/patches.sh` script uses hardcoded upstream base commits:
+The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M135):
 
 | Repo | Base commit | Chromium version |
 |------|-------------|-----------------|
-| Chromium | `92da8189788b1b373cbd3348f73d695dfdc521b6` | M111 (current) |
-| Skia | `486deb23bc2a4d3d09c66fef52c2ad64d8b4f761` | M111 (current) |
-| WebRTC | `727080cbacd58a2f303ed8a03f0264fe1493e47a` | M111 (current) |
-
-**M135 target commits** (update `scripts/patches.sh` when rebasing to M135):
-
-| Repo | Base commit | Source |
-|------|-------------|--------|
+| Chromium | `6c019e56001911b3fd467e03bf68c435924d62f4` | M135 (135.0.7049.84) |
 | Skia | `6e445bdea696eb6b6a46681dfc1a63edaa517edb` | DEPS @ 135.0.7049.84 |
 | WebRTC | `9e5db68b15087eccd8d2493b4e8539c1657e0f75` | DEPS @ 135.0.7049.84 |
 
-When updating Chromium, update these to the new Chromium's third-party base
-commits before running `patches.sh apply`.
+When updating Chromium, update all three to the new version's base commits
+before running `patches.sh apply`.
 
-### Patch 07 re-anchor (M135)
+### Notes on current patch set (M135)
 
-Patch 07 (`Disable-text-effects.patch`) currently targets:
-- `third_party/blink/renderer/core/paint/ng/ng_text_painter_base.cc`
+- **Patch 03** (`Setup-shared-software-rendering-surface`): removes `[EnableIf=is_win]`
+  guard from `CreateLayeredWindowUpdater` in `display_private.mojom`, making it
+  cross-platform. Also changes `Draw()` → `Draw(gfx.mojom.Rect damage_rect)`.
 
-In M135, the `ng/` subdirectory was dissolved (~M120). The `ng_text_painter_base.cc` file
-was merged into `third_party/blink/renderer/core/paint/text_painter_base.cc`, then further
-consolidated. In M135, only `text_painter.cc` and `painter_base.cc` exist in that directory.
+- **Patch 13** (`Refactor-rendering-bridge`): restores `software_output_device_proxy.cc/h`
+  into `components/viz/service/display_embedder/` (upstream removed it in M135).
+  The `LayeredWindowUpdater` Mojo interface is still present in M135.
 
-**Action before Phase 1:** Confirm which M135 file contains `PaintUnderOrOverLineDecorations`
-(likely `text_painter.cc`) and re-target the patch accordingly.
+- **`carbonyl/src/viz/`**: `CarbonylSoftwareOutputDevice` is a Carbonyl-owned copy
+  of the former upstream proxy class, kept for future use if the Mojo path is ever
+  replaced (e.g. M137+ removes `LayeredWindowUpdater`).
 
-### Patch 13 rewrite context (M135)
-
-Patch 13 (`Refactor-rendering-bridge.patch`) creates `software_output_device_proxy.cc` which
-uses the `LayeredWindowUpdater` Mojo interface (removed ~M137) for shared-memory pixel capture.
-
-In M135, the hook point is `components/viz/service/display_embedder/software_output_device_ozone.cc`.
-The `SoftwareOutputDeviceOzone` class interface:
-
-```cpp
-class SoftwareOutputDeviceOzone : public SoftwareOutputDevice {
-  SoftwareOutputDeviceOzone(std::unique_ptr<ui::PlatformWindowSurface>,
-                             std::unique_ptr<ui::SurfaceOzoneCanvas>);
-  SkCanvas* BeginPaint(const gfx::Rect& damage_rect);
-  void EndPaint();
-  void Resize(const gfx::Size& viewport_pixel_size, float scale_factor);
-  void OnSwapBuffers(SwapBuffersCallback, gfx::FrameData data);
-};
-```
-
-Rewrite strategy: subclass `SoftwareOutputDeviceOzone` and override `EndPaint()` to
-intercept the rendered `SkCanvas` pixels via `SkCanvas::readPixels()` into a shared memory
-buffer, then signal the Carbonyl Rust bridge.
+- **Skia/WebRTC patches**: none needed at M135. The two former Skia patches
+  (disable text rendering, export private APIs) were superseded during the M120
+  rebase; WebRTC's GIO patch was rendered unnecessary by `rtc_use_pipewire=false`.
 
 ## Automation Layer
 
