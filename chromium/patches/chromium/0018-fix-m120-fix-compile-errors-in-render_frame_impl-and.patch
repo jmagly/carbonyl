@@ -1,4 +1,4 @@
-From 9490c815aa002be39da7d789a6acac77a4ca1e61 Mon Sep 17 00:00:00 2001
+From 90ae22e7b2fa8d49049656e509590e75109d2c40 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 21:51:24 -0400
 Subject: [PATCH 18/21] fix(m120): fix compile errors in render_frame_impl and
@@ -19,10 +19,10 @@ Content-Transfer-Encoding: 8bit
  4 files changed, 8 insertions(+), 15 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index d9fdbc37751d3..d8f18811a672d 100644
+index 28954eeb6a01b..4d2488a9a7e6c 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -281,14 +281,14 @@
+@@ -283,14 +283,14 @@
  #include "third_party/blink/renderer/core/layout/layout_view.h"
  #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
  #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
@@ -39,7 +39,7 @@ index d9fdbc37751d3..d8f18811a672d 100644
  #include "third_party/skia/src/text/GlyphRun.h"
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
-@@ -2190,25 +2190,15 @@ protected:
+@@ -2177,25 +2177,15 @@ protected:
  
        base64[runSize] = '\0';
  
@@ -69,10 +69,10 @@ index d9fdbc37751d3..d8f18811a672d 100644
            paint.getColor()
          )
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index 92255d5cb15b6..ed7fa455ac50e 100644
+index 6f4a9c2b38661..a4c6444e66a8c 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -124,6 +124,7 @@
+@@ -128,6 +128,7 @@
  #include "url/gurl.h"
  #include "url/origin.h"
  #include "v8/include/v8-forward.h"
@@ -81,10 +81,10 @@ index 92255d5cb15b6..ed7fa455ac50e 100644
  #if BUILDFLAG(ENABLE_PPAPI)
  #include "content/common/pepper_plugin.mojom.h"
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 2dfc8cee05b4c..4fd973c4fbed9 100644
+index 3b141265dd7e0..0006b3ef9aae3 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -256,6 +256,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
+@@ -172,6 +172,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
  void HeadlessBrowserImpl::Shutdown() {
    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
  

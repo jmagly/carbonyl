@@ -1,4 +1,4 @@
-From f65be19eeedf85757365879a26691fd0d7fe635d Mon Sep 17 00:00:00 2001
+From 7b5ed1d54798050de3a5073d3a75d6ed4a29a812 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:31:17 +0100
 Subject: [PATCH 07/21] Disable text effects
@@ -9,10 +9,10 @@ Subject: [PATCH 07/21] Disable text effects
  2 files changed, 34 insertions(+), 33 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/paint/text_decoration_painter.cc b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-index bb71cabb345b2..c6fd5ce7cc7ae 100644
+index 10df8412e5dcf..3b19601ce4636 100644
 --- a/third_party/blink/renderer/core/paint/text_decoration_painter.cc
 +++ b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-@@ -172,21 +172,22 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
+@@ -171,21 +171,22 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
              continue;
            }
  
@@ -51,10 +51,10 @@ index bb71cabb345b2..c6fd5ce7cc7ae 100644
        },
        paint_info_.context, text_style);
 diff --git a/ui/gfx/render_text.cc b/ui/gfx/render_text.cc
-index ec4c6eb4e76dd..9dcdd533c1c83 100644
+index f015a54360dd9..c7d1582217026 100644
 --- a/ui/gfx/render_text.cc
 +++ b/ui/gfx/render_text.cc
-@@ -54,9 +54,9 @@ constexpr char16_t kEllipsisCodepoint = 0x2026;
+@@ -59,9 +59,9 @@ constexpr char16_t kEllipsisCodepoint = 0x2026;
  
  // Fraction of the text size to raise the center of a strike-through line above
  // the baseline.
@@ -66,7 +66,7 @@ index ec4c6eb4e76dd..9dcdd533c1c83 100644
  
  // Float comparison needs epsilon to consider rounding errors in float
  // arithmetic. Epsilon should be dependent on the context and here, we are
-@@ -379,28 +379,28 @@ void SkiaTextRenderer::DrawUnderline(int x,
+@@ -384,28 +384,28 @@ void SkiaTextRenderer::DrawUnderline(int x,
                                       int y,
                                       int width,
                                       SkScalar thickness_factor) {

@@ -6,9 +6,12 @@ source "$CARBONYL_ROOT/scripts/env.sh"
 
 cd "$CHROMIUM_SRC"
 
-chromium_upstream="a8187117c7ea88d5d027c48d2086c917052bd4c8"
-skia_upstream="349c1179c43ef46f2804404952b9460dc007d76a"
-webrtc_upstream="b0cc68e61205fd11a7256a6e85307ec17ad95790"
+# M135 (135.0.7049.84) baseline commits.
+# chromium_upstream: set this to the output of `git -C "$CHROMIUM_SRC" rev-parse HEAD`
+# after running `bash scripts/gclient.sh sync` for the first time on M135.
+chromium_upstream="6c019e56001911b3fd467e03bf68c435924d62f4"  # 135.0.7049.84
+skia_upstream="6e445bdea696eb6b6a46681dfc1a63edaa517edb"      # DEPS @ 135.0.7049.84
+webrtc_upstream="9e5db68b15087eccd8d2493b4e8539c1657e0f75"    # DEPS @ 135.0.7049.84
 
 if [[ "$1" == "apply" ]]; then
     echo "Stashing Chromium changes.."

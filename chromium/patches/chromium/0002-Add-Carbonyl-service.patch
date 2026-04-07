@@ -1,4 +1,4 @@
-From 84b23d78f161fa02c70dca1c1c780506e03febd5 Mon Sep 17 00:00:00 2001
+From e30ffc7b48590659fd33965a0aaaea9a4c8fa9c6 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:21:59 +0100
 Subject: [PATCH 02/21] Add Carbonyl service
@@ -11,10 +11,10 @@ Subject: [PATCH 02/21] Add Carbonyl service
  4 files changed, 69 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 650fbf7ba702f..2118c4a247e38 100644
+index 76fab186e5707..141329b08376a 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -5247,6 +5247,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -5421,6 +5421,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // to change across MPArch activations like prerendering.
    const base::UnguessableToken devtools_frame_token_;
  
@@ -24,10 +24,10 @@ index 650fbf7ba702f..2118c4a247e38 100644
    // RenderFrameHostImpl exposes document-scoped Mojo services to the currently
    // active document in the corresponding RenderFrame.
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index a0e45dfcf20ed..a9eab8f6dce4b 100644
+index 602bea4189f0d..d78c52755f4ce 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -2008,6 +2008,10 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -1995,6 +1995,10 @@ RenderFrameImpl::~RenderFrameImpl() {
                                              routing_id_
  #endif
    );
@@ -39,10 +39,10 @@ index a0e45dfcf20ed..a9eab8f6dce4b 100644
  
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index 0980dad73ed2d..92255d5cb15b6 100644
+index bf073c9180d47..6f4a9c2b38661 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -1559,6 +1559,8 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1582,6 +1582,8 @@ class CONTENT_EXPORT RenderFrameImpl
    scoped_refptr<network::SharedURLLoaderFactory>
        url_loader_factory_override_for_test_;
  
@@ -51,7 +51,7 @@ index 0980dad73ed2d..92255d5cb15b6 100644
    // When the browser asks the renderer to commit a navigation, it should always
    // result in a committed navigation reported via DidCommitProvisionalLoad().
    // This is important because DidCommitProvisionalLoad() is responsible for
-@@ -1635,6 +1637,10 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1658,6 +1660,10 @@ class CONTENT_EXPORT RenderFrameImpl
    // false, but set to true by some tests.
    bool send_content_state_immediately_ = false;
  
@@ -63,10 +63,10 @@ index 0980dad73ed2d..92255d5cb15b6 100644
    //
    // 1. The associated WebFrameWidget and its compositor is initialized at
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 8c4165bab3911..4a929ef6278a3 100644
+index 4b52d5d557c89..6517763ca7e8a 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -101,11 +101,17 @@ bool Font::operator==(const Font& other) const {
+@@ -96,11 +96,17 @@ bool Font::operator==(const Font& other) const {
  
  namespace {
  
@@ -84,7 +84,7 @@ index 8c4165bab3911..4a929ef6278a3 100644
    for (const auto& blob_info : blobs) {
      DCHECK(blob_info.blob);
      cc::PaintCanvasAutoRestore auto_restore(canvas, false);
-@@ -150,8 +156,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
+@@ -145,8 +151,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
        }
      }
      if (node_id != cc::kInvalidNodeId) {
@@ -94,7 +94,7 @@ index 8c4165bab3911..4a929ef6278a3 100644
      } else {
        canvas->drawTextBlob(blob_info.blob, point.x(), point.y(), flags);
      }
-@@ -179,6 +184,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -174,6 +179,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -125,8 +125,8 @@ index 8c4165bab3911..4a929ef6278a3 100644
 +
    CachingWordShaper word_shaper(*this);
    ShapeResultBuffer buffer;
-   word_shaper.FillResultBuffer(run_info, &buffer);
-@@ -201,6 +231,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+   word_shaper.FillResultBuffer(run, &buffer);
+@@ -197,6 +227,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

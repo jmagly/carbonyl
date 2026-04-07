@@ -1,4 +1,4 @@
-From e2ba375faf5e93389495def486c64245c269732f Mon Sep 17 00:00:00 2001
+From a8b38e00c769c2cf89d37ab0e7ca2d8b3820c4fa Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 04:00:35 -0400
 Subject: [PATCH 17/21] fix(ui): use raw_ptr for CompositorDelegate member
@@ -9,10 +9,10 @@ Subject: [PATCH 17/21] fix(ui): use raw_ptr for CompositorDelegate member
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/ui/compositor/compositor.h b/ui/compositor/compositor.h
-index 6aecebe0b7d97..497f3299ba459 100644
+index c11b5f26d2e1a..6c371b50b836e 100644
 --- a/ui/compositor/compositor.h
 +++ b/ui/compositor/compositor.h
-@@ -576,7 +576,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
+@@ -629,7 +629,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
        simple_begin_frame_observers_;
    std::unique_ptr<ui::HostBeginFrameObserver> host_begin_frame_observer_;
  

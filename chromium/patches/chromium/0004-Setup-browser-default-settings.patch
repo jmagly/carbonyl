@@ -1,27 +1,31 @@
-From 139df0856f12b401a706342a6d9befe6b5f50d29 Mon Sep 17 00:00:00 2001
+From 71365c9240fa69972f4324d1216467d23ee4e3da Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:27:27 +0100
 Subject: [PATCH 04/21] Setup browser default settings
 
 ---
- headless/lib/browser/headless_browser_impl.cc | 4 ++--
+ headless/lib/browser/headless_browser_impl.cc | 8 ++++++--
  headless/public/headless_browser.h            | 4 ++--
- 2 files changed, 4 insertions(+), 4 deletions(-)
+ 2 files changed, 8 insertions(+), 4 deletions(-)
 
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 1c4eee26540fd..05ac366832031 100644
+index d910939554e18..b3a9c8e4f98a6 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -54,7 +54,7 @@ namespace headless {
- 
+@@ -60,7 +60,11 @@ namespace headless {
  namespace {
+ 
  // Product name for building the default user agent string.
 -const char kHeadlessProductName[] = "HeadlessChrome";
 +const char kHeadlessProductName[] = "Google Chrome";
- constexpr gfx::Size kDefaultWindowSize(800, 600);
++constexpr gfx::Size kDefaultWindowSize(800, 600);
++
++constexpr gfx::FontRenderParams::Hinting kDefaultFontRenderHinting =
++    gfx::FontRenderParams::Hinting::HINTING_FULL;
  
- constexpr gfx::FontRenderParams::Hinting kDefaultFontRenderHinting =
-@@ -171,7 +171,7 @@ Options Builder::Build() {
+ #if defined(HEADLESS_USE_PREFS)
+ const base::FilePath::CharType kLocalStateFilename[] =
+@@ -86,7 +90,7 @@ bool HeadlessBrowser::Options::DevtoolsServerEnabled() {
  
  /// static
  std::string HeadlessBrowser::GetProductNameAndVersion() {
@@ -31,10 +35,10 @@ index 1c4eee26540fd..05ac366832031 100644
  
  /// static
 diff --git a/headless/public/headless_browser.h b/headless/public/headless_browser.h
-index 620cf327ccb16..f612b31b2c7ae 100644
+index 2669a6bb8ca2b..7d9329763da7b 100644
 --- a/headless/public/headless_browser.h
 +++ b/headless/public/headless_browser.h
-@@ -124,10 +124,10 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
+@@ -123,10 +123,10 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
    base::FilePath disk_cache_dir;
  
    // Run a browser context in an incognito mode. Enabled by default.

@@ -1,4 +1,4 @@
-From ec6ebaf2b599e1dc43feed4712b830f20c05c358 Mon Sep 17 00:00:00 2001
+From a3035a25f70761ed61a471214252c768a4b395a2 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sun, 5 Apr 2026 02:18:10 -0400
 Subject: [PATCH 21/21] fix(m120): fix base64 and CreateSkFont API changes in
@@ -12,10 +12,10 @@ Subject: [PATCH 21/21] fix(m120): fix base64 and CreateSkFont API changes in
  1 file changed, 5 insertions(+), 4 deletions(-)
 
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index afcd70e063491..f36fbc6ac6db6 100644
+index 0de1d6f17c6e3..0fca108328ddd 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -53,6 +53,7 @@
+@@ -48,6 +48,7 @@
  #include "third_party/skia/include/core/SkTextBlob.h"
  #include "ui/gfx/geometry/rect_f.h"
  
@@ -23,7 +23,7 @@ index afcd70e063491..f36fbc6ac6db6 100644
  #include "carbonyl/src/browser/bridge.h"
  
  namespace blink {
-@@ -190,14 +191,14 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -185,14 +186,14 @@ void Font::DrawText(cc::PaintCanvas* canvas,
        run_info.from,
        run_info.to - run_info.from
      ).ToString().Utf8();
@@ -40,7 +40,7 @@ index afcd70e063491..f36fbc6ac6db6 100644
      );
  
      if (node_id != cc::kInvalidNodeId) {
-@@ -237,14 +238,14 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -233,14 +234,14 @@ void Font::DrawText(cc::PaintCanvas* canvas,
        text_info.from,
        text_info.Length()
      ).ToString().Utf8();
