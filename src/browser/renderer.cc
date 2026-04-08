@@ -3,6 +3,7 @@
 #include <memory>
 #include <iostream>
 #include <stdio.h>
+#include <vector>
 
 #include "base/functional/callback.h"
 #include "carbonyl/src/browser/bridge.h"
@@ -127,7 +128,7 @@ void Renderer::SetTitle(const std::string& title) {
 }
 
 void Renderer::DrawText(const std::vector<Text>& text) {
-    struct carbonyl_renderer_text data[text.size()];
+    std::vector<struct carbonyl_renderer_text> data(text.size());
 
     for (size_t i = 0; i < text.size(); i++) {
         data[i].text = text[i].text.c_str();
@@ -140,7 +141,7 @@ void Renderer::DrawText(const std::vector<Text>& text) {
         data[i].rect.size.height = std::ceil(text[i].rect.height());
     }
 
-    carbonyl_renderer_draw_text(ptr_, data, text.size());
+    carbonyl_renderer_draw_text(ptr_, data.data(), text.size());
 }
 
 void Renderer::DrawBitmap(

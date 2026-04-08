@@ -13,8 +13,7 @@
 #   docker build -f build/Dockerfile.builder -t roctinam/carbonyl-builder:latest .
 #
 # CI usage:
-#   Registered as Gitea Actions runner 'carbonyl-builder' via gitea-act-runner.
-#   Jobs use `runs-on: carbonyl-builder`.
+#   All CI jobs use `runs-on: titan` — carbonyl builds run exclusively on titan.
 
 FROM ubuntu:22.04
 
