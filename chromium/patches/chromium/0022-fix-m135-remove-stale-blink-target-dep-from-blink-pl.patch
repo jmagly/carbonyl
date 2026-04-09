@@ -1,7 +1,7 @@
 From 5492db54967f058cc3a44dd2da3f86dc57c9ef73 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Tue, 7 Apr 2026 04:46:34 -0400
-Subject: [PATCH 22/22] fix(m135): remove stale :blink target dep from blink
+Subject: [PATCH 22/23] fix(m135): remove stale :blink target dep from blink
  platform BUILD.gn
 
 Patch 0012 replaced the :carbonyl dep with :blink in

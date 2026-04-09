@@ -1,7 +1,7 @@
 From 358a10658383c8f81d675c1dc5d8592bf5629fce Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:29:05 +0100
-Subject: [PATCH 11/22] Rename carbonyl::Renderer to carbonyl::Bridge
+Subject: [PATCH 11/23] Rename carbonyl::Renderer to carbonyl::Bridge
 
 ---
  headless/app/headless_shell.cc                     | 5 ++++-
