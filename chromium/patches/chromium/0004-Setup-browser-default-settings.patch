@@ -1,7 +1,7 @@
 From 71365c9240fa69972f4324d1216467d23ee4e3da Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:27:27 +0100
-Subject: [PATCH 04/23] Setup browser default settings
+Subject: [PATCH 04/24] Setup browser default settings
 
 ---
  headless/lib/browser/headless_browser_impl.cc | 8 ++++++--

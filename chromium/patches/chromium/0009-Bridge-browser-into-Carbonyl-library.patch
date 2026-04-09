@@ -1,7 +1,7 @@
 From edf5dadb08311183082be85bf6cc6c163b540cbe Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:32:30 +0100
-Subject: [PATCH 09/23] Bridge browser into Carbonyl library
+Subject: [PATCH 09/24] Bridge browser into Carbonyl library
 
 ---
  headless/app/headless_shell.cc                |  31 +-

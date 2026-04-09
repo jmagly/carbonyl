@@ -1,7 +1,7 @@
 From 65f35eb421346f48cdfe39f22f6c259681cb69dc Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 02:20:32 +0100
-Subject: [PATCH 12/23] Create separate bridge for Blink
+Subject: [PATCH 12/24] Create separate bridge for Blink
 
 ---
  .../blink/renderer/core/css/resolver/style_resolver.cc    | 4 ++--

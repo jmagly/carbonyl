@@ -1,0 +1,38 @@
+# Copyright 2026 The Carbonyl Authors. All rights reserved.
+# Use of this source code is governed by an MIT-style license that can be
+# found in the LICENSE file.
+
+# carbonyl/src/blink — text capture entry point that lives inside blink.
+#
+# This source_set exists to give carbonyl a translation unit that is
+# compiled with INSIDE_BLINK defined (via the blink "inside_blink" config),
+# so it can include third_party/blink/renderer/core/* and
+# third_party/blink/renderer/platform/* headers without triggering the
+# Oilpan/cppgc cascade documented in roctinam/carbonyl#27.
+#
+# The previous (M111-era) approach inlined this code directly into
+# content/renderer/render_frame_impl.cc, which is a non-blink TU. In M135
+# upstream tightened blink layering enforcement and the cppgc cascade
+# fired. See #28 for the structural fix this implements.
+
+source_set("text_capture") {
+  sources = [
+    "text_capture.cc",
+    "text_capture.h",
+  ]
+
+  # The "inside_blink" config defines INSIDE_BLINK and BLINK_IMPLEMENTATION,
+  # which lets this TU parse blink/renderer/core/* headers and their
+  # transitively-included mojom-blink.h variants without errors.
+  configs += [ "//third_party/blink/renderer:inside_blink" ]
+
+  deps = [
+    "//base",
+    "//carbonyl/src/browser:bridge",
+    "//carbonyl/src/browser:mojom",
+    "//skia",
+    "//third_party/blink/renderer/core",
+    "//third_party/blink/renderer/platform",
+    "//ui/gfx/geometry",
+  ]
+}
