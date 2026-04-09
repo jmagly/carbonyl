@@ -134,13 +134,23 @@ before running `patches.sh apply`.
 
 ### Notes on current patch set (M135)
 
+- **Total patches**: 23 (was 21 in M132). M135 added two integration patches:
+  - **Patch 22** (`fix-m135-remove-stale-blink-target-dep`): removes a stale
+    `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch
+    0012/0013 mismatch — patch 0013 reverted source changes but left the dep)
+  - **Patch 23** (`fix-m135-Path-B-build-fixes-disable-b64-text-capture`):
+    surgical M135 build fixes. See "Path B and the disabled b64 text capture"
+    below.
+
 - **Patch 03** (`Setup-shared-software-rendering-surface`): removes `[EnableIf=is_win]`
   guard from `CreateLayeredWindowUpdater` in `display_private.mojom`, making it
   cross-platform. Also changes `Draw()` → `Draw(gfx.mojom.Rect damage_rect)`.
 
 - **Patch 13** (`Refactor-rendering-bridge`): restores `software_output_device_proxy.cc/h`
   into `components/viz/service/display_embedder/` (upstream removed it in M135).
-  The `LayeredWindowUpdater` Mojo interface is still present in M135.
+  The `LayeredWindowUpdater` Mojo interface is still present in M135. Updated
+  for the M135 `CreatePlatformCanvasWithPixels` signature (added `bytes_per_row`
+  parameter).
 
 - **`carbonyl/src/viz/`**: `CarbonylSoftwareOutputDevice` is a Carbonyl-owned copy
   of the former upstream proxy class, kept for future use if the Mojo path is ever
@@ -149,6 +159,59 @@ before running `patches.sh apply`.
 - **Skia/WebRTC patches**: none needed at M135. The two former Skia patches
   (disable text rendering, export private APIs) were superseded during the M120
   rebase; WebRTC's GIO patch was rendered unnecessary by `rtc_use_pipewire=false`.
+
+### Path B and the disabled b64 text capture (M135+)
+
+The optional `--carbonyl-b64-text` text-capture mode is **currently disabled**
+in M135 builds. See [issue #27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)
+for the full diagnosis and [issue #28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)
+for the structural fix.
+
+**Why**: The b64 text-capture path in patch 02 (`Add-Carbonyl-service`) reaches
+into `third_party/blink/renderer/core/*` headers from `content/renderer/render_frame_impl.cc`,
+which is a non-blink translation unit. In M135 this triggers an Oilpan/cppgc
+template cascade via `kCustomizeSupportsUnretained<T>` that hard-errors on
+`sizeof(void)` when `base::SequenceBound<T>::Storage::Destruct` flows a
+`void*` allocator through `base::Unretained`.
+
+**Path B (current)**: `#if 0` the entire text-capture block (the
+`blink/renderer/core/*` includes, the `TextCaptureDevice` class, the
+`render_callback_` lambda registration). Bitmap rendering — the default since
+carbonyl 0.0.x — is unaffected. Patch 23 implements this.
+
+**Path A (planned, blocks M136+)**: Extract the text-capture code into a
+dedicated blink TU under `third_party/blink/renderer/core/carbonyl/`. The new
+TU is compiled with `INSIDE_BLINK` naturally and the cppgc cascade vanishes
+because it never instantiates `SequenceBound<T>` with a void allocator.
+This is the gating dependency for any rebase past M135 — see #28.
+
+**For maintainers**: when restoring `--carbonyl-b64-text` via Path A, all the
+`#if 0` blocks in patch 23's modifications to `render_frame_impl.cc` should be
+removed and the `TextCaptureDevice` class moved into the new blink TU. The
+content-side lambda becomes a thin call into the new entry point.
+
+### GN args notes (M135)
+
+Several feature flags are intentionally **left at their platform defaults**
+(typically `true` on Linux) instead of being explicitly set to `false`:
+
+- `enable_screen_ai_service`
+- `enable_speech_service`
+- `enable_pdf` / `enable_printing`
+- `enable_plugins` / `enable_tagged_pdf`
+- `enable_browser_speech_service`
+- `enable_webui_certificate_viewer`
+
+Setting any of these to `false` in `args.gn` triggers file-level `assert()`
+failures in `chrome/test/BUILD.gn` during `gn gen`, because M135's
+`gn_all` group transitively pulls those service BUILD.gn files into the
+evaluation graph even though headless_shell never compiles their targets.
+The features are not built into headless_shell either way (it has its own
+if-guards on dependent targets).
+
+**Removed from args.gn in M135**: `enable_component_updater` no longer
+exists as a GN arg. Setting it produces a "not declared in any declare_args
+block" warning.
 
 ## Automation Layer
 

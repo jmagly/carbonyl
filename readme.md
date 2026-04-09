@@ -29,10 +29,13 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 
 **What's different in this fork:**
 
-- **Chromium M120** — upgraded from M111 (21 patches, all applying cleanly). Upgrade to M135 is in progress.
-- **Python automation layer** (`automation/`) — `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction. Designed for agent-driven web interaction.
+- **Chromium M135** (135.0.7049.84) — upgraded from M111 across four phases (M111 → M120 → M132 → M135). 23 patches applied. Runtime tarballs published to [Gitea releases](https://git.integrolabs.net/roctinam/carbonyl/releases).
+- **Python automation layer** ([`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent)) — extracted into a standalone installable package. `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction. Designed for agent-driven web interaction.
 - **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
 - **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.
+- **CI infrastructure** — Gitea Actions workflows for fast checks and full Chromium runtime builds, pinned to dedicated build hosts.
+
+**Known limitation in M135**: the experimental `--carbonyl-b64-text` text-capture mode is currently disabled pending a structural refactor (see [issue #28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)). Default bitmap rendering is unaffected.
 
 **Maintenance commitment:** Security-relevant Chromium versions will be tracked on a best-effort basis. The automation API is under active development. Issues and PRs welcome.
 

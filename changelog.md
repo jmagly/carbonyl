@@ -11,9 +11,10 @@ This section covers work done in the `jmagly/carbonyl` fork since the upstream
 Carbonyl for use in automated agent testing pipelines and upgrades the
 Chromium base through M135.
 
-### Chromium Upgrade: M111 → M135 (Apr 2026)
+### Chromium Upgrade: M111 → M135 — SHIPPED (Apr 2026)
 
-A four-phase rebase of all 21 Chromium patches across four milestones:
+A four-phase rebase of all Chromium patches across four milestones, plus two
+M135-specific patches added during the final integration cycle.
 
 | Phase | Milestone | Commit |
 |-------|-----------|--------|
@@ -21,24 +22,87 @@ A four-phase rebase of all 21 Chromium patches across four milestones:
 | Phase 1 | M120 (120.0.6099.109) | `88d2d4d` |
 | Phase 2 | M132 (132.0.6834.109) | `2293579` |
 | Phase 3 | M135 (135.0.7049.84) | `c40955f` |
+| M135 GN gen + CI workflows | — | `43bb745` |
+| M135 Path B build fixes | — | `c22ea4f` |
 
-Key technical changes across the rebase:
+**Final patch count**: 23 (was 21 in M132). M135 added two patches:
+
+| Patch | Purpose |
+|-------|---------|
+| 0022 | Remove stale `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch 0012/0013 mismatch) |
+| 0023 | Path B build fixes — disable b64 text capture, restore Dispose() definition, multiple M135 API drift fixes |
+
+**Runtime tarball**: published to Gitea releases as
+[`runtime-c4200c4ec63078de`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-c4200c4ec63078de)
+(222 MB, x86_64-unknown-linux-gnu).
+
+#### Key technical changes across the rebase
 
 - **`headless_screen.{h,cc}`**: migrated to M135's `HeadlessScreenInfo`
   multi-display constructor while preserving Carbonyl DPI injection via
-  `carbonyl::Bridge::GetDPI()`
+  `carbonyl::Bridge::GetDPI()`. `IsNaturalPortrait` moved from protected to
+  public so the headless orientation delegate can call it externally.
 - **`SoftwareOutputDeviceProxy`**: removed from upstream in M135; patch 13
   restores it into `components/viz/service/display_embedder/`. A Carbonyl-owned
   replacement (`carbonyl/src/viz/CarbonylSoftwareOutputDevice`) is also added
-  for forward compatibility.
+  for forward compatibility. Updated for the M135 `CreatePlatformCanvasWithPixels`
+  signature (added `bytes_per_row` parameter).
 - **Skia patches dropped** (M120): both former Skia patches superseded by
   in-tree changes; WebRTC GIO patch replaced by `rtc_use_pipewire=false`
 - **`//build:chromeos_buildflags`** removed across M120+: dropped from all
   patch diffs
 - **`compositor.h`**: M135 added `ExternalBeginFrameControllerClientFactory`;
   kept alongside Carbonyl's `CompositorDelegate`
-- **GN args**: `enable_ppapi` and `enable_rust_json` removed (no longer exist
-  in M135)
+- **GN args**: `enable_ppapi`, `enable_rust_json`, `enable_component_updater`
+  removed (no longer exist in M135). Several feature flags
+  (`enable_screen_ai_service`, `enable_speech_service`, `enable_pdf`,
+  `enable_printing`, `enable_plugins`, `enable_browser_speech_service`,
+  `enable_webui_certificate_viewer`) left at their platform defaults
+  because setting them `false` triggers file-level GN asserts in
+  `chrome/test/BUILD.gn` during gn gen.
+- **`content::NativeWebKeyboardEvent`** moved to `input::` namespace under
+  `components/input/native_web_keyboard_event.h`
+- **`FontFamily::SetFamily()`** removed; use the constructor directly
+- **`ScriptPromiseResolverBase::Dispose()`**: header still declares it
+  unconditionally under `DCHECK_IS_ON()`, so the carbonyl patch's `#if 0`
+  removal of the definition broke linking. Restored as an empty body.
+- **C++20 `[=]` capture deprecation**: implicit `this` captures replaced
+  with explicit `[=, this]` in `render_frame_impl.cc` and `headless_browser_impl.cc`
+
+### Removed: Experimental b64 text-capture mode (M135+) — Path B per #27
+
+The optional `--carbonyl-b64-text` mode is **disabled** in M135 builds. This
+mode hooked `LayerTreeHost` to capture rendered glyph runs and feed them as
+base64-encoded text via Mojo to the Carbonyl Rust bridge.
+
+In M135, including `third_party/blink/renderer/core/*` headers from a non-blink
+TU (`content/renderer/render_frame_impl.cc`) triggers an Oilpan/cppgc cascade.
+The trigger pattern is structural: Blink's `garbage_collected.h` adds a
+`requires`-clause partial specialization on `kCustomizeSupportsUnretained<T>`
+that flows through `base::SequenceBound<T>::Storage::Destruct`'s type-erased
+`void*` allocator and hard-errors on `sizeof(void)`. See [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)
+for the full diagnosis.
+
+**Impact**: Bitmap rendering (the default since carbonyl 0.0.x) is unaffected.
+Users who relied on `--carbonyl-b64-text` for accessibility/agent integrations
+should fall back to bitmap mode + OCR until the feature is restored.
+
+**Restoration**: Tracked in [#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)
+(Path A) — extracts text capture into a dedicated blink translation unit
+under `third_party/blink/renderer/core/carbonyl/`. Path A is the gating
+dependency for any Chromium rebase past M135.
+
+### CI Infrastructure (Apr 2026) — `43bb745`
+
+- **`.gitea/workflows/check.yml`** — fast `cargo check`, `clippy`, and library
+  tests on every push to main. Pinned to `runs-on: titan` (the build host).
+- **`.gitea/workflows/build-runtime.yml`** — full Chromium build and runtime
+  upload via `workflow_dispatch` or on patch file changes. Builds
+  `headless_shell`, packages via `copy-binaries.sh`, uploads to Gitea releases
+  via `runtime-push.sh`. Pinned to `titan`.
+- **`build/Dockerfile.builder`** — builder image (Ubuntu 22.04 + Rust + ninja
+  + cross-compile toolchains + Chromium runtime deps). Comment header
+  documents that all CI runs on `titan` exclusively.
 
 ### Runtime Distribution Migration (Apr 2026) — `eb285c6`
 

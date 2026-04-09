@@ -71,9 +71,6 @@ void HostDisplayClient::OnDisplayReceivedCALayerParams(
     const gfx::CALayerParams& ca_layer_params) {}
 #endif
 
-#if BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
-void HostDisplayClient::DidCompleteSwapWithNewSize(
-    const gfx::Size& size) {}
-#endif
+// X11 support disabled in this build (ozone_platform_x11 = false).
 
 }  // namespace carbonyl
