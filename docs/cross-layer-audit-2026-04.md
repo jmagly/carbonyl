@@ -2,9 +2,33 @@
 
 **Issue**: [roctinam/carbonyl#29](https://git.integrolabs.net/roctinam/carbonyl/issues/29)
 **Triggered by**: [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27) (M135 cppgc cascade)
-**Blocks**: [#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28) (Path A — extract text capture into blink TU)
+**Related**: [#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28) (Path A — extract text capture into blink TU)
 **Tool**: `scripts/audit-cross-layer.sh`
-**Patch series state**: 23 patches (post-Path-B, M135 ship)
+**Patch series state**: 24 patches (post-Path-A)
+**Updated**: 2026-04-09 after Path A landed
+
+## Note on per-patch vs net state
+
+The audit script reports per-patch `+#include`/`-#include` counts. It is a
+transition-counter, not a state-tracker. Category A shows 8 findings because
+patch 0010 added 8 blink includes. Patch 0023 (Path B) removed them. Patch
+0024 (Path A) adds one `carbonyl/src/blink/text_capture.h` include (not
+counted as a blink reach).
+
+**Net state after applying the full series is 0 cross-layer reaches** —
+verified by grepping `chromium/src/content/renderer/render_frame_impl.cc`
+(and every other non-blink file patched by carbonyl) for
+`third_party/blink/renderer/core/` or `platform/heap/`:
+
+```bash
+grep -c "third_party/blink/renderer/core\|third_party/blink/renderer/platform/heap" \
+  chromium/src/content/renderer/render_frame_impl.cc
+# 0
+```
+
+Future rebases should verify **both** the per-patch output (to catch new
+patches that add cross-layer reaches) and the final-file grep (to confirm
+the net state is clean).
 
 ## TL;DR
 
