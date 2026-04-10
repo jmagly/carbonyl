@@ -92,6 +92,10 @@ jobs:
           BINARY="build/pre-built/${TRIPLE}/carbonyl"
           LD_LIBRARY_PATH="build/pre-built/${TRIPLE}" ${BINARY} --version
 
+      - name: Smoke test b64 text capture
+        run: |
+          CAPTURE_SECONDS=10 bash scripts/test-b64-text.sh
+
       - name: Upload runtime to Gitea releases
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
