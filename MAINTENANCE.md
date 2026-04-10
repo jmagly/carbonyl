@@ -83,20 +83,27 @@ The upgrade path was: M111 → M120 → M132 → M135. Updating it requires:
    - `compositor.h`: M135 added `ExternalBeginFrameControllerClientFactory` — keep both
    - `layer_tree_host.h`: M135 added `PropertyTreeDelegate` — keep both fields
 
-5. **Rebuild runtime** (requires Docker, ~2 hours):
+5. **Verify cross-layer dependencies** after patching:
+   ```bash
+   bash scripts/audit-cross-layer.sh
+   ```
+   This checks that `//carbonyl/src/blink:text_capture` visibility and the
+   symlink structure are intact. Fix any reported issues before building.
+
+6. **Rebuild runtime** (requires Docker, ~2 hours):
    ```bash
    bash scripts/docker-build.sh Default
    bash scripts/copy-binaries.sh Default
    ```
 
-6. **Save updated patches**:
+7. **Save updated patches**:
    ```bash
    bash scripts/patches.sh save
    git add chromium/patches/ scripts/patches.sh chromium/.gclient
    git commit -m "chore(chromium): rebase patches on M<version> (<version>)"
    ```
 
-7. **Upload new runtime** to Gitea releases (makes `build-local.sh` fast for others):
+8. **Upload new runtime** to Gitea releases (makes `build-local.sh` fast for others):
 
    Runtimes are distributed via Gitea releases on `roctinam/carbonyl`. Each release is
    tagged `runtime-<hash>` where the hash is computed from the Chromium version, patches,
@@ -134,13 +141,16 @@ before running `patches.sh apply`.
 
 ### Notes on current patch set (M135)
 
-- **Total patches**: 23 (was 21 in M132). M135 added two integration patches:
+- **Total patches**: 24 (was 21 in M132). M135 added three integration patches:
   - **Patch 22** (`fix-m135-remove-stale-blink-target-dep`): removes a stale
     `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch
     0012/0013 mismatch — patch 0013 reverted source changes but left the dep)
   - **Patch 23** (`fix-m135-Path-B-build-fixes-disable-b64-text-capture`):
-    surgical M135 build fixes. See "Path B and the disabled b64 text capture"
-    below.
+    surgical M135 build fixes — restores `Dispose()` definition and fixes API
+    drift. The b64 text-capture disable was superseded by patch 0024.
+  - **Patch 24** (`fix-chromium-Path-A-allow-carbonyl-src-blink-to-depend`):
+    grants `//carbonyl/src/blink:text_capture` visibility into blink GN targets,
+    enabling the Path A structural fix that restores `--carbonyl-b64-text`.
 
 - **Patch 03** (`Setup-shared-software-rendering-surface`): removes `[EnableIf=is_win]`
   guard from `CreateLayeredWindowUpdater` in `display_private.mojom`, making it
@@ -160,35 +170,51 @@ before running `patches.sh apply`.
   (disable text rendering, export private APIs) were superseded during the M120
   rebase; WebRTC's GIO patch was rendered unnecessary by `rtc_use_pipewire=false`.
 
-### Path B and the disabled b64 text capture (M135+)
+### Path A and the `//carbonyl/src/blink:text_capture` source set
 
-The optional `--carbonyl-b64-text` text-capture mode is **currently disabled**
-in M135 builds. See [issue #27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)
-for the full diagnosis and [issue #28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)
-for the structural fix.
+The `--carbonyl-b64-text` text-capture mode is **restored** in M135 builds
+via Path A ([#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28),
+landed in `61b9095`).
 
-**Why**: The b64 text-capture path in patch 02 (`Add-Carbonyl-service`) reaches
-into `third_party/blink/renderer/core/*` headers from `content/renderer/render_frame_impl.cc`,
-which is a non-blink translation unit. In M135 this triggers an Oilpan/cppgc
-template cascade via `kCustomizeSupportsUnretained<T>` that hard-errors on
-`sizeof(void)` when `base::SequenceBound<T>::Storage::Destruct` flows a
-`void*` allocator through `base::Unretained`.
+**Background**: The b64 text-capture path originally lived in
+`content/renderer/render_frame_impl.cc` (a non-blink TU). In M135, including
+`third_party/blink/renderer/core/*` headers from there triggers an
+Oilpan/cppgc template cascade that hard-errors on `sizeof(void)`. Path B
+(patch 23, [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27))
+temporarily `#if 0`'d the entire text-capture block while Path A was developed.
 
-**Path B (current)**: `#if 0` the entire text-capture block (the
-`blink/renderer/core/*` includes, the `TextCaptureDevice` class, the
-`render_callback_` lambda registration). Bitmap rendering — the default since
-carbonyl 0.0.x — is unaffected. Patch 23 implements this.
+**Path A solution**: The text-capture code was extracted into a dedicated blink
+TU under `src/blink/` in the carbonyl repo:
 
-**Path A (planned, blocks M136+)**: Extract the text-capture code into a
-dedicated blink TU under `third_party/blink/renderer/core/carbonyl/`. The new
-TU is compiled with `INSIDE_BLINK` naturally and the cppgc cascade vanishes
-because it never instantiates `SequenceBound<T>` with a void allocator.
-This is the gating dependency for any rebase past M135 — see #28.
+| File | Purpose |
+|------|---------|
+| `src/blink/text_capture.h` | Public entry point — `carbonyl::TextCapture::Install()` |
+| `src/blink/text_capture.cc` | Implementation — hooks `LayerTreeHost` for glyph capture |
+| `src/blink/BUILD.gn` | Declares `//carbonyl/src/blink:text_capture` source set |
 
-**For maintainers**: when restoring `--carbonyl-b64-text` via Path A, all the
-`#if 0` blocks in patch 23's modifications to `render_frame_impl.cc` should be
-removed and the `TextCaptureDevice` class moved into the new blink TU. The
-content-side lambda becomes a thin call into the new entry point.
+These files are symlinked into `chromium/src/carbonyl/src/blink/` during
+builds. The source set is compiled with `INSIDE_BLINK` naturally (it depends
+on blink targets), so the cppgc cascade vanishes. The content-side call site
+in `render_frame_impl.cc` is now a thin call into
+`carbonyl::TextCapture::Install()`.
+
+Patch 0024 grants `//carbonyl/src/blink:text_capture` visibility into the
+relevant blink GN targets (`blink/renderer/core`, `blink/renderer/platform`,
+etc.).
+
+**What to watch during rebases**:
+- If blink reorganizes `inside_blink` config or `blink/renderer/core/BUILD.gn`
+  visibility rules, patch 0024 may need updating.
+- Run `scripts/audit-cross-layer.sh` after every rebase to verify that the
+  cross-layer dependency graph is still valid.
+- The symlink from `chromium/src/carbonyl/src/blink/` into the repo's
+  `src/blink/` must be intact — `scripts/patches.sh apply` handles this.
+
+**For maintainers**: Path A is the gating dependency for any Chromium rebase
+past M135. If the blink GN target structure changes significantly in a future
+milestone, the `text_capture` source set may need to be relocated — but the
+pattern (dedicated blink TU for non-blink consumers) is the correct long-term
+approach.
 
 ### GN args notes (M135)
 

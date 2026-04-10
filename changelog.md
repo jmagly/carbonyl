@@ -24,17 +24,19 @@ M135-specific patches added during the final integration cycle.
 | Phase 3 | M135 (135.0.7049.84) | `c40955f` |
 | M135 GN gen + CI workflows | — | `43bb745` |
 | M135 Path B build fixes | — | `c22ea4f` |
+| M135 Path A — blink TU restoration | — | `61b9095` |
 
-**Final patch count**: 23 (was 21 in M132). M135 added two patches:
+**Final patch count**: 24 (was 21 in M132). M135 added three patches:
 
 | Patch | Purpose |
 |-------|---------|
 | 0022 | Remove stale `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch 0012/0013 mismatch) |
-| 0023 | Path B build fixes — disable b64 text capture, restore Dispose() definition, multiple M135 API drift fixes |
+| 0023 | Path B build fixes — restore `Dispose()` definition and multiple M135 API drift fixes (b64 text capture re-enabled by patch 0024) |
+| 0024 | Path A — allow `//carbonyl/src/blink:text_capture` to depend on blink internals; restores `--carbonyl-b64-text` mode via a dedicated blink TU |
 
 **Runtime tarball**: published to Gitea releases as
-[`runtime-c4200c4ec63078de`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-c4200c4ec63078de)
-(222 MB, x86_64-unknown-linux-gnu).
+[`runtime-34c55fd42862fd1c`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-34c55fd42862fd1c)
+(x86_64-unknown-linux-gnu).
 
 #### Key technical changes across the rebase
 
@@ -69,28 +71,33 @@ M135-specific patches added during the final integration cycle.
 - **C++20 `[=]` capture deprecation**: implicit `this` captures replaced
   with explicit `[=, this]` in `render_frame_impl.cc` and `headless_browser_impl.cc`
 
-### Removed: Experimental b64 text-capture mode (M135+) — Path B per #27
+### Restored: Experimental b64 text-capture mode (M135+) — Path A per #28
 
-The optional `--carbonyl-b64-text` mode is **disabled** in M135 builds. This
-mode hooked `LayerTreeHost` to capture rendered glyph runs and feed them as
-base64-encoded text via Mojo to the Carbonyl Rust bridge.
+The optional `--carbonyl-b64-text` mode is **restored** in M135 builds via a
+structural refactor. It was temporarily disabled in the initial M135 ship
+(Path B, [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)) and
+re-enabled by Path A ([#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28),
+landed in `61b9095` and documented in `25bb749`).
 
-In M135, including `third_party/blink/renderer/core/*` headers from a non-blink
-TU (`content/renderer/render_frame_impl.cc`) triggers an Oilpan/cppgc cascade.
-The trigger pattern is structural: Blink's `garbage_collected.h` adds a
-`requires`-clause partial specialization on `kCustomizeSupportsUnretained<T>`
-that flows through `base::SequenceBound<T>::Storage::Destruct`'s type-erased
-`void*` allocator and hard-errors on `sizeof(void)`. See [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)
-for the full diagnosis.
+**Why Path B was needed first**: In M135, including
+`third_party/blink/renderer/core/*` headers from a non-blink TU
+(`content/renderer/render_frame_impl.cc`) triggers an Oilpan/cppgc template
+cascade via Blink's `kCustomizeSupportsUnretained<T>` partial specialization,
+which flows through `base::SequenceBound<T>::Storage::Destruct`'s type-erased
+`void*` allocator and hard-errors on `sizeof(void)`.
 
-**Impact**: Bitmap rendering (the default since carbonyl 0.0.x) is unaffected.
-Users who relied on `--carbonyl-b64-text` for accessibility/agent integrations
-should fall back to bitmap mode + OCR until the feature is restored.
+**Path A fix**: Text capture now lives in a dedicated blink translation unit
+under `src/blink/text_capture.{h,cc}` (in this repo, symlinked into
+`chromium/src/carbonyl/src/blink/`) compiled as
+`//carbonyl/src/blink:text_capture`. The new TU is built with `INSIDE_BLINK`
+naturally, so the cppgc cascade vanishes — it never instantiates
+`SequenceBound<T>` with a void allocator. The content-side call site is now a
+thin entry point into the blink TU. Patch 0024 grants the new target
+visibility into the relevant blink GN targets.
 
-**Restoration**: Tracked in [#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)
-(Path A) — extracts text capture into a dedicated blink translation unit
-under `third_party/blink/renderer/core/carbonyl/`. Path A is the gating
-dependency for any Chromium rebase past M135.
+**Impact**: Both bitmap rendering (default) and `--carbonyl-b64-text` are
+functional on M135. Path A is also the gating dependency that unblocks any
+Chromium rebase past M135.
 
 ### CI Infrastructure (Apr 2026) — `43bb745`
 
