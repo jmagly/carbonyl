@@ -9,7 +9,51 @@ All notable changes to this project will be documented in this file.
 This section covers work done in the `jmagly/carbonyl` fork since the upstream
 (`fathyb/carbonyl`) became inactive in February 2023. The fork maintains
 Carbonyl for use in automated agent testing pipelines and upgrades the
-Chromium base through M135.
+Chromium base through M140.
+
+### Chromium Upgrade: M135 → M140 — SHIPPED (Apr 2026)
+
+Phase 1 of the M135 → M147 catch-up epic. Single-hop rebase of all 24
+patches from M135 to M140 (140.0.7339.264).
+
+| Phase | Milestone | Commit |
+|-------|-----------|--------|
+| Phase 1 | M140 (140.0.7339.264) | `5f165fe` |
+
+**Patch count**: 24 (unchanged from M135).
+
+**Runtime tarball**: published to Gitea releases as
+[`runtime-35de92813b596ca2`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-35de92813b596ca2)
+(238 MB, x86_64-unknown-linux-gnu).
+
+#### Patch conflicts resolved (7)
+
+- **Patch 02** (`render_frame_impl.cc`): M140 removed `CONTENT_ENABLE_LEGACY_IPC`
+  blocks — dropped legacy IPC guards, kept carbonyl callback cleanup
+- **Patch 02** (`font.cc`): Carbonyl b64 text additions — clean take of carbonyl
+  side (M140 had no changes to this region)
+- **Patch 06** (`headless_browser_impl_aura.cc`): M140 simplified `SetBoundsInPixels`
+  — kept carbonyl DPI scaling via `ScaleToEnclosedRect`
+- **Patch 07** (`text_decoration_painter.cc`): M140 added `TextDecorationSkipInk`
+  checks — kept carbonyl's disabled underline/overline
+- **Patch 08** (`style_resolver.cc`): M140 refactored sibling function tracking
+  — kept carbonyl monospace font forcing
+- **Patch 09** (`headless_web_contents_impl.h`): M140 added `HeadlessWindowDelegate`
+  base class — kept both it and carbonyl's `WebContentsObserver`
+- **Patch 13** (`printing_context_mac.mm`): M140 removed `USE_CUPS` feature check
+  — took M140 upstream side (macOS printing, not carbonyl-critical)
+
+#### Build fixes for M140 API drift
+
+- **Skia `drawPoints`**: signature changed from `(PointMode, size_t, const SkPoint[], const SkPaint&)`
+  to `(PointMode, SkSpan<const SkPoint>, const SkPaint&)` — updated in `text_capture.cc`
+- **Skia `getRelativeTransform`**: now returns `SkM44` instead of `SkMatrix` — added
+  `.asM33()` conversion in `text_capture.cc`
+- **`HeadlessWebContentsImpl`**: `OnVisibilityChanged()` hides `WebContentsObserver`
+  overload — added `using` declaration in header
+- **`Font::DrawText(TextRun)`**: overloads removed from `font.h` in M140 — re-added
+  carbonyl-specific declarations
+- **`cc::PaintCanvas`**: incomplete type in `font.cc` — added missing include
 
 ### Chromium Upgrade: M111 → M135 — SHIPPED (Apr 2026)
 

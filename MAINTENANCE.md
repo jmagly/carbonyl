@@ -46,8 +46,8 @@ To bump a specific crate to a new major version, edit `Cargo.toml` then run
 
 ### Chromium version (involved — do when security patches are needed)
 
-Chromium is currently at `135.0.7049.84` (M135, upgraded Apr 2026 from M132).
-The upgrade path was: M111 → M120 → M132 → M135. Updating it requires:
+Chromium is currently at `140.0.7339.264` (M140, upgraded Apr 2026 from M135).
+The upgrade path was: M111 → M120 → M132 → M135 → M140. Updating it requires:
 
 1. **Choose a new Chromium version**: check https://chromiumdash.appspot.com/releases
    for a stable branch release.
@@ -128,29 +128,43 @@ The upgrade path was: M111 → M120 → M132 → M135. Updating it requires:
 
 ### Patch reference commits
 
-The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M135):
+The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M140):
 
 | Repo | Base commit | Chromium version |
 |------|-------------|-----------------|
-| Chromium | `6c019e56001911b3fd467e03bf68c435924d62f4` | M135 (135.0.7049.84) |
-| Skia | `6e445bdea696eb6b6a46681dfc1a63edaa517edb` | DEPS @ 135.0.7049.84 |
-| WebRTC | `9e5db68b15087eccd8d2493b4e8539c1657e0f75` | DEPS @ 135.0.7049.84 |
+| Chromium | `56ca847e9ea70a5c56fa3d634361da1002fb284b` | M140 (140.0.7339.264) |
+| Skia | `f3ff281f2330f2948888a9cc0ba921bbdc107da8` | DEPS @ 140.0.7339.264 |
+| WebRTC | `36ea4535a500ac137dbf1f577ce40dc1aaa774ef` | DEPS @ 140.0.7339.264 |
 
 When updating Chromium, update all three to the new version's base commits
 before running `patches.sh apply`.
 
-### Notes on current patch set (M135)
+### Notes on current patch set (M140)
 
-- **Total patches**: 24 (was 21 in M132). M135 added three integration patches:
-  - **Patch 22** (`fix-m135-remove-stale-blink-target-dep`): removes a stale
-    `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch
-    0012/0013 mismatch — patch 0013 reverted source changes but left the dep)
-  - **Patch 23** (`fix-m135-Path-B-build-fixes-disable-b64-text-capture`):
-    surgical M135 build fixes — restores `Dispose()` definition and fixes API
-    drift. The b64 text-capture disable was superseded by patch 0024.
-  - **Patch 24** (`fix-chromium-Path-A-allow-carbonyl-src-blink-to-depend`):
-    grants `//carbonyl/src/blink:text_capture` visibility into blink GN targets,
-    enabling the Path A structural fix that restores `--carbonyl-b64-text`.
+- **Total patches**: 24 (unchanged from M135). All patches rebased cleanly on
+  M140 with 7 conflicts resolved and 5 build fixes applied. No new patches were
+  needed — the M140 drift was entirely API-level, not structural.
+
+- **M140-specific changes baked into existing patches**:
+  - `CONTENT_ENABLE_LEGACY_IPC` guards removed (dropped in M140)
+  - `HeadlessWindowDelegate` base class added alongside `WebContentsObserver`
+  - `Font::DrawText(TextRun)` overloads re-declared in `font.h` (M140 removed them)
+  - `cc::PaintCanvas` include added to `font.cc`
+  - `USE_CUPS` feature check removed from `printing_context_mac.mm`
+
+- **M140-specific changes in carbonyl source (`src/blink/text_capture.cc`)**:
+  - Skia `drawPoints` signature updated: `SkSpan<const SkPoint>` (was `size_t` + `SkPoint[]`)
+  - Skia `getRelativeTransform` returns `SkM44` — use `.asM33()` for `SkMatrix`
+
+- **Patch 22** (`fix-m135-remove-stale-blink-target-dep`): removes a stale
+  `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch
+  0012/0013 mismatch — patch 0013 reverted source changes but left the dep)
+- **Patch 23** (`fix-m135-Path-B-build-fixes-disable-b64-text-capture`):
+  surgical M135 build fixes — restores `Dispose()` definition and fixes API
+  drift. The b64 text-capture disable was superseded by patch 0024.
+- **Patch 24** (`fix-chromium-Path-A-allow-carbonyl-src-blink-to-depend`):
+  grants `//carbonyl/src/blink:text_capture` visibility into blink GN targets,
+  enabling the Path A structural fix that restores `--carbonyl-b64-text`.
 
 - **Patch 03** (`Setup-shared-software-rendering-surface`): removes `[EnableIf=is_win]`
   guard from `CreateLayeredWindowUpdater` in `display_private.mojom`, making it
@@ -216,7 +230,7 @@ milestone, the `text_capture` source set may need to be relocated — but the
 pattern (dedicated blink TU for non-blink consumers) is the correct long-term
 approach.
 
-### GN args notes (M135)
+### GN args notes (M140)
 
 Several feature flags are intentionally **left at their platform defaults**
 (typically `true` on Linux) instead of being explicitly set to `false`:
@@ -235,9 +249,9 @@ evaluation graph even though headless_shell never compiles their targets.
 The features are not built into headless_shell either way (it has its own
 if-guards on dependent targets).
 
-**Removed from args.gn in M135**: `enable_component_updater` no longer
-exists as a GN arg. Setting it produces a "not declared in any declare_args
-block" warning.
+**Removed from args.gn**: `enable_component_updater` (M135) and `enable_nacl`
+(M140) no longer exist as GN args. Setting them produces "not declared in any
+declare_args block" warnings.
 
 ## Automation Layer
 
