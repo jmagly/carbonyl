@@ -1,20 +1,20 @@
-From e30ffc7b48590659fd33965a0aaaea9a4c8fa9c6 Mon Sep 17 00:00:00 2001
+From fd58abca96d481b1cd5858e5a9ec353aa772fc53 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:21:59 +0100
 Subject: [PATCH 02/24] Add Carbonyl service
 
 ---
- .../renderer_host/render_frame_host_impl.h    |  2 +
- content/renderer/render_frame_impl.cc         |  4 ++
- content/renderer/render_frame_impl.h          |  6 ++
- .../blink/renderer/platform/fonts/font.cc     | 59 ++++++++++++++++++-
- 4 files changed, 69 insertions(+), 2 deletions(-)
+ .../renderer_host/render_frame_host_impl.h    |   2 +
+ content/renderer/render_frame_impl.cc         |   4 +
+ content/renderer/render_frame_impl.h          |   6 +
+ .../blink/renderer/platform/fonts/font.cc     | 147 ++++++++++++++++++
+ 4 files changed, 159 insertions(+)
 
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 76fab186e5707..141329b08376a 100644
+index 75c24911cb415..bfb37184c1833 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -5421,6 +5421,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -5459,6 +5459,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // to change across MPArch activations like prerendering.
    const base::UnguessableToken devtools_frame_token_;
  
@@ -24,13 +24,13 @@ index 76fab186e5707..141329b08376a 100644
    // RenderFrameHostImpl exposes document-scoped Mojo services to the currently
    // active document in the corresponding RenderFrame.
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 602bea4189f0d..d78c52755f4ce 100644
+index 7e54042f2fb8b..91c1a6a1de722 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -1995,6 +1995,10 @@ RenderFrameImpl::~RenderFrameImpl() {
-                                             routing_id_
- #endif
-   );
+@@ -1957,6 +1957,10 @@ RenderFrameImpl::~RenderFrameImpl() {
+   tracing::TrackNameRecorder::GetInstance()->RemoveProcessLabel(
+       process_label_id_);
+   agent_scheduling_group_->RemoveFrameRoute(frame_token_);
 +
 +  if (auto& callback = *render_callback_.get()) {
 +    callback = nullptr;
@@ -39,10 +39,10 @@ index 602bea4189f0d..d78c52755f4ce 100644
  
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index bf073c9180d47..6f4a9c2b38661 100644
+index 5456a50df5f75..b733b9164841c 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -1582,6 +1582,8 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1491,6 +1491,8 @@ class CONTENT_EXPORT RenderFrameImpl
    scoped_refptr<network::SharedURLLoaderFactory>
        url_loader_factory_override_for_test_;
  
@@ -51,7 +51,7 @@ index bf073c9180d47..6f4a9c2b38661 100644
    // When the browser asks the renderer to commit a navigation, it should always
    // result in a committed navigation reported via DidCommitProvisionalLoad().
    // This is important because DidCommitProvisionalLoad() is responsible for
-@@ -1658,6 +1660,10 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1567,6 +1569,10 @@ class CONTENT_EXPORT RenderFrameImpl
    // false, but set to true by some tests.
    bool send_content_state_immediately_ = false;
  
@@ -63,41 +63,98 @@ index bf073c9180d47..6f4a9c2b38661 100644
    //
    // 1. The associated WebFrameWidget and its compositor is initialized at
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 4b52d5d557c89..6517763ca7e8a 100644
+index 370a14c07f8c9..ed68d374fedf8 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -96,11 +96,17 @@ bool Font::operator==(const Font& other) const {
+@@ -93,6 +93,128 @@ bool Font::operator==(const Font& other) const {
+          font_description_ == other.font_description_;
+ }
  
- namespace {
- 
++namespace {
++
 +static const bool carbonyl_b64_text = true;
 +
- void DrawBlobs(cc::PaintCanvas* canvas,
-                const cc::PaintFlags& flags,
-                const ShapeResultBloberizer::BlobBuffer& blobs,
-                const gfx::PointF& point,
-                cc::NodeId node_id = cc::kInvalidNodeId) {
++void DrawBlobs(cc::PaintCanvas* canvas,
++               const cc::PaintFlags& flags,
++               const ShapeResultBloberizer::BlobBuffer& blobs,
++               const gfx::PointF& point,
++               cc::NodeId node_id = cc::kInvalidNodeId) {
 +  if (carbonyl_b64_text) {
 +    return;
 +  }
 +
-   for (const auto& blob_info : blobs) {
-     DCHECK(blob_info.blob);
-     cc::PaintCanvasAutoRestore auto_restore(canvas, false);
-@@ -145,8 +151,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
-       }
-     }
-     if (node_id != cc::kInvalidNodeId) {
--      canvas->drawTextBlob(blob_info.blob, point.x(), point.y(), node_id,
--                           flags);
++  for (const auto& blob_info : blobs) {
++    DCHECK(blob_info.blob);
++    cc::PaintCanvasAutoRestore auto_restore(canvas, false);
++    switch (blob_info.rotation) {
++      case CanvasRotationInVertical::kRegular:
++        break;
++      case CanvasRotationInVertical::kRotateCanvasUpright: {
++        canvas->save();
++
++        SkMatrix m;
++        m.setSinCos(-1, 0, point.x(), point.y());
++        canvas->concat(SkM44(m));
++        break;
++      }
++      case CanvasRotationInVertical::kRotateCanvasUprightOblique: {
++        canvas->save();
++
++        SkMatrix m;
++        m.setSinCos(-1, 0, point.x(), point.y());
++        // TODO(yosin): We should use angle specified in CSS instead of
++        // constant value -15deg.
++        // Note: We draw glyph in right-top corner upper.
++        // See CSS "transform: skew(0, -15deg)"
++        SkMatrix skewY;
++        constexpr SkScalar kSkewY = -0.2679491924311227;  // tan(-15deg)
++        skewY.setSkew(0, kSkewY, point.x(), point.y());
++        m.preConcat(skewY);
++        canvas->concat(SkM44(m));
++        break;
++      }
++      case CanvasRotationInVertical::kOblique: {
++        // TODO(yosin): We should use angle specified in CSS instead of
++        // constant value 15deg.
++        // Note: We draw glyph in right-top corner upper.
++        // See CSS "transform: skew(0, -15deg)"
++        canvas->save();
++        SkMatrix skewX;
++        constexpr SkScalar kSkewX = 0.2679491924311227;  // tan(15deg)
++        skewX.setSkew(kSkewX, 0, point.x(), point.y());
++        canvas->concat(SkM44(skewX));
++        break;
++      }
++    }
++    if (node_id != cc::kInvalidNodeId) {
 +      canvas->drawTextBlob(blob_info.blob, point.x(), point.y(), node_id, flags);
-     } else {
-       canvas->drawTextBlob(blob_info.blob, point.x(), point.y(), flags);
-     }
-@@ -174,6 +179,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
-   if (ShouldSkipDrawing())
-     return;
- 
++    } else {
++      canvas->drawTextBlob(blob_info.blob, point.x(), point.y(), flags);
++    }
++  }
++}
++
++}  // anonymous ns
++
++void Font::DrawText(cc::PaintCanvas* canvas,
++                    const TextRun& run,
++                    const gfx::PointF& point,
++                    const cc::PaintFlags& flags,
++                    DrawType draw_type) const {
++  DrawText(canvas, run, point, cc::kInvalidNodeId, flags, draw_type);
++}
++
++void Font::DrawText(cc::PaintCanvas* canvas,
++                    const TextRun& run,
++                    const gfx::PointF& point,
++                    cc::NodeId node_id,
++                    const cc::PaintFlags& flags,
++                    DrawType draw_type) const {
++  // Don't draw anything while we are using custom fonts that are in the process
++  // of loading.
++  if (ShouldSkipDrawing())
++    return;
++
 +  if (carbonyl_b64_text) {
 +    auto string = StringView(
 +      run_info.run.ToStringView(),
@@ -123,10 +180,22 @@ index 4b52d5d557c89..6517763ca7e8a 100644
 +    return;
 +  }
 +
-   CachingWordShaper word_shaper(*this);
-   ShapeResultBuffer buffer;
-   word_shaper.FillResultBuffer(run, &buffer);
-@@ -197,6 +227,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
++  CachingWordShaper word_shaper(*this);
++  ShapeResultBuffer buffer;
++  word_shaper.FillResultBuffer(run, &buffer);
++  TextRunPaintInfo run_info(run);
++  ShapeResultBloberizer::FillGlyphs bloberizer(
++      GetFontDescription(), run_info, buffer,
++      draw_type == Font::DrawType::kGlyphsOnly
++          ? ShapeResultBloberizer::Type::kNormal
++          : ShapeResultBloberizer::Type::kEmitText);
++  DrawBlobs(canvas, flags, bloberizer.Blobs(), point, node_id);
++}
++
+ void Font::DrawText(cc::PaintCanvas* canvas,
+                     const TextFragmentPaintInfo& text_info,
+                     const gfx::PointF& point,
+@@ -104,6 +226,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

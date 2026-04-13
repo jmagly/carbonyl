@@ -1,4 +1,4 @@
-From f6f22c957500c761e4d64688d3a3aaf3e7e996c7 Mon Sep 17 00:00:00 2001
+From 1cb4f1d0a97bb440e98ee68e9c7a02b4568c6a4d Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:24:29 +0100
 Subject: [PATCH 03/24] Setup shared software rendering surface
@@ -16,10 +16,10 @@ Subject: [PATCH 03/24] Setup shared software rendering surface
  9 files changed, 45 insertions(+), 9 deletions(-)
 
 diff --git a/components/viz/host/host_display_client.cc b/components/viz/host/host_display_client.cc
-index b84296cc7e3bb..6c86189077ead 100644
+index aed835411f572..401d1f839322f 100644
 --- a/components/viz/host/host_display_client.cc
 +++ b/components/viz/host/host_display_client.cc
-@@ -48,9 +48,9 @@ void HostDisplayClient::OnDisplayReceivedCALayerParams(
+@@ -49,9 +49,9 @@ void HostDisplayClient::OnDisplayReceivedCALayerParams(
  }
  #endif
  
@@ -30,7 +30,7 @@ index b84296cc7e3bb..6c86189077ead 100644
    if (!NeedsToUseLayerWindow(widget_)) {
      DLOG(ERROR) << "HWND shouldn't be using a layered window";
      return;
-@@ -58,7 +58,9 @@ void HostDisplayClient::CreateLayeredWindowUpdater(
+@@ -59,7 +59,9 @@ void HostDisplayClient::CreateLayeredWindowUpdater(
  
    layered_window_updater_ =
        std::make_unique<LayeredWindowUpdaterImpl>(widget_, std::move(receiver));
@@ -132,10 +132,10 @@ index 07502f4ff2afd..e7d422a18a0b2 100644
      return std::make_unique<SoftwareOutputDevice>();
  
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
-index 378910976c702..38dfd1f65897b 100644
+index 0c9dabd7e8504..d0de8d7f7b97e 100644
 --- a/content/browser/compositor/viz_process_transport_factory.cc
 +++ b/content/browser/compositor/viz_process_transport_factory.cc
-@@ -60,6 +60,8 @@
+@@ -54,6 +54,8 @@
  #include "ui/gfx/win/rendering_window_manager.h"
  #endif
  
@@ -144,7 +144,7 @@ index 378910976c702..38dfd1f65897b 100644
  namespace content {
  namespace {
  
-@@ -442,7 +444,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
+@@ -387,7 +389,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
    root_params->display_private =
        display_private.BindNewEndpointAndPassReceiver();
    compositor_data.display_client =
@@ -154,10 +154,10 @@ index 378910976c702..38dfd1f65897b 100644
        compositor_data.display_client->GetBoundRemote(resize_task_runner_);
    mojo::AssociatedRemote<viz::mojom::ExternalBeginFrameController>
 diff --git a/services/viz/privileged/mojom/compositing/display_private.mojom b/services/viz/privileged/mojom/compositing/display_private.mojom
-index 7d19b6be8bb0e..b8ec06ade095d 100644
+index e063835e87f08..34bcf67726f64 100644
 --- a/services/viz/privileged/mojom/compositing/display_private.mojom
 +++ b/services/viz/privileged/mojom/compositing/display_private.mojom
-@@ -117,7 +117,6 @@ interface DisplayClient {
+@@ -119,7 +119,6 @@ interface DisplayClient {
  
    // Creates a LayeredWindowUpdater implementation to draw into a layered
    // window.
@@ -177,10 +177,10 @@ index 2f462f0deb5fc..695869b83cefa 100644
 +  Draw(gfx.mojom.Rect damage_rect) => ();
  };
 diff --git a/ui/compositor/compositor.h b/ui/compositor/compositor.h
-index d353cd4613c73..c11b5f26d2e1a 100644
+index f1a4674323d96..4d28d74b43dd7 100644
 --- a/ui/compositor/compositor.h
 +++ b/ui/compositor/compositor.h
-@@ -91,7 +91,7 @@ namespace mojom {
+@@ -86,7 +86,7 @@ namespace mojom {
  class DisplayPrivate;
  class ExternalBeginFrameController;
  }  // namespace mojom
@@ -189,7 +189,7 @@ index d353cd4613c73..c11b5f26d2e1a 100644
  class HostFrameSinkManager;
  class LocalSurfaceId;
  class RasterContextProvider;
-@@ -144,6 +144,16 @@ class COMPOSITOR_EXPORT ContextFactory {
+@@ -135,6 +135,16 @@ class COMPOSITOR_EXPORT ContextFactory {
    virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
  };
  
@@ -206,7 +206,7 @@ index d353cd4613c73..c11b5f26d2e1a 100644
  // Factory object to create a ExternalBeginFrameControllerClient on demand.
  class COMPOSITOR_EXPORT ExternalBeginFrameControllerClientFactory {
   public:
-@@ -198,6 +208,9 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
+@@ -189,6 +199,9 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
    // Schedules a redraw of the layer tree associated with this compositor.
    void ScheduleDraw();
  
@@ -216,7 +216,7 @@ index d353cd4613c73..c11b5f26d2e1a 100644
    // Sets the root of the layer tree drawn by this Compositor. The root layer
    // must have no parent. The compositor's root layer is reset if the root layer
    // is destroyed. NULL can be passed to reset the root layer, in which case the
-@@ -616,6 +629,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
+@@ -630,6 +643,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
        simple_begin_frame_observers_;
    std::unique_ptr<ui::HostBeginFrameObserver> host_begin_frame_observer_;
  

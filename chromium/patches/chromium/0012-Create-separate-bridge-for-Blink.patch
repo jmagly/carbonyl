@@ -1,4 +1,4 @@
-From 65f35eb421346f48cdfe39f22f6c259681cb69dc Mon Sep 17 00:00:00 2001
+From 8767ab801706c7b588bb702911aa95790c2dda9c Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 02:20:32 +0100
 Subject: [PATCH 12/24] Create separate bridge for Blink
@@ -10,10 +10,10 @@ Subject: [PATCH 12/24] Create separate bridge for Blink
  3 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 0a8ed7e7ac110..b04899c4ea14d 100644
+index 6ab35a8adf314..80a9d8998e045 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -134,7 +134,7 @@
+@@ -137,7 +137,7 @@
  #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
  #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
  
@@ -22,7 +22,7 @@ index 0a8ed7e7ac110..b04899c4ea14d 100644
  
  namespace blink {
  
-@@ -1370,7 +1370,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1464,7 +1464,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -32,10 +32,10 @@ index 0a8ed7e7ac110..b04899c4ea14d 100644
      FontFamily family;
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 85aadea1a2322..9f07804ad9aa7 100644
+index 5188a4e273b72..4d6cadcebb51a 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1762,7 +1762,7 @@ component("platform") {
+@@ -1787,7 +1787,7 @@ component("platform") {
      "//base:base_static",
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
@@ -45,11 +45,11 @@ index 85aadea1a2322..9f07804ad9aa7 100644
      "//cc/ipc",
      "//cc/mojo_embedder",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 0de1d6f17c6e3..154b8220daf6b 100644
+index af84fb7122d15..82c5a23ee1ba9 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -48,7 +48,7 @@
- #include "third_party/skia/include/core/SkTextBlob.h"
+@@ -47,7 +47,7 @@
+ #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
  #include "ui/gfx/geometry/rect_f.h"
  
 -#include "carbonyl/src/browser/bridge.h"
@@ -57,7 +57,7 @@ index 0de1d6f17c6e3..154b8220daf6b 100644
  
  namespace blink {
  
-@@ -103,7 +103,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
+@@ -102,7 +102,7 @@ void DrawBlobs(cc::PaintCanvas* canvas,
                 const ShapeResultBloberizer::BlobBuffer& blobs,
                 const gfx::PointF& point,
                 cc::NodeId node_id = cc::kInvalidNodeId) {
@@ -66,7 +66,7 @@ index 0de1d6f17c6e3..154b8220daf6b 100644
      return;
    }
  
-@@ -179,7 +179,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -178,7 +178,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -75,7 +75,7 @@ index 0de1d6f17c6e3..154b8220daf6b 100644
      auto string = StringView(
        run_info.run.ToStringView(),
        run_info.from,
-@@ -227,7 +227,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -226,7 +226,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

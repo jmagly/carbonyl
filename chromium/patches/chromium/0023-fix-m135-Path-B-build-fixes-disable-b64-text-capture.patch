@@ -1,4 +1,4 @@
-From 1bba979322e395f0031c726178014a90920106ad Mon Sep 17 00:00:00 2001
+From 7e8761a2703670613d2d040986042a3e15476dc5 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Thu, 9 Apr 2026 11:50:01 -0400
 Subject: [PATCH 23/24] =?UTF-8?q?fix(m135):=20Path=20B=20build=20fixes=20?=
@@ -86,10 +86,10 @@ index c76e94705b67a..427d9bb4e4d05 100644
  
    // Transfer region ownership to the browser process.
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index b2cc98b91307f..b9b83a22f5ae8 100644
+index 901846f0d8880..b27ec820f3717 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -275,14 +275,14 @@
+@@ -266,14 +266,14 @@
  #include "cc/trees/layer_tree_host.h"
  #include "cc/trees/render_frame_metadata_observer.h"
  #include "components/paint_preview/common/paint_preview_tracker.h"
@@ -112,9 +112,9 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
  #include "third_party/skia/include/codec/SkEncodedImageFormat.h"
  #include "third_party/skia/include/core/SkMesh.h"
  #include "third_party/skia/include/core/SkStream.h"
-@@ -2029,13 +2029,21 @@ RenderFrameImpl::~RenderFrameImpl() {
- #endif
-   );
+@@ -1991,13 +1991,21 @@ RenderFrameImpl::~RenderFrameImpl() {
+       process_label_id_);
+   agent_scheduling_group_->RemoveFrameRoute(frame_token_);
  
 -  if (auto& callback = *render_callback_.get()) {
 -    callback = nullptr;
@@ -136,7 +136,7 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
  namespace carbonyl {
  class TextCaptureDevice: public SkClipStackDevice {
  public:
-@@ -2157,7 +2165,6 @@ protected:
+@@ -2119,7 +2127,6 @@ protected:
  
    void onDrawGlyphRunList(SkCanvas*,
                            const sktext::GlyphRunList& glyphRunList,
@@ -144,7 +144,7 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
                            const SkPaint& paint) override {
      auto position = scale(glyphRunList.origin());
  
-@@ -2238,6 +2245,7 @@ class RendererService {
+@@ -2200,6 +2207,7 @@ class RendererService {
  };
  
  } // namespace carbonyl
@@ -152,7 +152,7 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
  
  namespace content {
  
-@@ -2270,7 +2278,7 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2228,7 +2236,7 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
                                    GetBrowserInterfaceBroker());
    }
  
@@ -161,8 +161,8 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
  
    // Bind this class to mojom::Frame and to the message router for legacy IPC.
    // These must be called after |frame_| is set since binding requires a
-@@ -2285,6 +2293,11 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
- #endif
+@@ -2240,6 +2248,11 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+       frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
  
 +  // M135 Path B (#27): the b64 text-capture render callback is disabled.
@@ -173,7 +173,7 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
    if (base::CommandLine::ForCurrentProcess()->HasSwitch("carbonyl-b64-text")) {
      setenv("carbonyl_b64_text", "true", 1);
    }
-@@ -2293,7 +2306,7 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2248,7 +2261,7 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    auto renderer = std::make_shared<carbonyl::RendererService>();
  
    render_callback_ = std::make_shared<std::function<bool()>>(
@@ -182,7 +182,7 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
        if (!IsMainFrame() || IsHidden() || carbonyl::Bridge::BitmapMode()) {
          return false;
        }
-@@ -2315,6 +2328,7 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2270,6 +2283,7 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    );
  
    host->ObserveTerminalRender(render_callback_);
@@ -191,7 +191,7 @@ index b2cc98b91307f..b9b83a22f5ae8 100644
  
  void RenderFrameImpl::GetInterface(
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 0006b3ef9aae3..04b75edaca0db 100644
+index dae4fcfa8b2da..557ad8e14567c 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
 @@ -21,6 +21,7 @@
@@ -202,7 +202,7 @@ index 0006b3ef9aae3..04b75edaca0db 100644
  #include "components/version_info/version_info.h"
  #include "components/zoom/zoom_controller.h"
  #include "content/public/browser/browser_task_traits.h"
-@@ -83,9 +84,9 @@ namespace {
+@@ -82,9 +83,9 @@ namespace {
  
  // Product name for building the default user agent string.
  const char kHeadlessProductName[] = "Google Chrome";
@@ -214,7 +214,7 @@ index 0006b3ef9aae3..04b75edaca0db 100644
      gfx::FontRenderParams::Hinting::HINTING_FULL;
  
  #if defined(HEADLESS_USE_PREFS)
-@@ -452,7 +453,7 @@ void HeadlessBrowserImpl::OnScrollInput(int delta) {
+@@ -451,7 +452,7 @@ void HeadlessBrowserImpl::OnScrollInput(int delta) {
  
  void HeadlessBrowserImpl::OnKeyPressInput(char key) {
    bool raw = true;
@@ -223,7 +223,7 @@ index 0006b3ef9aae3..04b75edaca0db 100644
        blink::WebKeyboardEvent::Type::kRawKeyDown,
        blink::WebInputEvent::kNoModifiers,
        base::TimeTicks::Now());
-@@ -612,7 +613,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -611,7 +612,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
      }
    });
  
@@ -233,10 +233,10 @@ index 0006b3ef9aae3..04b75edaca0db 100644
  
      carbonyl_renderer_browser_delegate delegate = {
 diff --git a/headless/lib/browser/headless_screen.cc b/headless/lib/browser/headless_screen.cc
-index 867f2bdfead69..1ced26c161503 100644
+index c10c4ef757348..154b9555498c1 100644
 --- a/headless/lib/browser/headless_screen.cc
 +++ b/headless/lib/browser/headless_screen.cc
-@@ -66,7 +66,11 @@ display::Display HeadlessScreen::GetDisplayNearestWindow(
+@@ -74,7 +74,11 @@ display::Display HeadlessScreen::GetDisplayNearestWindow(
  
  void HeadlessScreen::Resize() {
    float dpi = carbonyl::Bridge::GetDPI();
@@ -250,7 +250,7 @@ index 867f2bdfead69..1ced26c161503 100644
  
    auto displays = GetAllDisplays();
 diff --git a/headless/lib/browser/headless_screen.h b/headless/lib/browser/headless_screen.h
-index 30b38e35cbcdc..5d1002ebb4dfd 100644
+index 738e187ab432f..227b6b1c4f279 100644
 --- a/headless/lib/browser/headless_screen.h
 +++ b/headless/lib/browser/headless_screen.h
 @@ -47,6 +47,7 @@ class HeadlessScreen : public display::ScreenBase {
@@ -262,7 +262,7 @@ index 30b38e35cbcdc..5d1002ebb4dfd 100644
    bool IsNaturalLandscape(int64_t display_id) const;
  
 diff --git a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
-index 9cc94e05d8bab..620e13c481bc5 100644
+index df5018f5bd65a..a2c296282112b 100644
 --- a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
 +++ b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
 @@ -42,17 +42,12 @@ ScriptPromiseResolverBase::ScriptPromiseResolverBase(
@@ -290,10 +290,10 @@ index 9cc94e05d8bab..620e13c481bc5 100644
  
  void ScriptPromiseResolverBase::Reject(DOMException* value) {
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index d71fdd5fa45be..d35208767b3da 100644
+index c8f2d2505dfc8..e5a820061befc 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -1372,9 +1372,9 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1466,9 +1466,9 @@ const ComputedStyle* StyleResolver::ResolveStyle(
  
    if (!carbonyl::Bridge::BitmapMode()) {
      auto font = state.StyleBuilder().GetFontDescription();
@@ -307,10 +307,10 @@ index d71fdd5fa45be..d35208767b3da 100644
      font.SetStretch(kExtraExpandedWidthValue);
      font.SetKerning(FontDescription::kNoneKerning);
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 0fca108328ddd..a379bc8a44525 100644
+index 19aaede83a651..d52dbfc9d10be 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -181,6 +181,9 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -180,6 +180,9 @@ void Font::DrawText(cc::PaintCanvas* canvas,
      return;
  
    if (!carbonyl::Bridge::BitmapMode()) {
@@ -321,10 +321,10 @@ index 0fca108328ddd..a379bc8a44525 100644
        run_info.run.ToStringView(),
        run_info.from,
 diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.h b/third_party/blink/renderer/platform/graphics/graphics_context.h
-index 98567ebe5953c..15cd0387e4141 100644
+index a338dfe252e8d..2329b3b310fff 100644
 --- a/third_party/blink/renderer/platform/graphics/graphics_context.h
 +++ b/third_party/blink/renderer/platform/graphics/graphics_context.h
-@@ -574,7 +574,7 @@ class PLATFORM_EXPORT GraphicsContext {
+@@ -558,7 +558,7 @@ class PLATFORM_EXPORT GraphicsContext {
  
  #if DCHECK_IS_ON()
    int layer_count_ = 0;

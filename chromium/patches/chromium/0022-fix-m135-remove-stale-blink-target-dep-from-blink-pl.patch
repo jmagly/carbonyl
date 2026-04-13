@@ -1,4 +1,4 @@
-From 5492db54967f058cc3a44dd2da3f86dc57c9ef73 Mon Sep 17 00:00:00 2001
+From 38f3f16654d6bbf455cc3c3626f9000d3fea9c58 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Tue, 7 Apr 2026 04:46:34 -0400
 Subject: [PATCH 22/24] fix(m135): remove stale :blink target dep from blink
@@ -17,10 +17,10 @@ Remove the stale dep. Platform uses carbonyl::Bridge from :bridge.
  1 file changed, 1 deletion(-)
 
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index cb2797b1e676d..b50b164052c60 100644
+index 0d06c2fae3641..a104e2c3acc98 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1762,7 +1762,6 @@ component("platform") {
+@@ -1787,7 +1787,6 @@ component("platform") {
      "//base:base_static",
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",

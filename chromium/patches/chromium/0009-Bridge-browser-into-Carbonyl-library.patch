@@ -1,4 +1,4 @@
-From edf5dadb08311183082be85bf6cc6c163b540cbe Mon Sep 17 00:00:00 2001
+From c1e3a227ada373e10ad86350360aa209d328ec21 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:32:30 +0100
 Subject: [PATCH 09/24] Bridge browser into Carbonyl library
@@ -9,11 +9,11 @@ Subject: [PATCH 09/24] Bridge browser into Carbonyl library
  headless/lib/browser/headless_browser_impl.cc | 410 +++++++++++++++++-
  headless/lib/browser/headless_browser_impl.h  |  19 +
  .../lib/browser/headless_web_contents_impl.cc |  31 ++
- .../lib/browser/headless_web_contents_impl.h  |   9 +-
- 6 files changed, 478 insertions(+), 27 deletions(-)
+ .../lib/browser/headless_web_contents_impl.h  |  11 +-
+ 6 files changed, 479 insertions(+), 28 deletions(-)
 
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index c0b3fed6d659f..632f0333332f3 100644
+index db291ed65ce2f..6897e0a138c1b 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -9,6 +9,8 @@
@@ -34,7 +34,7 @@ index c0b3fed6d659f..632f0333332f3 100644
    // Create browser context and set it as the default. The default browser
    // context is used by the Target.createTarget() DevTools command when no other
    // context is given.
-@@ -145,31 +149,8 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -143,31 +147,8 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
    GURL target_url = ConvertArgumentToURL(args.front());
    HeadlessWebContents::Builder builder(
        browser_context->CreateWebContentsBuilder());
@@ -86,7 +86,7 @@ index f8287680cfea4..203b06489e0e4 100644
  #if BUILDFLAG(IS_WIN)
    sandbox::SandboxInterfaceInfo sandbox_info = {nullptr};
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index b3a9c8e4f98a6..25fa679cda70d 100644
+index 92732a46445ac..a3f209c5acdb4 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
 @@ -12,6 +12,8 @@
@@ -98,7 +98,7 @@ index b3a9c8e4f98a6..25fa679cda70d 100644
  
  #include "base/functional/callback.h"
  #include "base/logging.h"
-@@ -55,6 +57,23 @@
+@@ -54,6 +56,23 @@
  #include "components/variations/service/variations_service.h"  // nogncheck
  #endif
  
@@ -122,7 +122,7 @@ index b3a9c8e4f98a6..25fa679cda70d 100644
  namespace headless {
  
  namespace {
-@@ -122,7 +141,15 @@ HeadlessBrowserImpl::HeadlessBrowserImpl(
+@@ -121,7 +140,15 @@ HeadlessBrowserImpl::HeadlessBrowserImpl(
      base::OnceCallback<void(HeadlessBrowser*)> on_start_callback)
      : on_start_callback_(std::move(on_start_callback)) {}
  
@@ -139,7 +139,7 @@ index b3a9c8e4f98a6..25fa679cda70d 100644
  
  void HeadlessBrowserImpl::SetOptions(HeadlessBrowser::Options options) {
    options_ = std::move(options);
-@@ -262,6 +289,311 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -261,6 +288,311 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
    return true;
  }
  
@@ -451,7 +451,7 @@ index b3a9c8e4f98a6..25fa679cda70d 100644
  void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    PlatformInitialize();
  
-@@ -271,6 +603,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -270,6 +602,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
  
    PlatformStart();
    std::move(on_start_callback_).Run(this);
@@ -572,7 +572,7 @@ index 1b697c0df00ef..74bcd5ee177de 100644
    base::OnceCallback<void(HeadlessBrowser*)> on_start_callback_;
    std::optional<HeadlessBrowser::Options> options_;
 diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
-index 62be493c74423..99c0727fb2ce9 100644
+index cb6c4637aab67..a53debde1ac33 100644
 --- a/headless/lib/browser/headless_web_contents_impl.cc
 +++ b/headless/lib/browser/headless_web_contents_impl.cc
 @@ -9,6 +9,7 @@
@@ -596,7 +596,7 @@ index 62be493c74423..99c0727fb2ce9 100644
  #include "content/public/browser/navigation_handle.h"
  #include "content/public/browser/render_frame_host.h"
  #include "content/public/browser/render_view_host.h"
-@@ -443,6 +447,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
+@@ -444,6 +448,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
    }
  
    web_contents_->SetDelegate(web_contents_delegate_.get());
@@ -604,7 +604,7 @@ index 62be493c74423..99c0727fb2ce9 100644
  }
  
  HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
-@@ -452,6 +457,32 @@ HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
+@@ -453,6 +458,32 @@ HeadlessWebContentsImpl::~HeadlessWebContentsImpl() {
        FROM_HERE, std::move(window_tree_host_));
  }
  
@@ -638,21 +638,23 @@ index 62be493c74423..99c0727fb2ce9 100644
    if (!url.is_valid())
      return false;
 diff --git a/headless/lib/browser/headless_web_contents_impl.h b/headless/lib/browser/headless_web_contents_impl.h
-index e01010b066c8d..73a54640910ba 100644
+index 783afa61f2654..725190dee7fdc 100644
 --- a/headless/lib/browser/headless_web_contents_impl.h
 +++ b/headless/lib/browser/headless_web_contents_impl.h
-@@ -33,7 +33,9 @@ namespace headless {
+@@ -35,8 +35,10 @@ namespace headless {
  class HeadlessBrowserImpl;
  
  // Exported for tests.
--class HEADLESS_EXPORT HeadlessWebContentsImpl : public HeadlessWebContents {
+-class HEADLESS_EXPORT HeadlessWebContentsImpl : public HeadlessWebContents,
+-                                                public HeadlessWindowDelegate {
 +class HEADLESS_EXPORT HeadlessWebContentsImpl
 +    : public HeadlessWebContents,
++      public HeadlessWindowDelegate,
 +      public content::WebContentsObserver {
   public:
    HeadlessWebContentsImpl(const HeadlessWebContentsImpl&) = delete;
    HeadlessWebContentsImpl& operator=(const HeadlessWebContentsImpl&) = delete;
-@@ -51,6 +53,11 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl : public HeadlessWebContents {
+@@ -54,6 +56,11 @@ class HEADLESS_EXPORT HeadlessWebContentsImpl : public HeadlessWebContents,
        HeadlessWebContentsImpl* parent,
        std::unique_ptr<content::WebContents> child_contents);
  

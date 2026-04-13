@@ -1,35 +1,47 @@
-From 7b5ed1d54798050de3a5073d3a75d6ed4a29a812 Mon Sep 17 00:00:00 2001
+From b71d50d6cf19c1f7dc9277fb572fbee5300a51a5 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:31:17 +0100
 Subject: [PATCH 07/24] Disable text effects
 
 ---
- .../core/paint/text_decoration_painter.cc     | 31 ++++++++--------
- ui/gfx/render_text.cc                         | 36 +++++++++----------
- 2 files changed, 34 insertions(+), 33 deletions(-)
+ .../core/paint/text_decoration_painter.cc     | 43 +++++++------------
+ ui/gfx/render_text.cc                         | 36 ++++++++--------
+ 2 files changed, 34 insertions(+), 45 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/paint/text_decoration_painter.cc b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-index 10df8412e5dcf..3b19601ce4636 100644
+index 37443194557ce..26cb9df20fded 100644
 --- a/third_party/blink/renderer/core/paint/text_decoration_painter.cc
 +++ b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-@@ -171,21 +171,22 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
+@@ -173,33 +173,22 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
              continue;
            }
  
 -          if (decoration_info.HasUnderline() && decoration_info.FontData() &&
 -              EnumHasFlags(lines_to_paint, TextDecorationLine::kUnderline)) {
 -            decoration_info.SetUnderlineLineData(decoration_offset);
+-            if (decoration_info.TargetStyle().TextDecorationSkipInk() ==
+-                ETextDecorationSkipInk::kAuto) {
+-              text_painter_.ClipDecorationLine(
+-                  decoration_info.GetGeometry(),
+-                  decoration_info.BaselineForInkSkip(), fragment_paint_info);
+-            }
 -            text_painter_.PaintDecorationLine(
 -                decoration_info, LineColorForPhase(decoration_info, phase),
--                &fragment_paint_info);
+-                auto_dark_mode);
 -          }
 -
 -          if (decoration_info.HasOverline() && decoration_info.FontData() &&
 -              EnumHasFlags(lines_to_paint, TextDecorationLine::kOverline)) {
 -            decoration_info.SetOverlineLineData(decoration_offset);
+-            if (decoration_info.TargetStyle().TextDecorationSkipInk() ==
+-                ETextDecorationSkipInk::kAuto) {
+-              text_painter_.ClipDecorationLine(
+-                  decoration_info.GetGeometry(),
+-                  decoration_info.BaselineForInkSkip(), fragment_paint_info);
+-            }
 -            text_painter_.PaintDecorationLine(
 -                decoration_info, LineColorForPhase(decoration_info, phase),
--                &fragment_paint_info);
+-                auto_dark_mode);
 -          }
 +          // carbonyl: underline/overline painting disabled (text effects patch)
 +          // if (decoration_info.HasUnderline() && decoration_info.FontData() &&
@@ -51,10 +63,10 @@ index 10df8412e5dcf..3b19601ce4636 100644
        },
        paint_info_.context, text_style);
 diff --git a/ui/gfx/render_text.cc b/ui/gfx/render_text.cc
-index f015a54360dd9..c7d1582217026 100644
+index 8221222fba3d7..03c34d6c1191c 100644
 --- a/ui/gfx/render_text.cc
 +++ b/ui/gfx/render_text.cc
-@@ -59,9 +59,9 @@ constexpr char16_t kEllipsisCodepoint = 0x2026;
+@@ -55,9 +55,9 @@ constexpr char16_t kEllipsisCodepoint = 0x2026;
  
  // Fraction of the text size to raise the center of a strike-through line above
  // the baseline.
@@ -66,7 +78,7 @@ index f015a54360dd9..c7d1582217026 100644
  
  // Float comparison needs epsilon to consider rounding errors in float
  // arithmetic. Epsilon should be dependent on the context and here, we are
-@@ -384,28 +384,28 @@ void SkiaTextRenderer::DrawUnderline(int x,
+@@ -380,28 +380,28 @@ void SkiaTextRenderer::DrawUnderline(int x,
                                       int y,
                                       int width,
                                       SkScalar thickness_factor) {

@@ -1,4 +1,4 @@
-From be097e2c894b9beebd90025bf9d4041aee92dd73 Mon Sep 17 00:00:00 2001
+From 32a67f4314318c7a136600085ff8d3e7baf19e11 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Thu, 9 Apr 2026 18:18:30 -0400
 Subject: [PATCH 24/24] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
@@ -42,10 +42,10 @@ See: roctinam/carbonyl#28 (this work), #27 (diagnosis), #29 (audit)
  5 files changed, 37 insertions(+), 240 deletions(-)
 
 diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
-index 4fcb5b4af9ea5..cd03f47db32c7 100644
+index 8bb4ca2e03b98..66da8b38bf98e 100644
 --- a/content/renderer/BUILD.gn
 +++ b/content/renderer/BUILD.gn
-@@ -239,6 +239,7 @@ target(link_target_type, "renderer") {
+@@ -228,6 +228,7 @@ target(link_target_type, "renderer") {
      "//base",
      "//base:i18n",
      "//build:chromecast_buildflags",
@@ -54,10 +54,10 @@ index 4fcb5b4af9ea5..cd03f47db32c7 100644
      "//carbonyl/src/browser:mojom",
      "//carbonyl/src/browser:renderer",
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index b9b83a22f5ae8..5fc859d148e2e 100644
+index b27ec820f3717..b92f886bed0e1 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -275,14 +275,15 @@
+@@ -266,14 +266,15 @@
  #include "cc/trees/layer_tree_host.h"
  #include "cc/trees/render_frame_metadata_observer.h"
  #include "components/paint_preview/common/paint_preview_tracker.h"
@@ -81,16 +81,16 @@ index b9b83a22f5ae8..5fc859d148e2e 100644
  #include "third_party/skia/include/codec/SkEncodedImageFormat.h"
  #include "third_party/skia/include/core/SkMesh.h"
  #include "third_party/skia/include/core/SkStream.h"
-@@ -2029,8 +2030,6 @@ RenderFrameImpl::~RenderFrameImpl() {
- #endif
-   );
+@@ -1991,8 +1992,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+       process_label_id_);
+   agent_scheduling_group_->RemoveFrameRoute(frame_token_);
  
 -  // M135 Path B (#27): render_callback_ is never assigned now (text capture
 -  // disabled), so guard the dereference. Restored by #28.
    if (render_callback_) {
      if (auto& callback = *render_callback_.get()) {
        callback = nullptr;
-@@ -2038,217 +2037,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2000,217 +1999,6 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -308,8 +308,8 @@ index b9b83a22f5ae8..5fc859d148e2e 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -2293,42 +2081,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
- #endif
+@@ -2248,42 +2036,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+       frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
  
 -  // M135 Path B (#27): the b64 text-capture render callback is disabled.
@@ -379,10 +379,10 @@ index 0f2a6baa28cfa..d0ac3b61516cd 100644
  # arguments --------------------------------------------------------------------
  
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 9b8cb9c8c6751..566838a2d2018 100644
+index 4991c95c89c60..03b42db987a38 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
-@@ -92,6 +92,9 @@ if (is_ios) {
+@@ -96,6 +96,9 @@ if (is_ios) {
  visibility = [
    "//third_party/blink/public/*",
    "//third_party/blink/renderer/*",
@@ -392,7 +392,7 @@ index 9b8cb9c8c6751..566838a2d2018 100644
  ]
  
  rel_blink_core_gen_dir = rebase_path(blink_core_output_dir, root_build_dir)
-@@ -237,7 +240,11 @@ component("core") {
+@@ -244,7 +247,11 @@ component("core") {
    output_name = "blink_core"
  
    visibility = []  # Allow re-assignment of list.
@@ -406,7 +406,7 @@ index 9b8cb9c8c6751..566838a2d2018 100644
    sources = [
      "core_initializer.cc",
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index b50b164052c60..254055ede1e50 100644
+index a104e2c3acc98..79ab18f07ae24 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
 @@ -32,6 +32,8 @@ visibility = [
@@ -418,7 +418,7 @@ index b50b164052c60..254055ede1e50 100644
  ]
  
  blink_platform_avx_files = [
-@@ -333,6 +335,8 @@ component("platform") {
+@@ -340,6 +342,8 @@ component("platform") {
    visibility = [
      "//third_party/blink/*",
      "//tools/privacy_budget/font_indexer:*",

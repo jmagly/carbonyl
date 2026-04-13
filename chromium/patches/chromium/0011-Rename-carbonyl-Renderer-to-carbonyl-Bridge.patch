@@ -1,4 +1,4 @@
-From 358a10658383c8f81d675c1dc5d8592bf5629fce Mon Sep 17 00:00:00 2001
+From e5eb3b6f2b3ac277cbca3601458b37aa99f62f8a Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:29:05 +0100
 Subject: [PATCH 11/24] Rename carbonyl::Renderer to carbonyl::Bridge
@@ -13,7 +13,7 @@ Subject: [PATCH 11/24] Rename carbonyl::Renderer to carbonyl::Bridge
  6 files changed, 13 insertions(+), 9 deletions(-)
 
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 632f0333332f3..f2dce8072cc91 100644
+index 6897e0a138c1b..62020e3c68e37 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -18,6 +18,7 @@
@@ -49,10 +49,10 @@ index 203b06489e0e4..e8dc41abba686 100644
    content::ContentMainParams params(nullptr);
  #if BUILDFLAG(IS_WIN)
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 25fa679cda70d..90518a36a01f0 100644
+index a3f209c5acdb4..4f2abf76762ba 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -290,7 +290,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -289,7 +289,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
  }
  
  void HeadlessBrowserImpl::Resize() {
@@ -61,7 +61,7 @@ index 25fa679cda70d..90518a36a01f0 100644
    auto rect = gfx::Rect(0, 0, size.width(), size.height());
  
    for (auto* ctx: GetAllBrowserContexts()) {
-@@ -305,7 +305,7 @@ void HeadlessBrowserImpl::Resize() {
+@@ -304,7 +304,7 @@ void HeadlessBrowserImpl::Resize() {
      }
    }
  
@@ -70,7 +70,7 @@ index 25fa679cda70d..90518a36a01f0 100644
  }
  
  void HeadlessBrowserImpl::OnShutdownInput() {
-@@ -677,7 +677,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -676,7 +676,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
        }
      };
  
@@ -101,10 +101,10 @@ index 5fd9ecc596da0..43616efbc8309 100644
  
  ui::Compositor* HeadlessBrowserImpl::PlatformGetCompositor(
 diff --git a/headless/lib/browser/headless_screen.cc b/headless/lib/browser/headless_screen.cc
-index 93fe63a9082fe..dbfccf455b093 100644
+index f2b40396236c0..22b69c686ce84 100644
 --- a/headless/lib/browser/headless_screen.cc
 +++ b/headless/lib/browser/headless_screen.cc
-@@ -74,7 +74,7 @@ HeadlessScreen::HeadlessScreen(const gfx::Size& window_size,
+@@ -82,7 +82,7 @@ HeadlessScreen::HeadlessScreen(const gfx::Size& window_size,
  
    bool is_primary = true;
    base::flat_set<int64_t> internal_display_ids;
@@ -114,10 +114,10 @@ index 93fe63a9082fe..dbfccf455b093 100644
      static int64_t synthesized_display_id = 2000;
      display::Display display(synthesized_display_id++);
 diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
-index 99c0727fb2ce9..f92fa4cdde20f 100644
+index a53debde1ac33..713707c31a462 100644
 --- a/headless/lib/browser/headless_web_contents_impl.cc
 +++ b/headless/lib/browser/headless_web_contents_impl.cc
-@@ -464,7 +464,7 @@ void HeadlessWebContentsImpl::TitleWasSet(content::NavigationEntry* entry) {
+@@ -465,7 +465,7 @@ void HeadlessWebContentsImpl::TitleWasSet(content::NavigationEntry* entry) {
    if (!web_contents() || !web_contents()->GetPrimaryMainFrame()->IsActive())
      return;
  
@@ -126,7 +126,7 @@ index 99c0727fb2ce9..f92fa4cdde20f 100644
  }
  
  void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* handle) {
-@@ -475,7 +475,7 @@ void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* han
+@@ -476,7 +476,7 @@ void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* han
  
    auto& nav = web_contents()->GetController();
  

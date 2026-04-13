@@ -1,16 +1,16 @@
-From 2f98a7a84399b6170120274183a5b83a94444cbc Mon Sep 17 00:00:00 2001
+From 4e121cd3e46cf9a71776912adb95ebb0d46eb481 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:00:43 +0100
 Subject: [PATCH 06/24] Setup display DPI
 
 ---
- .../lib/browser/headless_browser_impl_aura.cc | 10 ++--
+ .../lib/browser/headless_browser_impl_aura.cc | 12 +++--
  headless/lib/browser/headless_screen.cc       |  5 +-
  ui/display/display.cc                         | 52 ++++++++++---------
- 3 files changed, 36 insertions(+), 31 deletions(-)
+ 3 files changed, 38 insertions(+), 31 deletions(-)
 
 diff --git a/headless/lib/browser/headless_browser_impl_aura.cc b/headless/lib/browser/headless_browser_impl_aura.cc
-index 0f7f05fd438e5..5fd9ecc596da0 100644
+index 6154889277817..5fd9ecc596da0 100644
 --- a/headless/lib/browser/headless_browser_impl_aura.cc
 +++ b/headless/lib/browser/headless_browser_impl_aura.cc
 @@ -18,6 +18,8 @@
@@ -35,20 +35,22 @@ index 0f7f05fd438e5..5fd9ecc596da0 100644
  
    // Update WebContentsViewAura. This also updates RenderWidgetHostViewAura.
    if (gfx::NativeView native_view =
-@@ -64,7 +64,7 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+@@ -62,7 +62,9 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+   }
+ 
    // Update RootWindow.
-   HeadlessWindowTreeHost* host = web_contents->window_tree_host();
-   host->window()->SetBounds(bounds);
--  host->SetBoundsInPixels(bounds);
+-  web_contents->window_tree_host()->SetBoundsInPixels(bounds);
++  HeadlessWindowTreeHost* host = web_contents->window_tree_host();
++  host->window()->SetBounds(bounds);
 +  host->SetBoundsInPixels(ScaleToEnclosedRect(bounds, carbonyl::Renderer::GetDPI()));
  }
  
  ui::Compositor* HeadlessBrowserImpl::PlatformGetCompositor(
 diff --git a/headless/lib/browser/headless_screen.cc b/headless/lib/browser/headless_screen.cc
-index 2c693bf2a5e8f..93fe63a9082fe 100644
+index 2179074d32a21..f2b40396236c0 100644
 --- a/headless/lib/browser/headless_screen.cc
 +++ b/headless/lib/browser/headless_screen.cc
-@@ -15,6 +15,8 @@
+@@ -19,6 +19,8 @@
  #include "ui/aura/window.h"
  #endif
  
@@ -57,7 +59,7 @@ index 2c693bf2a5e8f..93fe63a9082fe 100644
  namespace headless {
  
  // static
-@@ -72,12 +74,13 @@ HeadlessScreen::HeadlessScreen(const gfx::Size& window_size,
+@@ -80,12 +82,13 @@ HeadlessScreen::HeadlessScreen(const gfx::Size& window_size,
  
    bool is_primary = true;
    base::flat_set<int64_t> internal_display_ids;

@@ -1,31 +1,41 @@
-From bb268b37d5de00af34c9e99cbeb9c2070f107c4f Mon Sep 17 00:00:00 2001
+From 0ebc601f8d1bcd90495afcee9c644225ccd23b18 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:32:14 +0100
 Subject: [PATCH 08/24] Fix text layout
 
 ---
- .../core/css/resolver/style_resolver.cc         | 17 ++++++++++++++++-
- 1 file changed, 16 insertions(+), 1 deletion(-)
+ .../core/css/resolver/style_resolver.cc       | 26 +++++++++++--------
+ 1 file changed, 15 insertions(+), 11 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 330e2a30ba3a4..e315d1d8efefa 100644
+index 89146e8392e51..a01c8623c4728 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -357,7 +357,9 @@ String ComputeBaseComputedStyleDiff(const ComputedStyle* base_computed_style,
+@@ -370,7 +370,9 @@ String ComputeBaseComputedStyleDiff(const ComputedStyle* base_computed_style,
      return g_null_atom;
    }
  
--  return String("Field diff: ") + builder.ReleaseString();
+-  return StrCat({"Field diff: ", builder.ReleaseString()});
 +  // TODO(fathy): Carbonyl should properly set the computed style
 +  // return String("Field diff: ") + builder.ReleaseString();
 +  return g_null_atom;
  }
  #endif  // DCHECK_IS_ON()
  
-@@ -1366,6 +1368,19 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1460,16 +1462,18 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
+-  if (state.StyleBuilder().HasSiblingFunctions()) {
+-    Element& tree_counting_element =
+-        state.GetUltimateOriginatingElementOrSelf();
+-    if (ContainerNode* parent =
+-            tree_counting_element.ParentElementOrDocumentFragment()) {
+-      parent->SetChildrenAffectedByForwardPositionalRules();
+-      parent->SetChildrenAffectedByBackwardPositionalRules();
+-      GetDocument().GetStyleEngine().SetUsesTreeCountingFunctions();
+-    }
+-  }
 +  auto font = state.StyleBuilder().GetFontDescription();
 +  FontFamily family;
 +
@@ -38,7 +48,6 @@ index 330e2a30ba3a4..e315d1d8efefa 100644
 +  font.SetIsAbsoluteSize(true);
 +  state.StyleBuilder().SetFontDescription(font);
 +  state.StyleBuilder().SetLineHeight(Length::Fixed(14.0 / 7.0));
-+
+ 
    state.LoadPendingResources();
  
-   // Now return the style.

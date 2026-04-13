@@ -95,7 +95,8 @@ class TextCaptureDevice : public SkClipStackDevice {
     }
 
     auto* device = static_cast<TextCaptureDevice*>(baseDevice);
-    SkMatrix transform = device->getRelativeTransform(*this);
+    SkM44 transform44 = device->getRelativeTransform(*this);
+    SkMatrix transform = transform44.asM33();
 
     for (auto& data : device->data_) {
       data_.push_back(carbonyl::mojom::TextData::New(
@@ -108,8 +109,7 @@ class TextCaptureDevice : public SkClipStackDevice {
   void drawPaint(const SkPaint&) override {}
   void drawOval(const SkRect&, const SkPaint&) override {}
   void drawPoints(SkCanvas::PointMode,
-                  size_t,
-                  const SkPoint[],
+                  SkSpan<const SkPoint>,
                   const SkPaint&) override {}
   void drawImageRect(const SkImage*,
                      const SkRect*,
