@@ -46,8 +46,8 @@ To bump a specific crate to a new major version, edit `Cargo.toml` then run
 
 ### Chromium version (involved — do when security patches are needed)
 
-Chromium is currently at `140.0.7339.264` (M140, upgraded Apr 2026 from M135).
-The upgrade path was: M111 → M120 → M132 → M135 → M140. Updating it requires:
+Chromium is currently at `147.0.7727.94` (M147, upgraded Apr 2026 from M140).
+The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147. Updating it requires:
 
 1. **Choose a new Chromium version**: check https://chromiumdash.appspot.com/releases
    for a stable branch release.
@@ -128,33 +128,54 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140. Updating it requ
 
 ### Patch reference commits
 
-The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M140):
+The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M147):
 
 | Repo | Base commit | Chromium version |
 |------|-------------|-----------------|
-| Chromium | `56ca847e9ea70a5c56fa3d634361da1002fb284b` | M140 (140.0.7339.264) |
-| Skia | `f3ff281f2330f2948888a9cc0ba921bbdc107da8` | DEPS @ 140.0.7339.264 |
-| WebRTC | `36ea4535a500ac137dbf1f577ce40dc1aaa774ef` | DEPS @ 140.0.7339.264 |
+| Chromium | `be35d570111fa75402da99a722251d8af5ee5990` | M147 (147.0.7727.94) |
+| Skia | `d203629ce869dbb142ca186c7da60a97cfb1550d` | DEPS @ 147.0.7727.94 |
+| WebRTC | `9179833d210d105aede5d4ec516734a6bd1ef2e8` | DEPS @ 147.0.7727.94 |
 
 When updating Chromium, update all three to the new version's base commits
 before running `patches.sh apply`.
 
-### Notes on current patch set (M140)
+### Notes on current patch set (M147)
 
-- **Total patches**: 24 (unchanged from M135). All patches rebased cleanly on
-  M140 with 7 conflicts resolved and 5 build fixes applied. No new patches were
-  needed — the M140 drift was entirely API-level, not structural.
+- **Total patches**: 24 (unchanged). All rebased cleanly on M147 with 11
+  conflicts resolved during `git am` and 20 iterative build fixes for M147
+  API drift. No new patches were needed — the drift was entirely API-level,
+  not structural.
 
-- **M140-specific changes baked into existing patches**:
-  - `CONTENT_ENABLE_LEGACY_IPC` guards removed (dropped in M140)
-  - `HeadlessWindowDelegate` base class added alongside `WebContentsObserver`
-  - `Font::DrawText(TextRun)` overloads re-declared in `font.h` (M140 removed them)
-  - `cc::PaintCanvas` include added to `font.cc`
-  - `USE_CUPS` feature check removed from `printing_context_mac.mm`
+- **M147-specific changes baked into existing patches**:
+  - `font.h`: dead `Font::DrawText(TextRun)` overloads removed —
+    `CachingWordShaper` and `ShapeResultBuffer` were removed upstream.
+    The `TextFragmentPaintInfo` path (with the b64 text-capture bypass)
+    is the only remaining carbonyl hook into text rendering.
+  - `host_display_client.h`: `ui/gfx/native_widget_types.h` renamed to
+    `ui/gfx/native_ui_types.h`; `SkBitmap.h` added; viz target now deps
+    on `//ui/gfx`
+  - `software_output_device_proxy.cc`: `ResourceSizes::MaybeSizeInBytes`
+    replaced with `SinglePlaneFormat::kRGBA_8888.MaybeEstimatedSizeInBytes()`
+  - `browser_interface_binders.cc`: `BinderMap::Add` signature changed;
+    use `BindRenderFrameHostImpl<>` template (M147)
+  - `headless/BUILD.gn`: phantom `//carbonyl/src/browser:carbonyl` dep
+    removed (target never existed — worked by accident in older gn)
+  - `headless_browser_impl.cc`: added `content/public/browser/navigation_controller.h`;
+    `PlatformSetWebContentsBounds` → `SetWebContentsBounds`
+  - `headless_screen.cc`: removed duplicate `~HeadlessScreen() = default`
+  - `headless_web_contents_impl.h`: `using content::WebContentsObserver::OnVisibilityChanged`
+  - `paint_artifact_compositor.cc`: removed orphan
+    `DumpWithDifferingPaintPropertiesIncluded` definition
+  - `text_decoration_painter.cc`: `(void)skip_ink` to suppress unused-var
 
-- **M140-specific changes in carbonyl source (`src/blink/text_capture.cc`)**:
-  - Skia `drawPoints` signature updated: `SkSpan<const SkPoint>` (was `size_t` + `SkPoint[]`)
-  - Skia `getRelativeTransform` returns `SkM44` — use `.asM33()` for `SkMatrix`
+- **M147-specific changes in carbonyl source**:
+  - `src/browser/args.gn`: `use_dbus = true` (wayland ozone requirement)
+  - `src/browser/renderer.cc`: static `unique_ptr` → leaked raw pointer
+    (M147 clang enforces `-Wexit-time-destructors`)
+  - `src/blink/text_capture.cc`:
+    - Skia `drawPath(path, paint, bool=false)` → `drawPath(path, paint)`
+    - Skia `getRelativeTransform` returns `SkM44` — use `.asM33()`
+    - Static `RendererService` → leaked pointer
 
 - **Patch 22** (`fix-m135-remove-stale-blink-target-dep`): removes a stale
   `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch
@@ -230,7 +251,7 @@ milestone, the `text_capture` source set may need to be relocated — but the
 pattern (dedicated blink TU for non-blink consumers) is the correct long-term
 approach.
 
-### GN args notes (M140)
+### GN args notes (M147)
 
 Several feature flags are intentionally **left at their platform defaults**
 (typically `true` on Linux) instead of being explicitly set to `false`:

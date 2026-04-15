@@ -29,7 +29,7 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 
 **What's different in this fork:**
 
-- **Chromium M140** (140.0.7339.264) — upgraded from M111 across five phases (M111 → M120 → M132 → M135 → M140). 24 patches applied. Runtime tarballs published to [Gitea releases](https://git.integrolabs.net/roctinam/carbonyl/releases).
+- **Chromium M147** (147.0.7727.94) — current upstream stable. Upgraded from M111 across six phases (M111 → M120 → M132 → M135 → M140 → M147). 24 patches applied. Runtime tarballs published to [Gitea releases](https://git.integrolabs.net/roctinam/carbonyl/releases).
 - **Python automation layer** ([`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent)) — extracted into a standalone installable package. `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction. Designed for agent-driven web interaction.
 - **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
 - **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.

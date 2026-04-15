@@ -9,7 +9,78 @@ All notable changes to this project will be documented in this file.
 This section covers work done in the `jmagly/carbonyl` fork since the upstream
 (`fathyb/carbonyl`) became inactive in February 2023. The fork maintains
 Carbonyl for use in automated agent testing pipelines and upgrades the
-Chromium base through M140.
+Chromium base through M147.
+
+### Chromium Upgrade: M140 → M147 — SHIPPED (Apr 2026)
+
+Phase 2 of the M135 → M147 catch-up epic. All 24 patches rebased from
+M140 to M147 (147.0.7727.94) — current upstream stable.
+
+| Phase | Milestone | Commit |
+|-------|-----------|--------|
+| Phase 2 | M147 (147.0.7727.94) | `58e50bd` |
+
+**Patch count**: 24 (unchanged).
+
+**Runtime tarball**: published to Gitea releases as
+[`runtime-c6fd85745eeaaf1b`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-c6fd85745eeaaf1b)
+(x86_64-unknown-linux-gnu).
+
+#### Patch conflicts resolved (11)
+
+- **Patch 01** (`headless/BUILD.gn`): merged M147 deps with carbonyl dep
+- **Patch 02**: kept carbonyl Mojo members alongside M147's `BrokerHolder`
+  struct refactor in `render_frame_host_impl.h`; dropped
+  `CONTENT_ENABLE_LEGACY_IPC` blocks (removed in M147)
+- **Patch 03** (`host_display_client.h`): kept `LayeredWindowUpdater`
+  Mojo interface alongside M147's M147 IS_MAC refactor
+- **Patch 05** (`paint_artifact_compositor.cc`): removed debug dump calls
+  (carbonyl side)
+- **Patch 06** (`headless_screen.cc`): kept carbonyl bridge include and
+  DPI scaling
+- **Patch 07** (`text_decoration_painter.cc`): kept disabled underline/overline
+- **Patch 09**: merged headless_web_contents / browser_impl includes
+- **Patch 10** (`render_frame_impl.cc`): merged M147 perfetto includes
+  with carbonyl Skia include
+- **Patch 13** (6 files): merged includes and deps across the rendering
+  bridge refactor
+- **Patch 23**: merged `headless_browser_impl.cc` includes
+- **Patch 24** (`blink/renderer/platform/BUILD.gn`): added carbonyl
+  text_capture visibility
+
+#### Build fixes for M147 API drift
+
+- **GN args**: `use_dbus = true` required — M147's wayland ozone now
+  unconditionally depends on `clipboard_util_linux` which needs dbus
+- **`renderer.cc`**: replaced `static std::unique_ptr<Renderer>` with a
+  leaked raw pointer — M147 clang enforces `-Wexit-time-destructors`
+- **`text_capture.cc`** (Skia API drift):
+  - `drawPath(path, paint, bool=false)` → `drawPath(path, paint)` (2-arg)
+  - `getRelativeTransform` returns `SkM44`, use `.asM33()` for `SkMatrix`
+  - Static `RendererService` → leaked pointer
+- **`host_display_client.h`**: `ui/gfx/native_widget_types.h` renamed to
+  `ui/gfx/native_ui_types.h`; added `SkBitmap.h` include; viz target
+  now depends on `//ui/gfx`
+- **`host_display_client.cc`**: removed obsolete `resource_sizes.h` include
+- **`software_output_device_proxy.cc`**: `ResourceSizes::MaybeSizeInBytes`
+  removed; replaced with `SinglePlaneFormat::kRGBA_8888.MaybeEstimatedSizeInBytes()`
+- **`browser_interface_binders.cc`**: `BinderMap::Add` signature changed;
+  switched carbonyl from manual `BindRepeating` to `BindRenderFrameHostImpl<>`
+- **`headless_browser_impl.cc`**: added `navigation_controller.h` include;
+  `PlatformSetWebContentsBounds` → `SetWebContentsBounds` (renamed)
+- **`headless_screen.cc`**: removed duplicate `~HeadlessScreen() = default`
+- **`headless_web_contents_impl.h`**: added
+  `using content::WebContentsObserver::OnVisibilityChanged;`
+- **`text_decoration_painter.cc`**: `(void)skip_ink` to suppress unused-var
+- **`paint_artifact_compositor.cc`**: removed orphan
+  `DumpWithDifferingPaintPropertiesIncluded` definition
+- **`font.{h,cc}`**: removed dead `Font::DrawText(TextRun)` overloads —
+  `CachingWordShaper` and `ShapeResultBuffer` removed upstream; the
+  `TextFragmentPaintInfo` path with the b64 text-capture bypass remains
+
+**Phantom dep fix**: removed `//carbonyl/src/browser:carbonyl` from
+`headless/BUILD.gn` — target never existed (only `bridge`, `viz`,
+`renderer`). Previously worked by accident in older gn evaluations.
 
 ### Chromium Upgrade: M135 → M140 — SHIPPED (Apr 2026)
 
