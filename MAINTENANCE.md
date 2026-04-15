@@ -103,9 +103,9 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147. Updatin
    git commit -m "chore(chromium): rebase patches on M<version> (<version>)"
    ```
 
-8. **Upload new runtime** to Gitea releases (makes `build-local.sh` fast for others):
+8. **Upload new runtime** to the release page (makes `build-local.sh` fast for others):
 
-   Runtimes are distributed via Gitea releases on `roctinam/carbonyl`. Each release is
+   Runtimes are distributed as release assets on `jmagly/carbonyl`. Each release is
    tagged `runtime-<hash>` where the hash is computed from the Chromium version, patches,
    and bridge files. Run for each target platform:
 
@@ -121,10 +121,9 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147. Updatin
    GITEA_TOKEN=<token> bash scripts/runtime-push.sh arm64
    ```
 
-   The token needs `write:release` scope on the `roctinam/carbonyl` repo.
-
-   If the tarball (~75 MB) exceeds the Gitea upload limit, increase
-   `APP_MAX_ATTACHMENT_SIZE` in Gitea's `app.ini`.
+   The upload token must have release-write scope on `jmagly/carbonyl`.
+   If the tarball exceeds a server-side upload limit, adjust the limit in the
+   hosting platform's configuration.
 
 ### Patch reference commits
 
@@ -208,14 +207,14 @@ before running `patches.sh apply`.
 ### Path A and the `//carbonyl/src/blink:text_capture` source set
 
 The `--carbonyl-b64-text` text-capture mode is **restored** in M135 builds
-via Path A ([#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28),
+via Path A ([#28](https://github.com/jmagly/carbonyl/issues/28),
 landed in `61b9095`).
 
 **Background**: The b64 text-capture path originally lived in
 `content/renderer/render_frame_impl.cc` (a non-blink TU). In M135, including
 `third_party/blink/renderer/core/*` headers from there triggers an
 Oilpan/cppgc template cascade that hard-errors on `sizeof(void)`. Path B
-(patch 23, [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27))
+(patch 23, [#27](https://github.com/jmagly/carbonyl/issues/27))
 temporarily `#if 0`'d the entire text-capture block while Path A was developed.
 
 **Path A solution**: The text-capture code was extracted into a dedicated blink

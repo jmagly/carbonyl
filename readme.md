@@ -3,7 +3,7 @@
 <pre>
    O    O
     \  /
-O —— Cr —— O
+   O —— Cr —— O
     /  \
    O    O
 </pre>
@@ -18,7 +18,7 @@ pip install carbonyl-agent && carbonyl-agent install
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Chromium M147](https://img.shields.io/badge/chromium-M147.0.7727.94-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromium.googlesource.com/chromium/src/+/refs/tags/147.0.7727.94)
-[![Runtime](https://img.shields.io/badge/runtime-gitea_releases-green?style=flat-square)](https://git.integrolabs.net/roctinam/carbonyl/releases)
+[![Runtime](https://img.shields.io/badge/runtime-releases-green?style=flat-square)](https://github.com/jmagly/carbonyl/releases)
 
 [**Get Started**](#-get-started) · [**Fork Status**](#active-fork--continued-maintenance) · [**Build from Source**](#building-from-source) · [**Comparisons**](#comparisons) · [**Blog**](https://fathy.fr/carbonyl)
 
@@ -30,13 +30,13 @@ pip install carbonyl-agent && carbonyl-agent install
 
 Carbonyl is a Chromium-based browser that renders into terminal text. It supports pretty much all Web APIs — WebGL, WebGPU, audio and video playback, animations — and starts in less than a second, runs at 60 FPS, and idles at 0% CPU. It does not require a window server (works in a safe-mode console) and runs comfortably over SSH. Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
 
-This repository (`roctinam/carbonyl`) is the **maintained fork** of the original [`fathyb/carbonyl`](https://github.com/fathyb/carbonyl), which has been inactive since early 2023. It tracks upstream Chromium stable (currently M147) and publishes runtime tarballs to Gitea releases.
+This repository (`jmagly/carbonyl`) is the **maintained fork** of the original [`fathyb/carbonyl`](https://github.com/fathyb/carbonyl), which has been inactive since early 2023. It tracks upstream Chromium stable (currently M147) and publishes runtime tarballs as release assets.
 
 ---
 
 ## Looking for the automation SDK?
 
-Most users want **[carbonyl-agent](https://git.integrolabs.net/roctinam/carbonyl-agent)** — the Python SDK that drives Carbonyl for scripted browsing, scraping, and agent-based testing. It handles binary discovery, session persistence, daemon reconnection, and bot-detection evasion out of the box.
+Most users want **[carbonyl-agent](https://github.com/jmagly/carbonyl-agent)** — the Python SDK that drives Carbonyl for scripted browsing, scraping, and agent-based testing. It handles binary discovery, session persistence, daemon reconnection, and bot-detection evasion out of the box.
 
 ```bash
 pip install carbonyl-agent
@@ -53,9 +53,9 @@ print(b.page_text())
 b.close()
 ```
 
-For multi-instance orchestration (N concurrent browsers over PTY + Unix socket, with gRPC + REST), see **[carbonyl-fleet](https://git.integrolabs.net/roctinam/carbonyl-fleet)**.
+For multi-instance orchestration (N concurrent browsers over PTY + Unix socket, with gRPC + REST), see **[carbonyl-fleet](https://github.com/jmagly/carbonyl-fleet)**.
 
-This repo (`roctinam/carbonyl`) is the Chromium fork and the source of the runtime tarballs. Most users do **not** need to build it.
+This repo (`jmagly/carbonyl`) is the Chromium fork and the source of the runtime tarballs. Most users do **not** need to build it.
 
 ---
 
@@ -68,7 +68,7 @@ pip install carbonyl-agent
 carbonyl-agent install
 ```
 
-The installer downloads a verified-by-SHA256 runtime tarball from Gitea releases. No compilation required.
+The installer downloads a verified-by-SHA256 runtime tarball from the release page. No compilation required.
 
 ### Run Carbonyl directly
 
@@ -80,8 +80,8 @@ docker run --rm -ti fathyb/carbonyl https://youtube.com
 npm install --global carbonyl
 carbonyl https://github.com
 
-# Or download a pre-built runtime from Gitea releases (M147, current)
-# See: https://git.integrolabs.net/roctinam/carbonyl/releases
+# Or download a pre-built runtime from release assets (M147, current)
+# See: https://github.com/jmagly/carbonyl/releases
 ```
 
 ---
@@ -92,14 +92,14 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 
 ### What's different in this fork
 
-- **Chromium M147** (147.0.7727.94) — current upstream stable. Upgraded from M111 across six phases (M111 → M120 → M132 → M135 → M140 → M147). 24 patches applied. Runtime tarballs published to [Gitea releases](https://git.integrolabs.net/roctinam/carbonyl/releases).
-- **Python automation layer** ([`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent)) — extracted into a standalone installable package. `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction.
-- **Fleet server** ([`carbonyl-fleet`](https://git.integrolabs.net/roctinam/carbonyl-fleet)) — Rust server for N concurrent browsers with gRPC + REST + Python SDK.
+- **Chromium M147** (147.0.7727.94) — current upstream stable. Upgraded from M111 across six phases (M111 → M120 → M132 → M135 → M140 → M147). 24 patches applied. Runtime tarballs published as [release assets](https://github.com/jmagly/carbonyl/releases).
+- **Python automation layer** ([`carbonyl-agent`](https://github.com/jmagly/carbonyl-agent)) — extracted into a standalone installable package. `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction.
+- **Fleet server** ([`carbonyl-fleet`](https://github.com/jmagly/carbonyl-fleet)) — Rust server for N concurrent browsers with gRPC + REST + Python SDK.
 - **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
 - **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.
-- **CI infrastructure** — Gitea Actions workflows for fast checks and full Chromium runtime builds, pinned to dedicated build hosts.
+- **CI infrastructure** — automated workflows for fast checks and full Chromium runtime builds, pinned to dedicated build hosts.
 
-**`--carbonyl-b64-text` restored in M135**: the experimental text-capture mode was temporarily disabled during the initial M135 ship and has been re-enabled via a structural refactor (Path A, [issue #28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)). Both bitmap rendering (default) and b64 text capture are functional on M147.
+**`--carbonyl-b64-text` restored in M135**: the experimental text-capture mode was temporarily disabled during the initial M135 ship and has been re-enabled via a structural refactor (Path A, [issue #28](https://github.com/jmagly/carbonyl/issues/28)). Both bitmap rendering (default) and b64 text capture are functional on M147.
 
 **Maintenance commitment:** Security-relevant Chromium versions are tracked on a best-effort basis. The automation API is under active development. Issues and PRs welcome.
 
@@ -109,9 +109,9 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 
 | Repo | Purpose | Build tech |
 |------|---------|------------|
-| [`carbonyl`](https://git.integrolabs.net/roctinam/carbonyl) | Chromium fork + runtime tarballs (this repo) | Chromium, GN, ninja, Rust |
-| [`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent) | Python automation SDK (single-instance) | Python 3.11+, pyte, pexpect |
-| [`carbonyl-fleet`](https://git.integrolabs.net/roctinam/carbonyl-fleet) | Fleet server (N concurrent browsers, gRPC + REST) | Rust, tonic, axum |
+| [`carbonyl`](https://github.com/jmagly/carbonyl) | Chromium fork + runtime tarballs (this repo) | Chromium, GN, ninja, Rust |
+| [`carbonyl-agent`](https://github.com/jmagly/carbonyl-agent) | Python automation SDK (single-instance) | Python 3.11+, pyte, pexpect |
+| [`carbonyl-fleet`](https://github.com/jmagly/carbonyl-fleet) | Fleet server (N concurrent browsers, gRPC + REST) | Rust, tonic, axum |
 
 ---
 
@@ -287,15 +287,15 @@ See [MAINTENANCE.md](MAINTENANCE.md) for detailed upgrade procedures, patch reba
 
 ## Contributing
 
-PRs and issues welcome at [git.integrolabs.net/roctinam/carbonyl](https://git.integrolabs.net/roctinam/carbonyl) or [github.com/jmagly/carbonyl](https://github.com/jmagly/carbonyl).
+PRs and issues welcome at [github.com/jmagly/carbonyl](https://github.com/jmagly/carbonyl).
 
-Most meaningful changes to the Python automation path belong in [`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent). This repo is the Chromium side — patches, build scripts, runtime infrastructure.
+Most meaningful changes to the Python automation path belong in [`carbonyl-agent`](https://github.com/jmagly/carbonyl-agent). This repo is the Chromium side — patches, build scripts, runtime infrastructure.
 
 ---
 
 ## Community & Support
 
-- **Issues**: [git.integrolabs.net/roctinam/carbonyl/issues](https://git.integrolabs.net/roctinam/carbonyl/issues)
+- **Issues**: [github.com/jmagly/carbonyl/issues](https://github.com/jmagly/carbonyl/issues)
 - **GitHub Discussions**: [github.com/jmagly/carbonyl/discussions](https://github.com/jmagly/carbonyl/discussions)
 
 ---
@@ -348,7 +348,7 @@ Custom AI and blockchain solutions for the digital age.
 
 ## Acknowledgments
 
-Built on top of [Carbonyl](https://github.com/fathyb/carbonyl) by Fathy Boundjadj, which in turn sits on [Chromium](https://www.chromium.org/) and [Skia](https://skia.org/). The M111→M147 rebase path was informed by [CEF](https://github.com/chromiumembedded/cef)'s `blink_glue.cc` pattern for the Path A structural fix. Thanks to the Chromium cppgc / Oilpan maintainers for the underlying template machinery (see [issue #27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)).
+Built on top of [Carbonyl](https://github.com/fathyb/carbonyl) by Fathy Boundjadj, which in turn sits on [Chromium](https://www.chromium.org/) and [Skia](https://skia.org/). The M111→M147 rebase path was informed by [CEF](https://github.com/chromiumembedded/cef)'s `blink_glue.cc` pattern for the Path A structural fix. Thanks to the Chromium cppgc / Oilpan maintainers for the underlying template machinery (see [issue #27](https://github.com/jmagly/carbonyl/issues/27)).
 
 ---
 
