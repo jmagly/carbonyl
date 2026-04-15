@@ -23,6 +23,29 @@ It's snappy, starts in less than a second, runs at 60 FPS, and idles at 0% CPU u
 
 Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
 
+## Looking for the automation SDK?
+
+Most users want **[carbonyl-agent](https://git.integrolabs.net/roctinam/carbonyl-agent)** — the Python automation package that drives Carbonyl for scripted browsing, scraping, and agent-based testing. It handles binary discovery, session persistence, daemon reconnection, and bot-detection evasion out of the box.
+
+```bash
+pip install carbonyl-agent
+carbonyl-agent install   # downloads the runtime binary
+```
+
+```python
+from carbonyl_agent import CarbonylBrowser
+
+b = CarbonylBrowser()
+b.open("https://example.com")
+b.drain(8.0)
+print(b.page_text())
+b.close()
+```
+
+For multi-instance orchestration (N concurrent browsers over PTY + Unix socket), see **[carbonyl-fleet](https://git.integrolabs.net/roctinam/carbonyl-fleet)**.
+
+This repo (`roctinam/carbonyl`) is the Chromium fork and the source of the runtime tarballs. Most users do **not** need to build it.
+
 ## Active Fork — Continued Maintenance
 
 The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) has been inactive since early 2023. This fork is actively maintained for use in headless browser automation and agentic pipelines.
