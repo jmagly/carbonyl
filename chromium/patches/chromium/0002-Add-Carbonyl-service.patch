@@ -1,4 +1,4 @@
-From fd58abca96d481b1cd5858e5a9ec353aa772fc53 Mon Sep 17 00:00:00 2001
+From 81de9fd7758de77a85ee1e13c5c0e99e8215df01 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:21:59 +0100
 Subject: [PATCH 02/24] Add Carbonyl service
@@ -7,27 +7,27 @@ Subject: [PATCH 02/24] Add Carbonyl service
  .../renderer_host/render_frame_host_impl.h    |   2 +
  content/renderer/render_frame_impl.cc         |   4 +
  content/renderer/render_frame_impl.h          |   6 +
- .../blink/renderer/platform/fonts/font.cc     | 147 ++++++++++++++++++
- 4 files changed, 159 insertions(+)
+ .../blink/renderer/platform/fonts/font.cc     | 150 +++++++++++++++++-
+ 4 files changed, 160 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 75c24911cb415..bfb37184c1833 100644
+index 5664e618dc31b..0ae6d6c5ad5c5 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -5459,6 +5459,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -5524,6 +5524,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // to change across MPArch activations like prerendering.
    const base::UnguessableToken devtools_frame_token_;
  
 +  std::unique_ptr<carbonyl::CarbonylRenderServiceImpl> carbonyl_render_service_;
 +
-   // BrowserInterfaceBroker implementation through which this
-   // RenderFrameHostImpl exposes document-scoped Mojo services to the currently
-   // active document in the corresponding RenderFrame.
+   // A holder for the BrowserInterfaceBrokerImpl and its receiver. By default
+   // this is constructed along with the RFHI. When kLazyBrowserInterfaceBroker
+   // is enabled the struct is lazily instantiated when the RFHI becomes
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 7e54042f2fb8b..91c1a6a1de722 100644
+index 6ee766c522028..e74978a3550be 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -1957,6 +1957,10 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -1999,6 +1999,10 @@ RenderFrameImpl::~RenderFrameImpl() {
    tracing::TrackNameRecorder::GetInstance()->RemoveProcessLabel(
        process_label_id_);
    agent_scheduling_group_->RemoveFrameRoute(frame_token_);
@@ -39,10 +39,10 @@ index 7e54042f2fb8b..91c1a6a1de722 100644
  
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index 5456a50df5f75..b733b9164841c 100644
+index c803bf1d93bb9..f24837c78b32e 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -1491,6 +1491,8 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1523,6 +1523,8 @@ class CONTENT_EXPORT RenderFrameImpl
    scoped_refptr<network::SharedURLLoaderFactory>
        url_loader_factory_override_for_test_;
  
@@ -51,7 +51,7 @@ index 5456a50df5f75..b733b9164841c 100644
    // When the browser asks the renderer to commit a navigation, it should always
    // result in a committed navigation reported via DidCommitProvisionalLoad().
    // This is important because DidCommitProvisionalLoad() is responsible for
-@@ -1567,6 +1569,10 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1599,6 +1601,10 @@ class CONTENT_EXPORT RenderFrameImpl
    // false, but set to true by some tests.
    bool send_content_state_immediately_ = false;
  
@@ -59,14 +59,14 @@ index 5456a50df5f75..b733b9164841c 100644
 +  mojo::PendingReceiver<carbonyl::mojom::CarbonylRenderService> carbonyl_render_service_receiver_ =
 +    carbonyl_render_service_.BindNewPipeAndPassReceiver();
 +
-   // The RenderFrameImpl can be created in 2 modes.
-   //
-   // 1. The associated WebFrameWidget and its compositor is initialized at
+   // Used by DevTools to defer async client navigations for the duration of
+   // handling a CDP command.
+   ClientNavigationThrottler client_navigation_throttler_;
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 370a14c07f8c9..ed68d374fedf8 100644
+index f634b8f3d2a33..25941467d1568 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -93,6 +93,128 @@ bool Font::operator==(const Font& other) const {
+@@ -89,6 +89,128 @@ bool Font::operator==(const Font& other) const {
           font_description_ == other.font_description_;
  }
  
@@ -195,10 +195,12 @@ index 370a14c07f8c9..ed68d374fedf8 100644
  void Font::DrawText(cc::PaintCanvas* canvas,
                      const TextFragmentPaintInfo& text_info,
                      const gfx::PointF& point,
-@@ -104,6 +226,31 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -100,8 +222,32 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
+-  // For performance avoid stack initialization on this large object.
+-  STACK_UNINITIALIZED ShapeResultBloberizer::FillGlyphsNG bloberizer(
 +  if (carbonyl_b64_text) {
 +    auto string = StringView(
 +      text_info.text,
@@ -224,6 +226,7 @@ index 370a14c07f8c9..ed68d374fedf8 100644
 +    return;
 +  }
 +
-   ShapeResultBloberizer::FillGlyphsNG bloberizer(
++  ShapeResultBloberizer::FillGlyphsNG bloberizer(
        GetFontDescription(), text_info.text, text_info.from, text_info.to,
        text_info.shape_result,
+       draw_type == Font::DrawType::kGlyphsOnly

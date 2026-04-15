@@ -6,12 +6,12 @@ source "$CARBONYL_ROOT/scripts/env.sh"
 
 cd "$CHROMIUM_SRC"
 
-# M140 (140.0.7339.264) baseline commits.
+# M147 (147.0.7727.94) baseline commits.
 # chromium_upstream: set this to the output of `git -C "$CHROMIUM_SRC" rev-parse HEAD`
 # after running `bash scripts/gclient.sh sync` for the target version.
-chromium_upstream="56ca847e9ea70a5c56fa3d634361da1002fb284b"  # 140.0.7339.264
-skia_upstream="f3ff281f2330f2948888a9cc0ba921bbdc107da8"      # DEPS @ 140.0.7339.264
-webrtc_upstream="36ea4535a500ac137dbf1f577ce40dc1aaa774ef"    # DEPS @ 140.0.7339.264
+chromium_upstream="be35d570111fa75402da99a722251d8af5ee5990"  # 147.0.7727.94
+skia_upstream="d203629ce869dbb142ca186c7da60a97cfb1550d"      # DEPS @ 147.0.7727.94
+webrtc_upstream="9179833d210d105aede5d4ec516734a6bd1ef2e8"    # DEPS @ 147.0.7727.94
 
 if [[ "$1" == "apply" ]]; then
     echo "Stashing Chromium changes.."

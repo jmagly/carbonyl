@@ -42,7 +42,7 @@ TMPDIR_BASE="${TMPDIR:-/tmp}"
 EXPECTED_STRINGS=(
     "CarbonylTextCaptureTest"
     "SectionAlpha"
-    "Foxtrot"
+    "ItemDelta"
 )
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

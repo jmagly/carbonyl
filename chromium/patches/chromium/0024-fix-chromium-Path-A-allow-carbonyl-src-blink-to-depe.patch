@@ -1,4 +1,4 @@
-From 32a67f4314318c7a136600085ff8d3e7baf19e11 Mon Sep 17 00:00:00 2001
+From 2c51dece24b832c5d0270c955639b62f148ec31c Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Thu, 9 Apr 2026 18:18:30 -0400
 Subject: [PATCH 24/24] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
@@ -38,14 +38,14 @@ See: roctinam/carbonyl#28 (this work), #27 (diagnosis), #29 (audit)
  content/renderer/render_frame_impl.cc        | 256 ++-----------------
  third_party/blink/renderer/BUILD.gn          |   7 +-
  third_party/blink/renderer/core/BUILD.gn     |   9 +-
- third_party/blink/renderer/platform/BUILD.gn |   4 +
- 5 files changed, 37 insertions(+), 240 deletions(-)
+ third_party/blink/renderer/platform/BUILD.gn |   8 +-
+ 5 files changed, 40 insertions(+), 241 deletions(-)
 
 diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
-index 8bb4ca2e03b98..66da8b38bf98e 100644
+index c592c99b3cafd..08c2ada3dfad6 100644
 --- a/content/renderer/BUILD.gn
 +++ b/content/renderer/BUILD.gn
-@@ -228,6 +228,7 @@ target(link_target_type, "renderer") {
+@@ -233,6 +233,7 @@ target(link_target_type, "renderer") {
      "//base",
      "//base:i18n",
      "//build:chromecast_buildflags",
@@ -54,10 +54,10 @@ index 8bb4ca2e03b98..66da8b38bf98e 100644
      "//carbonyl/src/browser:mojom",
      "//carbonyl/src/browser:renderer",
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index b27ec820f3717..b92f886bed0e1 100644
+index 82101bd3c69aa..50b7658ef0c3d 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -266,14 +266,15 @@
+@@ -273,14 +273,15 @@
  #include "cc/trees/layer_tree_host.h"
  #include "cc/trees/render_frame_metadata_observer.h"
  #include "components/paint_preview/common/paint_preview_tracker.h"
@@ -81,7 +81,7 @@ index b27ec820f3717..b92f886bed0e1 100644
  #include "third_party/skia/include/codec/SkEncodedImageFormat.h"
  #include "third_party/skia/include/core/SkMesh.h"
  #include "third_party/skia/include/core/SkStream.h"
-@@ -1991,8 +1992,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2033,8 +2034,6 @@ RenderFrameImpl::~RenderFrameImpl() {
        process_label_id_);
    agent_scheduling_group_->RemoveFrameRoute(frame_token_);
  
@@ -90,7 +90,7 @@ index b27ec820f3717..b92f886bed0e1 100644
    if (render_callback_) {
      if (auto& callback = *render_callback_.get()) {
        callback = nullptr;
-@@ -2000,217 +1999,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2042,217 +2041,6 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -308,7 +308,7 @@ index b27ec820f3717..b92f886bed0e1 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -2248,42 +2036,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2290,42 +2078,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
        frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
  
@@ -379,10 +379,10 @@ index 0f2a6baa28cfa..d0ac3b61516cd 100644
  # arguments --------------------------------------------------------------------
  
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 4991c95c89c60..03b42db987a38 100644
+index 1b898d14e7635..690ada40b4cac 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
-@@ -96,6 +96,9 @@ if (is_ios) {
+@@ -97,6 +97,9 @@ if (is_ios) {
  visibility = [
    "//third_party/blink/public/*",
    "//third_party/blink/renderer/*",
@@ -392,7 +392,7 @@ index 4991c95c89c60..03b42db987a38 100644
  ]
  
  rel_blink_core_gen_dir = rebase_path(blink_core_output_dir, root_build_dir)
-@@ -244,7 +247,11 @@ component("core") {
+@@ -254,7 +257,11 @@ component("core") {
    output_name = "blink_core"
  
    visibility = []  # Allow re-assignment of list.
@@ -406,10 +406,10 @@ index 4991c95c89c60..03b42db987a38 100644
    sources = [
      "core_initializer.cc",
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index a104e2c3acc98..79ab18f07ae24 100644
+index 79c581e819e8f..1d54d26d58878 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -32,6 +32,8 @@ visibility = [
+@@ -31,6 +31,8 @@ visibility = [
    "//:gn_all",
    "//third_party/blink/public:all_blink",
    "//third_party/blink/renderer/platform/heap:test_support",
@@ -418,12 +418,16 @@ index a104e2c3acc98..79ab18f07ae24 100644
  ]
  
  blink_platform_avx_files = [
-@@ -340,6 +342,8 @@ component("platform") {
-   visibility = [
-     "//third_party/blink/*",
-     "//tools/privacy_budget/font_indexer:*",
+@@ -348,7 +350,11 @@ source_set("image_headers") {
+ 
+ component("platform") {
+   visibility = []  # Allow re-assignment of list.
+-  visibility = [ "//third_party/blink/*" ]
++  visibility = [
++    "//third_party/blink/*",
 +    # Carbonyl text capture (roctinam/carbonyl#28).
 +    "//carbonyl/src/blink/*",
-   ]
++  ]
    output_name = "blink_platform"
  
+   sources = [

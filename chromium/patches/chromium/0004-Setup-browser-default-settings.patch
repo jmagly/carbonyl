@@ -1,4 +1,4 @@
-From fe81b2c2445378ecfb6fe735d01241898782ec64 Mon Sep 17 00:00:00 2001
+From 5884c7e817ae07beec7d1adcf956f783052eeb49 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:27:27 +0100
 Subject: [PATCH 04/24] Setup browser default settings
@@ -9,10 +9,10 @@ Subject: [PATCH 04/24] Setup browser default settings
  2 files changed, 8 insertions(+), 4 deletions(-)
 
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 5ef3b847dc71e..92732a46445ac 100644
+index eb1a52ac99254..17f063e1c55a2 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -59,7 +59,11 @@ namespace headless {
+@@ -70,7 +70,11 @@ namespace headless {
  namespace {
  
  // Product name for building the default user agent string.
@@ -25,7 +25,7 @@ index 5ef3b847dc71e..92732a46445ac 100644
  
  #if defined(HEADLESS_USE_PREFS)
  const base::FilePath::CharType kLocalStateFilename[] =
-@@ -85,7 +89,7 @@ bool HeadlessBrowser::Options::DevtoolsServerEnabled() {
+@@ -96,7 +100,7 @@ bool HeadlessBrowser::Options::DevtoolsServerEnabled() {
  
  /// static
  std::string HeadlessBrowser::GetProductNameAndVersion() {

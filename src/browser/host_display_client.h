@@ -9,7 +9,8 @@
 #include "carbonyl/src/browser/export.h"
 #include "components/viz/host/host_display_client.h"
 #include "services/viz/privileged/mojom/compositing/layered_window_updater.mojom.h"
-#include "ui/gfx/native_widget_types.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/native_ui_types.h"
 
 namespace carbonyl {
 

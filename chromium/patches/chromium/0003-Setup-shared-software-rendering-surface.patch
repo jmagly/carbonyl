@@ -1,4 +1,4 @@
-From 1cb4f1d0a97bb440e98ee68e9c7a02b4568c6a4d Mon Sep 17 00:00:00 2001
+From 390becc800745867517d5d6aa6dd6e8db569e6ee Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:24:29 +0100
 Subject: [PATCH 03/24] Setup shared software rendering surface
@@ -9,14 +9,14 @@ Subject: [PATCH 03/24] Setup shared software rendering surface
  .../viz/host/layered_window_updater_impl.cc     |  2 +-
  .../viz/host/layered_window_updater_impl.h      |  2 +-
  .../output_surface_provider_impl.cc             | 16 ++++++++++++++++
- .../compositor/viz_process_transport_factory.cc |  4 +++-
+ .../compositor/viz_process_transport_factory.cc |  5 ++++-
  .../mojom/compositing/display_private.mojom     |  1 -
  .../compositing/layered_window_updater.mojom    |  2 +-
  ui/compositor/compositor.h                      | 17 ++++++++++++++++-
- 9 files changed, 45 insertions(+), 9 deletions(-)
+ 9 files changed, 46 insertions(+), 9 deletions(-)
 
 diff --git a/components/viz/host/host_display_client.cc b/components/viz/host/host_display_client.cc
-index aed835411f572..401d1f839322f 100644
+index b153c538488b7..24eeb948567af 100644
 --- a/components/viz/host/host_display_client.cc
 +++ b/components/viz/host/host_display_client.cc
 @@ -49,9 +49,9 @@ void HostDisplayClient::OnDisplayReceivedCALayerParams(
@@ -41,7 +41,7 @@ index aed835411f572..401d1f839322f 100644
      gpu::SurfaceHandle child_window) {
    NOTREACHED();
 diff --git a/components/viz/host/host_display_client.h b/components/viz/host/host_display_client.h
-index 9e94f648060e9..ebfdfd2343603 100644
+index 03410160827d5..ff48d8d6a203e 100644
 --- a/components/viz/host/host_display_client.h
 +++ b/components/viz/host/host_display_client.h
 @@ -47,11 +47,13 @@ class VIZ_HOST_EXPORT HostDisplayClient : public mojom::DisplayClient {
@@ -57,11 +57,11 @@ index 9e94f648060e9..ebfdfd2343603 100644
 +  void CreateLayeredWindowUpdater(
 +      mojo::PendingReceiver<mojom::LayeredWindowUpdater> receiver) override;
 +
- #if BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE_X11)
+ #if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
    void DidCompleteSwapWithNewSize(const gfx::Size& size) override;
- #endif  // BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE_X11)
+ #endif  // BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
 diff --git a/components/viz/host/layered_window_updater_impl.cc b/components/viz/host/layered_window_updater_impl.cc
-index 8f726bde2cb5d..0737835d1e9d1 100644
+index 36b9e09ca63ae..a0552011f89ba 100644
 --- a/components/viz/host/layered_window_updater_impl.cc
 +++ b/components/viz/host/layered_window_updater_impl.cc
 @@ -46,7 +46,7 @@ void LayeredWindowUpdaterImpl::OnAllocatedSharedMemory(
@@ -132,19 +132,20 @@ index 07502f4ff2afd..e7d422a18a0b2 100644
      return std::make_unique<SoftwareOutputDevice>();
  
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
-index 0c9dabd7e8504..d0de8d7f7b97e 100644
+index 59a7d48453bc4..56f9a86435e2f 100644
 --- a/content/browser/compositor/viz_process_transport_factory.cc
 +++ b/content/browser/compositor/viz_process_transport_factory.cc
-@@ -54,6 +54,8 @@
- #include "ui/gfx/win/rendering_window_manager.h"
+@@ -59,6 +59,9 @@
+ #include "ui/display/mac/display_link_mac.h"
  #endif
  
 +#include "carbonyl/src/browser/host_display_client.h"
 +
++
  namespace content {
  namespace {
  
-@@ -387,7 +389,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
+@@ -407,7 +410,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
    root_params->display_private =
        display_private.BindNewEndpointAndPassReceiver();
    compositor_data.display_client =
@@ -154,10 +155,10 @@ index 0c9dabd7e8504..d0de8d7f7b97e 100644
        compositor_data.display_client->GetBoundRemote(resize_task_runner_);
    mojo::AssociatedRemote<viz::mojom::ExternalBeginFrameController>
 diff --git a/services/viz/privileged/mojom/compositing/display_private.mojom b/services/viz/privileged/mojom/compositing/display_private.mojom
-index e063835e87f08..34bcf67726f64 100644
+index 00bd84b857fbd..18c4391ba498f 100644
 --- a/services/viz/privileged/mojom/compositing/display_private.mojom
 +++ b/services/viz/privileged/mojom/compositing/display_private.mojom
-@@ -119,7 +119,6 @@ interface DisplayClient {
+@@ -130,7 +130,6 @@ interface DisplayClient {
  
    // Creates a LayeredWindowUpdater implementation to draw into a layered
    // window.
@@ -177,10 +178,10 @@ index 2f462f0deb5fc..695869b83cefa 100644
 +  Draw(gfx.mojom.Rect damage_rect) => ();
  };
 diff --git a/ui/compositor/compositor.h b/ui/compositor/compositor.h
-index f1a4674323d96..4d28d74b43dd7 100644
+index 97f26777528c3..5cd3fac8e78c6 100644
 --- a/ui/compositor/compositor.h
 +++ b/ui/compositor/compositor.h
-@@ -86,7 +86,7 @@ namespace mojom {
+@@ -88,7 +88,7 @@ namespace mojom {
  class DisplayPrivate;
  class ExternalBeginFrameController;
  }  // namespace mojom
@@ -189,7 +190,7 @@ index f1a4674323d96..4d28d74b43dd7 100644
  class HostFrameSinkManager;
  class LocalSurfaceId;
  class RasterContextProvider;
-@@ -135,6 +135,16 @@ class COMPOSITOR_EXPORT ContextFactory {
+@@ -136,6 +136,16 @@ class COMPOSITOR_EXPORT ContextFactory {
    virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
  };
  
@@ -206,7 +207,7 @@ index f1a4674323d96..4d28d74b43dd7 100644
  // Factory object to create a ExternalBeginFrameControllerClient on demand.
  class COMPOSITOR_EXPORT ExternalBeginFrameControllerClientFactory {
   public:
-@@ -189,6 +199,9 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
+@@ -190,6 +200,9 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
    // Schedules a redraw of the layer tree associated with this compositor.
    void ScheduleDraw();
  
@@ -216,7 +217,7 @@ index f1a4674323d96..4d28d74b43dd7 100644
    // Sets the root of the layer tree drawn by this Compositor. The root layer
    // must have no parent. The compositor's root layer is reset if the root layer
    // is destroyed. NULL can be passed to reset the root layer, in which case the
-@@ -630,6 +643,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
+@@ -632,6 +645,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
        simple_begin_frame_observers_;
    std::unique_ptr<ui::HostBeginFrameObserver> host_begin_frame_observer_;
  

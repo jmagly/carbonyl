@@ -1,4 +1,4 @@
-From d7112cc69d02e472c568dba4c079612551b3888a Mon Sep 17 00:00:00 2001
+From 8831ec54bbb2c848857706ca169e4621566ce737 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 21:51:24 -0400
 Subject: [PATCH 18/24] fix(m120): fix compile errors in render_frame_impl and
@@ -19,10 +19,10 @@ Content-Transfer-Encoding: 8bit
  4 files changed, 8 insertions(+), 15 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 4d65d8c678e0f..427fe9f7c4f6c 100644
+index 4efd81b5b90d5..b4cd56c28e5e5 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -274,14 +274,14 @@
+@@ -281,14 +281,14 @@
  #include "third_party/blink/renderer/core/layout/layout_view.h"
  #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
  #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
@@ -39,7 +39,7 @@ index 4d65d8c678e0f..427fe9f7c4f6c 100644
  #include "third_party/skia/src/text/GlyphRun.h"
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
-@@ -2139,25 +2139,15 @@ protected:
+@@ -2181,25 +2181,15 @@ protected:
  
        base64[runSize] = '\0';
  
@@ -69,7 +69,7 @@ index 4d65d8c678e0f..427fe9f7c4f6c 100644
            paint.getColor()
          )
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index b733b9164841c..a0d1e0c7bd1d4 100644
+index f24837c78b32e..20b4fdfbab065 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
 @@ -127,6 +127,7 @@
@@ -81,10 +81,10 @@ index b733b9164841c..a0d1e0c7bd1d4 100644
  #if BUILDFLAG(IS_ANDROID)
  #include "content/common/gin_java_bridge.mojom.h"
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 7c9a5e47534c2..dae4fcfa8b2da 100644
+index a7c66b2fe7016..43d8c71167a7b 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -171,6 +171,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
+@@ -183,6 +183,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
  void HeadlessBrowserImpl::Shutdown() {
    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
  
@@ -93,14 +93,14 @@ index 7c9a5e47534c2..dae4fcfa8b2da 100644
    // Make sure GetAllBrowserContexts is sane if called after this point.
    auto tmp = std::move(browser_contexts_);
 diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
-index 74bcd5ee177de..893a3e5eac9be 100644
+index eed25b81f39c6..840cf9c5d4fa4 100644
 --- a/headless/lib/browser/headless_browser_impl.h
 +++ b/headless/lib/browser/headless_browser_impl.h
-@@ -149,6 +149,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
-   std::optional<HeadlessBrowser::Options> options_;
+@@ -147,6 +147,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+   std::unique_ptr<HeadlessPlatformDelegate> platform_delegate_;
  
    int exit_code_ = 0;
 +  bool did_shutdown_ = false;
  
-   base::flat_map<std::string, std::unique_ptr<HeadlessBrowserContextImpl>>
-       browser_contexts_;
+   std::unique_ptr<os_crypt_async::OSCryptAsync> os_crypt_async_;
+ 

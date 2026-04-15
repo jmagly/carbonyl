@@ -1,4 +1,4 @@
-From 457d388fdecec919a3a7ad7155b082b8e2a7252d Mon Sep 17 00:00:00 2001
+From aec5ac9c70182f363890601ff2de7b42bc164918 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 00:55:33 +0100
 Subject: [PATCH 10/24] Conditionally enable text rendering
@@ -17,10 +17,10 @@ Subject: [PATCH 10/24] Conditionally enable text rendering
  10 files changed, 356 insertions(+), 16 deletions(-)
 
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index a33b4f801d2d4..60e044753024a 100644
+index 5a2d613cec812..9bdc7c3aeac63 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -488,6 +488,24 @@ bool LayerTreeHost::IsUsingLayerLists() const {
+@@ -503,6 +503,24 @@ bool LayerTreeHost::IsUsingLayerLists() const {
    return settings_.use_layer_lists;
  }
  
@@ -45,7 +45,7 @@ index a33b4f801d2d4..60e044753024a 100644
  void LayerTreeHost::CommitComplete(int source_frame_number,
                                     const CommitTimestamps& commit_timestamps) {
    DCHECK(IsMainThread());
-@@ -1691,6 +1709,9 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
+@@ -1773,6 +1791,9 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
    for (const auto& layer : update_layer_list) {
      did_paint_content |= layer->Update();
    }
@@ -56,10 +56,10 @@ index a33b4f801d2d4..60e044753024a 100644
  }
  
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 3d644e1659738..7c37bbf7b0219 100644
+index 6055bc8f78889..4ab7fb088e264 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
-@@ -182,6 +182,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
+@@ -191,6 +191,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
    // Returns the process global unique identifier for this LayerTreeHost.
    int GetId() const;
  
@@ -72,7 +72,7 @@ index 3d644e1659738..7c37bbf7b0219 100644
    // The commit state for the frame being assembled by the compositor host.
    const CommitState* pending_commit_state() const {
      DCHECK(IsMainThread());
-@@ -1152,6 +1158,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
+@@ -1193,6 +1199,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
    std::unique_ptr<PropertyTreeDelegate> owned_property_tree_delegate_;
    raw_ptr<PropertyTreeDelegate> property_tree_delegate_;
  
@@ -82,12 +82,12 @@ index 3d644e1659738..7c37bbf7b0219 100644
  };
  
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index e140a507f4e26..298ec14ce6530 100644
+index f5f7a55ddaabf..d2102f1f5674f 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
-@@ -957,6 +957,10 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
-           &RenderFrameHostImpl::CreateSecurePaymentConfirmationService,
-           base::Unretained(host)));
+@@ -943,6 +943,10 @@ void PopulateBinderMapWithContext(
+       &BindRenderFrameHostImpl<
+           &RenderFrameHostImpl::CreateWebTransportConnector>);
  
 +  map->Add<carbonyl::mojom::CarbonylRenderService>(
 +      base::BindRepeating(&RenderFrameHostImpl::GetCarbonylRenderService,
@@ -97,10 +97,10 @@ index e140a507f4e26..298ec14ce6530 100644
    if (BrowserMainLoop::GetInstance()) {
      // BrowserMainLoop, which owns MediaStreamManager, is alive for the lifetime
 diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
-index 1aec55ce3bbe4..ec1ab95441579 100644
+index c5ee522e5ffb3..b0f897e6d8171 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl.cc
-@@ -14423,6 +14423,12 @@ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
+@@ -14947,6 +14947,12 @@ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
        std::move(receiver), ComputeTopFrameOrigin(GetLastCommittedOrigin()));
  }
  
@@ -114,10 +114,10 @@ index 1aec55ce3bbe4..ec1ab95441579 100644
      mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver) {
    AudioContextManagerImpl::Create(this, std::move(receiver));
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index bfb37184c1833..3822ce2c23429 100644
+index 0ae6d6c5ad5c5..026d6ebbb7826 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -213,6 +213,8 @@
+@@ -216,6 +216,8 @@
  #include "media/mojo/mojom/remoting.mojom-forward.h"
  #endif
  
@@ -126,7 +126,7 @@ index bfb37184c1833..3822ce2c23429 100644
  namespace blink {
  class AssociatedInterfaceRegistry;
  class DocumentPolicy;
-@@ -2056,6 +2058,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -2081,6 +2083,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // Set the `frame_` for sending messages to the renderer process.
    void SetMojomFrameRemote(mojo::PendingAssociatedRemote<mojom::Frame>);
  
@@ -137,18 +137,18 @@ index bfb37184c1833..3822ce2c23429 100644
        mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver);
  
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 91c1a6a1de722..4d65d8c678e0f 100644
+index e74978a3550be..4efd81b5b90d5 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -238,6 +238,7 @@
- #include "third_party/blink/public/web/web_view.h"
- #include "third_party/blink/public/web/web_widget.h"
+@@ -245,6 +245,7 @@
  #include "third_party/blink/public/web/web_window_features.h"
+ #include "third_party/perfetto/include/perfetto/tracing/track.h"
+ #include "third_party/perfetto/include/perfetto/tracing/track_event_args.h"
 +#include "third_party/skia/include/core/SkPictureRecorder.h"
  #include "ui/accessibility/ax_tree_update.h"
  #include "ui/events/base_event_utils.h"
  #include "url/origin.h"
-@@ -254,6 +255,39 @@
+@@ -261,6 +262,39 @@
  #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
  #endif
  
@@ -188,7 +188,7 @@ index 91c1a6a1de722..4d65d8c678e0f 100644
  using base::Time;
  using blink::ContextMenuData;
  using blink::WebContentDecryptionModule;
-@@ -1963,6 +1997,223 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2005,6 +2039,223 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -412,7 +412,7 @@ index 91c1a6a1de722..4d65d8c678e0f 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -1988,6 +2239,8 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2030,6 +2281,8 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
                                    GetBrowserInterfaceBroker());
    }
  
@@ -421,7 +421,7 @@ index 91c1a6a1de722..4d65d8c678e0f 100644
    // Bind this class to mojom::Frame and to the message router for legacy IPC.
    // These must be called after |frame_| is set since binding requires a
    // per-frame task runner.
-@@ -1997,6 +2250,37 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2039,6 +2292,37 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    agent_scheduling_group_->AddFrameRoute(
        frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
@@ -460,7 +460,7 @@ index 91c1a6a1de722..4d65d8c678e0f 100644
  
  void RenderFrameImpl::GetInterface(
 diff --git a/third_party/blink/public/web/web_frame_widget.h b/third_party/blink/public/web/web_frame_widget.h
-index a0cb8d3c31fb1..f47e898ac995e 100644
+index 11e9b422ee4ed..d55d67e56752c 100644
 --- a/third_party/blink/public/web/web_frame_widget.h
 +++ b/third_party/blink/public/web/web_frame_widget.h
 @@ -58,6 +58,10 @@ struct ApplyViewportChangesArgs;
@@ -474,7 +474,7 @@ index a0cb8d3c31fb1..f47e898ac995e 100644
  namespace gfx {
  class PointF;
  class RectF;
-@@ -275,6 +279,9 @@ class WebFrameWidget : public WebWidget {
+@@ -271,6 +275,9 @@ class WebFrameWidget : public WebWidget {
    // GPU benchmarking extension needs access to the LayerTreeHost
    friend class GpuBenchmarkingContext;
  
@@ -485,10 +485,10 @@ index a0cb8d3c31fb1..f47e898ac995e 100644
    // WebFrameWidgetImpl is the only concrete subclass that implements
    // WebFrameWidget, so that it is safe to downcast to WebFrameWidgetImpl.
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index a01c8623c4728..6ab35a8adf314 100644
+index 420273dfb1a3f..f1a7b43abee9c 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -137,6 +137,8 @@
+@@ -141,6 +141,8 @@
  #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
  #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
  
@@ -497,7 +497,7 @@ index a01c8623c4728..6ab35a8adf314 100644
  namespace blink {
  
  namespace {
-@@ -1462,18 +1464,20 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1482,18 +1484,20 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -530,10 +530,10 @@ index a01c8623c4728..6ab35a8adf314 100644
    state.LoadPendingResources();
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 67f6aecb0f50b..5188a4e273b72 100644
+index eb2472737bd6e..f5292ee5fff98 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1787,6 +1787,7 @@ component("platform") {
+@@ -1803,6 +1803,7 @@ component("platform") {
      "//base:base_static",
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
@@ -542,10 +542,10 @@ index 67f6aecb0f50b..5188a4e273b72 100644
      "//cc/ipc",
      "//cc/mojo_embedder",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index ed68d374fedf8..af84fb7122d15 100644
+index 25941467d1568..bf10907b23071 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -47,6 +47,8 @@
+@@ -43,6 +43,8 @@
  #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
  #include "ui/gfx/geometry/rect_f.h"
  
@@ -554,7 +554,7 @@ index ed68d374fedf8..af84fb7122d15 100644
  namespace blink {
  
  namespace {
-@@ -95,14 +97,12 @@ bool Font::operator==(const Font& other) const {
+@@ -91,14 +93,12 @@ bool Font::operator==(const Font& other) const {
  
  namespace {
  
@@ -570,7 +570,7 @@ index ed68d374fedf8..af84fb7122d15 100644
      return;
    }
  
-@@ -178,7 +178,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -174,7 +174,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -579,7 +579,7 @@ index ed68d374fedf8..af84fb7122d15 100644
      auto string = StringView(
        run_info.run.ToStringView(),
        run_info.from,
-@@ -226,7 +226,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -222,7 +222,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

@@ -1,4 +1,4 @@
-From 0ebc601f8d1bcd90495afcee9c644225ccd23b18 Mon Sep 17 00:00:00 2001
+From eeaa977c9f5deb23b2f795726ba3e0aada193bb8 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:32:14 +0100
 Subject: [PATCH 08/24] Fix text layout
@@ -8,10 +8,10 @@ Subject: [PATCH 08/24] Fix text layout
  1 file changed, 15 insertions(+), 11 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 89146e8392e51..a01c8623c4728 100644
+index 996c856818701..420273dfb1a3f 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -370,7 +370,9 @@ String ComputeBaseComputedStyleDiff(const ComputedStyle* base_computed_style,
+@@ -375,7 +375,9 @@ String ComputeBaseComputedStyleDiff(const ComputedStyle* base_computed_style,
      return g_null_atom;
    }
  
@@ -22,7 +22,7 @@ index 89146e8392e51..a01c8623c4728 100644
  }
  #endif  // DCHECK_IS_ON()
  
-@@ -1460,16 +1462,18 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1480,16 +1482,18 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  

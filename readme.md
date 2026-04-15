@@ -228,3 +228,13 @@ $ ./scripts/docker-build.sh Default amd64
 ```
 $ ./scripts/run.sh Default https://wikipedia.org
 ```
+
+## Sponsors
+
+This project is supported by:
+
+- **[Roko Network](https://roko.network)** — The Temporal Layer for Web3. Enterprise-grade timing infrastructure for blockchain applications.
+- **[Selfient](https://selfient.xyz)** — No-Code Smart Contracts for Everyone. Democratizing Web3 by making blockchain-based agreements accessible without coding.
+- **[Integro Labs](https://integrolabs.io)** — AI-Powered Automation Solutions. Custom AI and blockchain solutions for digital automation and transformation.
+
+Interested in sponsoring? Open a [GitHub Discussion](https://github.com/jmagly/carbonyl/discussions).

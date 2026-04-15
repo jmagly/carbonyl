@@ -20,7 +20,9 @@ use_qt = false
 use_gio = false
 use_gtk = false
 use_cups = false
-use_dbus = false
+# M147: use_dbus must be true — wayland ozone unconditionally depends on
+# clipboard_util_linux which requires use_dbus.
+use_dbus = true
 use_glib = false
 use_libpci = false
 use_kerberos = false

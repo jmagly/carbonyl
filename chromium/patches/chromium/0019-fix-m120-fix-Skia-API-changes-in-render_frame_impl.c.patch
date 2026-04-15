@@ -1,4 +1,4 @@
-From e61680c7ec5241cc1438e5a7ca5ab78ceb254735 Mon Sep 17 00:00:00 2001
+From 6da5c717a6aa3d13c52276540d96d9d24c75b661 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sun, 5 Apr 2026 01:10:56 -0400
 Subject: [PATCH 19/24] fix(m120): fix Skia API changes in render_frame_impl.cc
@@ -12,10 +12,10 @@ Subject: [PATCH 19/24] fix(m120): fix Skia API changes in render_frame_impl.cc
  1 file changed, 5 insertions(+), 6 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 427fe9f7c4f6c..901846f0d8880 100644
+index b4cd56c28e5e5..76dd51d000b88 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -286,7 +286,6 @@
+@@ -293,7 +293,6 @@
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
  #include "third_party/skia/src/core/SkFontPriv.h"
@@ -23,7 +23,7 @@ index 427fe9f7c4f6c..901846f0d8880 100644
  
  using base::Time;
  using blink::ContextMenuData;
-@@ -2030,11 +2029,11 @@ public:
+@@ -2072,11 +2071,11 @@ public:
    }
  
  protected:
@@ -38,7 +38,7 @@ index 427fe9f7c4f6c..901846f0d8880 100644
      if(isUnsupportedPaint(paint)) {
        return;
      }
-@@ -2126,9 +2125,9 @@ protected:
+@@ -2168,9 +2167,9 @@ protected:
  
      for (auto& glyphRun : glyphRunList) {
        auto runSize = glyphRun.runSize();

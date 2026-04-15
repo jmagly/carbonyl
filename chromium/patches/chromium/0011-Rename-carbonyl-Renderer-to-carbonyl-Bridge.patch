@@ -1,30 +1,30 @@
-From e5eb3b6f2b3ac277cbca3601458b37aa99f62f8a Mon Sep 17 00:00:00 2001
+From e790cd0475f77989840a6f0181a1105706cf4375 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:29:05 +0100
 Subject: [PATCH 11/24] Rename carbonyl::Renderer to carbonyl::Bridge
 
 ---
- headless/app/headless_shell.cc                     | 5 ++++-
- headless/app/headless_shell_main.cc                | 2 +-
- headless/lib/browser/headless_browser_impl.cc      | 6 +++---
- headless/lib/browser/headless_browser_impl_aura.cc | 3 ++-
- headless/lib/browser/headless_screen.cc            | 2 +-
- headless/lib/browser/headless_web_contents_impl.cc | 4 ++--
+ headless/app/headless_shell.cc                          | 5 ++++-
+ headless/app/headless_shell_main.cc                     | 2 +-
+ headless/lib/browser/headless_browser_impl.cc           | 6 +++---
+ headless/lib/browser/headless_platform_delegate_aura.cc | 3 ++-
+ headless/lib/browser/headless_screen.cc                 | 2 +-
+ headless/lib/browser/headless_web_contents_impl.cc      | 4 ++--
  6 files changed, 13 insertions(+), 9 deletions(-)
 
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 6897e0a138c1b..62020e3c68e37 100644
+index 99e05ebd19e82..4d5707bece030 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
-@@ -18,6 +18,7 @@
- #include "base/command_line.h"
+@@ -14,6 +14,7 @@
+ #include "base/compiler_specific.h"
  #include "base/files/file_util.h"
  #include "base/functional/bind.h"
 +#include "base/functional/callback.h"
  #include "base/logging.h"
  #include "base/task/thread_pool.h"
  #include "base/version_info/version_info.h"
-@@ -114,7 +115,9 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -107,7 +108,9 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
    HeadlessBrowserContext::Builder context_builder =
        browser_->CreateBrowserContextBuilder();
  
@@ -49,10 +49,10 @@ index 203b06489e0e4..e8dc41abba686 100644
    content::ContentMainParams params(nullptr);
  #if BUILDFLAG(IS_WIN)
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index a3f209c5acdb4..4f2abf76762ba 100644
+index 3fd1a6d12f6e6..5a95111480d0d 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -289,7 +289,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -300,7 +300,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
  }
  
  void HeadlessBrowserImpl::Resize() {
@@ -61,7 +61,7 @@ index a3f209c5acdb4..4f2abf76762ba 100644
    auto rect = gfx::Rect(0, 0, size.width(), size.height());
  
    for (auto* ctx: GetAllBrowserContexts()) {
-@@ -304,7 +304,7 @@ void HeadlessBrowserImpl::Resize() {
+@@ -315,7 +315,7 @@ void HeadlessBrowserImpl::Resize() {
      }
    }
  
@@ -70,7 +70,7 @@ index a3f209c5acdb4..4f2abf76762ba 100644
  }
  
  void HeadlessBrowserImpl::OnShutdownInput() {
-@@ -676,7 +676,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -690,7 +690,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
        }
      };
  
@@ -79,11 +79,11 @@ index a3f209c5acdb4..4f2abf76762ba 100644
    });
  }
  
-diff --git a/headless/lib/browser/headless_browser_impl_aura.cc b/headless/lib/browser/headless_browser_impl_aura.cc
-index 5fd9ecc596da0..43616efbc8309 100644
---- a/headless/lib/browser/headless_browser_impl_aura.cc
-+++ b/headless/lib/browser/headless_browser_impl_aura.cc
-@@ -55,6 +55,7 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+diff --git a/headless/lib/browser/headless_platform_delegate_aura.cc b/headless/lib/browser/headless_platform_delegate_aura.cc
+index a97eda327d532..99a05598dafe2 100644
+--- a/headless/lib/browser/headless_platform_delegate_aura.cc
++++ b/headless/lib/browser/headless_platform_delegate_aura.cc
+@@ -56,6 +56,7 @@ void HeadlessPlatformDelegate::SetWebContentsBounds(
    // Browser's window bounds should contain all web contents, so that we're sure
    // that we will actually produce visible damage when taking a screenshot.
  
@@ -91,7 +91,7 @@ index 5fd9ecc596da0..43616efbc8309 100644
    // Update WebContentsViewAura. This also updates RenderWidgetHostViewAura.
    if (gfx::NativeView native_view =
            web_contents->web_contents()->GetNativeView()) {
-@@ -64,7 +65,7 @@ void HeadlessBrowserImpl::PlatformSetWebContentsBounds(
+@@ -65,7 +66,7 @@ void HeadlessPlatformDelegate::SetWebContentsBounds(
    // Update RootWindow.
    HeadlessWindowTreeHost* host = web_contents->window_tree_host();
    host->window()->SetBounds(bounds);
@@ -99,25 +99,25 @@ index 5fd9ecc596da0..43616efbc8309 100644
 +  host->SetBoundsInPixels(ScaleToEnclosedRect(bounds, carbonyl::Bridge::GetCurrent()->GetDPI()));
  }
  
- ui::Compositor* HeadlessBrowserImpl::PlatformGetCompositor(
+ ui::Compositor* HeadlessPlatformDelegate::GetCompositor(
 diff --git a/headless/lib/browser/headless_screen.cc b/headless/lib/browser/headless_screen.cc
-index f2b40396236c0..22b69c686ce84 100644
+index 8f4586f311f7c..0cd8cdf6bad38 100644
 --- a/headless/lib/browser/headless_screen.cc
 +++ b/headless/lib/browser/headless_screen.cc
-@@ -82,7 +82,7 @@ HeadlessScreen::HeadlessScreen(const gfx::Size& window_size,
+@@ -99,7 +99,7 @@ void HeadlessScreen::CreateDisplayList(const gfx::Size& window_size,
  
    bool is_primary = true;
    base::flat_set<int64_t> internal_display_ids;
 -  float dpi = carbonyl::Renderer::GetDPI();
 +  float dpi = carbonyl::Bridge::GetCurrent()->GetDPI();
    for (const auto& it : screen_info) {
-     static int64_t synthesized_display_id = 2000;
-     display::Display display(synthesized_display_id++);
+     Display display(display::HeadlessScreenManager::GetNewDisplayId());
+     display.set_label(it.label);
 diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
-index a53debde1ac33..713707c31a462 100644
+index e886771cdaa70..a7e7d10c19077 100644
 --- a/headless/lib/browser/headless_web_contents_impl.cc
 +++ b/headless/lib/browser/headless_web_contents_impl.cc
-@@ -465,7 +465,7 @@ void HeadlessWebContentsImpl::TitleWasSet(content::NavigationEntry* entry) {
+@@ -477,7 +477,7 @@ void HeadlessWebContentsImpl::TitleWasSet(content::NavigationEntry* entry) {
    if (!web_contents() || !web_contents()->GetPrimaryMainFrame()->IsActive())
      return;
  
@@ -126,7 +126,7 @@ index a53debde1ac33..713707c31a462 100644
  }
  
  void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* handle) {
-@@ -476,7 +476,7 @@ void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* han
+@@ -488,7 +488,7 @@ void HeadlessWebContentsImpl::DidFinishNavigation(content::NavigationHandle* han
  
    auto& nav = web_contents()->GetController();
  

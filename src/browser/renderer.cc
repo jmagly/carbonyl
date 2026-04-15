@@ -66,7 +66,8 @@ void carbonyl_renderer_draw_bitmap(
 namespace carbonyl {
 
 namespace {
-    static std::unique_ptr<Renderer> globalInstance;
+    // Intentionally leaked — the renderer lives for the entire process lifetime.
+    Renderer* globalInstance = nullptr;
 }
 
 Renderer::Renderer(struct carbonyl_renderer* ptr): ptr_(ptr) {}
@@ -82,12 +83,10 @@ void Renderer::Main() {
 
 Renderer* Renderer::GetCurrent() {
     if (!globalInstance) {
-        globalInstance = std::unique_ptr<Renderer>(
-            new Renderer(carbonyl_renderer_create())
-        );
+        globalInstance = new Renderer(carbonyl_renderer_create());
     }
 
-    return globalInstance.get();
+    return globalInstance;
 }
 
 void Renderer::StartRenderer() {

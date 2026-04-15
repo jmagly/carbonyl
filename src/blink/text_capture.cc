@@ -133,9 +133,7 @@ class TextCaptureDevice : public SkClipStackDevice {
     drawRect(mesh.bounds(), paint);
   }
 
-  void drawPath(const SkPath& path,
-                const SkPaint& paint,
-                bool = false) override {
+  void drawPath(const SkPath& path, const SkPaint& paint) override {
     drawRect(path.getBounds(), paint);
   }
 
@@ -244,9 +242,9 @@ bool CaptureFromFrame(blink::WebLocalFrame* frame,
   }
 
   // Per-frame singleton — re-uses the SkCanvas/TextCaptureDevice across calls
-  // to avoid allocating a fresh one on every paint. Owned by the function-local
-  // static so it lives as long as the renderer process.
-  static RendererService renderer;
+  // to avoid allocating a fresh one on every paint. Intentionally leaked
+  // (process-lifetime); avoids -Wexit-time-destructors under M147 clang.
+  static RendererService* renderer = new RendererService();
 
   size_t width = frame->DocumentSize().width();
   size_t height = frame->VisibleContentRect().height();
@@ -271,10 +269,10 @@ bool CaptureFromFrame(blink::WebLocalFrame* frame,
   }
 
   local_frame_view->GetPaintRecord().Playback(
-      renderer.BeginPaint(width, height));
+      renderer->BeginPaint(width, height));
 
   out_data->clear();
-  renderer.Swap(*out_data);
+  renderer->Swap(*out_data);
   return !out_data->empty();
 }
 

@@ -1,4 +1,4 @@
-From aed7f43f8d3d9d915b3db0cc302f0cb8050af1c5 Mon Sep 17 00:00:00 2001
+From 6fe66f2b1c348f5b97024eb2d0210d7c3bb5ff04 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:28:35 +0100
 Subject: [PATCH 05/24] Remove some debug assertions
@@ -10,10 +10,10 @@ Subject: [PATCH 05/24] Remove some debug assertions
  3 files changed, 11 insertions(+), 25 deletions(-)
 
 diff --git a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
-index e25d6ffe1d54e..df5018f5bd65a 100644
+index afb10fe2da6a7..1ebc545b24517 100644
 --- a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
 +++ b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
-@@ -42,27 +42,15 @@ ScriptPromiseResolverBase::ScriptPromiseResolverBase(
+@@ -47,27 +47,15 @@ ScriptPromiseResolverBase::ScriptPromiseResolverBase(
  
  ScriptPromiseResolverBase::~ScriptPromiseResolverBase() = default;
  
@@ -45,30 +45,30 @@ index e25d6ffe1d54e..df5018f5bd65a 100644
  }
  #endif
 diff --git a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-index ca0c5c82ffe94..3fad2ae40e539 100644
+index c066b46007c91..485d344066cc7 100644
 --- a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
 +++ b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-@@ -401,7 +401,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
+@@ -452,7 +452,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
      // properties are changed, which would indicate a missing call to
      // SetNeedsUpdate.
      if (previous.properties != repainted.properties) {
--      base::debug::DumpWithoutCrashing();
+-      DumpWithDifferingPaintPropertiesIncluded(previous, repainted);
        return true;
      }
  
-@@ -470,7 +469,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
+@@ -521,7 +520,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
    // properties are changed, which would indicate a missing call to
    // SetNeedsUpdate.
    if (previous.properties != repainted.properties) {
--    base::debug::DumpWithoutCrashing();
+-    DumpWithDifferingPaintPropertiesIncluded(previous, repainted);
      return true;
    }
  
 diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/third_party/blink/renderer/platform/graphics/graphics_context.cc
-index 03c866d4b3938..c8d3374a3e490 100644
+index 362b5ab4a0783..6e0825fae0c40 100644
 --- a/third_party/blink/renderer/platform/graphics/graphics_context.cc
 +++ b/third_party/blink/renderer/platform/graphics/graphics_context.cc
-@@ -128,14 +128,14 @@ GraphicsContext::GraphicsContext(PaintController& paint_controller)
+@@ -218,14 +218,14 @@ GraphicsContext::GraphicsContext(PaintController& paint_controller)
  }
  
  GraphicsContext::~GraphicsContext() {
