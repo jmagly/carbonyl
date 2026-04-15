@@ -1,35 +1,46 @@
-<table align="center">
-  <tbody>
-    <tr>
-      <td>
-        <p></p>
-        <pre>
+<div align="center">
+
+<pre>
    O    O
     \  /
 O —— Cr —— O
     /  \
-   O    O</pre>
-      </td>
-      <td><h1>Carbonyl</h1></td>
-    </tr>
-  </tbody>
-</table>
+   O    O
+</pre>
 
-Carbonyl is a Chromium based browser built to run in a terminal. [Read the blog post](https://fathy.fr/carbonyl).
+# Carbonyl
 
-It supports pretty much all Web APIs including WebGL, WebGPU, audio and video playback, animations, etc..
+**Chromium-based browser that runs in a terminal — 60 FPS, 0% idle CPU, SSH-friendly**
 
-It's snappy, starts in less than a second, runs at 60 FPS, and idles at 0% CPU usage. It does not require a window server (i.e. works in a safe-mode console), and even runs through SSH.
+```bash
+pip install carbonyl-agent && carbonyl-agent install
+```
 
-Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Chromium M147](https://img.shields.io/badge/chromium-M147.0.7727.94-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromium.googlesource.com/chromium/src/+/refs/tags/147.0.7727.94)
+[![Runtime](https://img.shields.io/badge/runtime-gitea_releases-green?style=flat-square)](https://git.integrolabs.net/roctinam/carbonyl/releases)
+
+[**Get Started**](#-get-started) · [**Fork Status**](#active-fork--continued-maintenance) · [**Build from Source**](#building-from-source) · [**Comparisons**](#comparisons) · [**Blog**](https://fathy.fr/carbonyl)
+
+</div>
+
+---
+
+## What Carbonyl Is
+
+Carbonyl is a Chromium-based browser that renders into terminal text. It supports pretty much all Web APIs — WebGL, WebGPU, audio and video playback, animations — and starts in less than a second, runs at 60 FPS, and idles at 0% CPU. It does not require a window server (works in a safe-mode console) and runs comfortably over SSH. Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
+
+This repository (`roctinam/carbonyl`) is the **maintained fork** of the original [`fathyb/carbonyl`](https://github.com/fathyb/carbonyl), which has been inactive since early 2023. It tracks upstream Chromium stable (currently M147) and publishes runtime tarballs to Gitea releases.
+
+---
 
 ## Looking for the automation SDK?
 
-Most users want **[carbonyl-agent](https://git.integrolabs.net/roctinam/carbonyl-agent)** — the Python automation package that drives Carbonyl for scripted browsing, scraping, and agent-based testing. It handles binary discovery, session persistence, daemon reconnection, and bot-detection evasion out of the box.
+Most users want **[carbonyl-agent](https://git.integrolabs.net/roctinam/carbonyl-agent)** — the Python SDK that drives Carbonyl for scripted browsing, scraping, and agent-based testing. It handles binary discovery, session persistence, daemon reconnection, and bot-detection evasion out of the box.
 
 ```bash
 pip install carbonyl-agent
-carbonyl-agent install   # downloads the runtime binary
+carbonyl-agent install   # downloads the verified runtime binary
 ```
 
 ```python
@@ -42,49 +53,111 @@ print(b.page_text())
 b.close()
 ```
 
-For multi-instance orchestration (N concurrent browsers over PTY + Unix socket), see **[carbonyl-fleet](https://git.integrolabs.net/roctinam/carbonyl-fleet)**.
+For multi-instance orchestration (N concurrent browsers over PTY + Unix socket, with gRPC + REST), see **[carbonyl-fleet](https://git.integrolabs.net/roctinam/carbonyl-fleet)**.
 
 This repo (`roctinam/carbonyl`) is the Chromium fork and the source of the runtime tarballs. Most users do **not** need to build it.
+
+---
+
+## Get Started
+
+### Use the runtime (recommended)
+
+```bash
+pip install carbonyl-agent
+carbonyl-agent install
+```
+
+The installer downloads a verified-by-SHA256 runtime tarball from Gitea releases. No compilation required.
+
+### Run Carbonyl directly
+
+```bash
+# From Docker (upstream image — M111-era, dated but works)
+docker run --rm -ti fathyb/carbonyl https://youtube.com
+
+# Or via npm (upstream package — M111-era)
+npm install --global carbonyl
+carbonyl https://github.com
+
+# Or download a pre-built runtime from Gitea releases (M147, current)
+# See: https://git.integrolabs.net/roctinam/carbonyl/releases
+```
+
+---
 
 ## Active Fork — Continued Maintenance
 
 The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) has been inactive since early 2023. This fork is actively maintained for use in headless browser automation and agentic pipelines.
 
-**What's different in this fork:**
+### What's different in this fork
 
 - **Chromium M147** (147.0.7727.94) — current upstream stable. Upgraded from M111 across six phases (M111 → M120 → M132 → M135 → M140 → M147). 24 patches applied. Runtime tarballs published to [Gitea releases](https://git.integrolabs.net/roctinam/carbonyl/releases).
-- **Python automation layer** ([`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent)) — extracted into a standalone installable package. `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction. Designed for agent-driven web interaction.
+- **Python automation layer** ([`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent)) — extracted into a standalone installable package. `CarbonylBrowser` class with persistent sessions, daemon reconnect, mouse movement, click-by-text, and screen extraction.
+- **Fleet server** ([`carbonyl-fleet`](https://git.integrolabs.net/roctinam/carbonyl-fleet)) — Rust server for N concurrent browsers with gRPC + REST + Python SDK.
 - **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
 - **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.
 - **CI infrastructure** — Gitea Actions workflows for fast checks and full Chromium runtime builds, pinned to dedicated build hosts.
 
-**`--carbonyl-b64-text` restored in M135**: the experimental text-capture mode was temporarily disabled during the initial M135 ship and has been re-enabled via a structural refactor (Path A, [issue #28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)). Both bitmap rendering (default) and b64 text capture are functional.
+**`--carbonyl-b64-text` restored in M135**: the experimental text-capture mode was temporarily disabled during the initial M135 ship and has been re-enabled via a structural refactor (Path A, [issue #28](https://git.integrolabs.net/roctinam/carbonyl/issues/28)). Both bitmap rendering (default) and b64 text capture are functional on M147.
 
-**Maintenance commitment:** Security-relevant Chromium versions will be tracked on a best-effort basis. The automation API is under active development. Issues and PRs welcome.
+**Maintenance commitment:** Security-relevant Chromium versions are tracked on a best-effort basis. The automation API is under active development. Issues and PRs welcome.
 
-## Usage
+---
 
-> Carbonyl on Linux without Docker requires the same dependencies as Chromium.
+## Project Family
 
-### Docker
+| Repo | Purpose | Build tech |
+|------|---------|------------|
+| [`carbonyl`](https://git.integrolabs.net/roctinam/carbonyl) | Chromium fork + runtime tarballs (this repo) | Chromium, GN, ninja, Rust |
+| [`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent) | Python automation SDK (single-instance) | Python 3.11+, pyte, pexpect |
+| [`carbonyl-fleet`](https://git.integrolabs.net/roctinam/carbonyl-fleet) | Fleet server (N concurrent browsers, gRPC + REST) | Rust, tonic, axum |
 
-```shell
-$ docker run --rm -ti fathyb/carbonyl https://youtube.com
-```
+---
 
-### npm
+## Known Issues
 
-```console
-$ npm install --global carbonyl
-$ carbonyl https://github.com
-```
+- Fullscreen mode not supported yet
 
-### Binaries
+---
 
-- [macOS amd64](https://github.com/fathyb/carbonyl/releases/download/v0.0.3/carbonyl.macos-amd64.zip)
-- [macOS arm64](https://github.com/fathyb/carbonyl/releases/download/v0.0.3/carbonyl.macos-arm64.zip)
-- [Linux amd64](https://github.com/fathyb/carbonyl/releases/download/v0.0.3/carbonyl.linux-amd64.zip)
-- [Linux arm64](https://github.com/fathyb/carbonyl/releases/download/v0.0.3/carbonyl.linux-arm64.zip)
+## Comparisons
+
+### Lynx
+
+Lynx is the original terminal web browser, and the oldest one still maintained.
+
+**Pros**
+- When it understands a page, Lynx has the best layout, fully optimized for the terminal
+
+**Cons** _(some might sound like pluses, but Browsh and Carbonyl let you disable most of those if you'd like)_
+- Does not support a lot of modern web standards
+- Cannot run JavaScript/WebAssembly
+- Cannot view or play media (audio, video, DOOM)
+
+### Browsh
+
+Browsh is the original "normal browser in a terminal" project. It starts Firefox in headless mode and connects to it through an automation protocol.
+
+**Pros**
+- Easier to update the underlying browser: just update Firefox
+- As of today, Browsh supports extensions while Carbonyl doesn't (on our roadmap)
+
+**Cons**
+- Runs slower and requires more resources than Carbonyl. 50× more CPU for the same content on average, because Carbonyl does not downscale or copy the window framebuffer — it natively renders to the terminal resolution.
+- Uses custom stylesheets to fix the layout, which is less reliable than Carbonyl's changes to its HTML engine (Blink).
+
+---
+
+## Operating System Support
+
+| OS | Status |
+|----|--------|
+| Linux (Debian, Ubuntu, Arch) | ✅ Tested |
+| macOS | ✅ Tested (upstream; M147 fork not yet rebuilt on macOS) |
+| Windows 11 / WSL | 🟡 Reported working (upstream) |
+
+---
 
 ## Demo
 
@@ -106,118 +179,67 @@ $ carbonyl https://github.com
   </tbody>
 </table>
 
-## Known issues
+---
 
-- Fullscreen mode not supported yet
+## Building from Source
 
-## Comparisons
+> You almost certainly do not need to do this — use `carbonyl-agent install` to pull a pre-built runtime.
 
-### Lynx
+Carbonyl is split in two parts:
 
-Lynx is the original terminal web browser, and the oldest one still maintained.
+- **Core** (`libcarbonyl.so`) — written in Rust, builds in seconds via `cargo`
+- **Runtime** (`headless_shell`) — a modified Chromium build with 24 patches, requires the full Chromium toolchain
 
-#### Pros
+If you're just changing the Rust code, build `libcarbonyl` and drop it into a release version of Carbonyl. You do not need to rebuild Chromium.
 
-- When it understands a page, Lynx has the best layout, fully optimized for the terminal
+### Core (Rust library)
 
-#### Cons
-
-> Some might sound like pluses, but Browsh and Carbonyl let you disable most of those if you'd like
-
-- Does not support a lot of modern web standards
-- Cannot run JavaScript/WebAssembly
-- Cannot view or play media (audio, video, DOOM)
-
-### Browsh
-
-Browsh is the original "normal browser into a terminal" project. It starts Firefox in headless mode and connects to it through an automation protocol.
-
-#### Pro
-
-- It's easier to update the underlying browser: just update Firefox
-- This makes development easier: just install Firefox and compile the Go code in a few seconds
-- As of today, Browsh supports extensions while Carbonyl doesn't, although it's on our roadmap
-
-#### Cons
-
-- It runs slower and requires more resources than Carbonyl. 50x more CPU power is needed for the same content in average, that's because Carbonyl does not downscale or copy the window framebuffer, it natively renders to the terminal resolution.
-- It uses custom stylesheets to fix the layout, which is less reliable than Carbonyl's changes to its HTML engine (Blink).
-
-## Operating System Support
-
-As far as tested, the operating systems under are supported:
-
-- Linux (Debian, Ubuntu and Arch tested)
-- MacOS
-- Windows 11 and WSL
-
-## Contributing
-
-Carbonyl is split in two parts: the "core" which is built into a shared library (`libcarbonyl`), and the "runtime" which dynamically loads the core (`carbonyl` executable).
-
-The core is written in Rust and takes a few seconds to build from scratch. The runtime is a modified version of the Chromium headless shell and takes more than an hour to build from scratch.
-
-If you're just making changes to the Rust code, build `libcarbonyl` and replace it in a release version of Carbonyl.
-
-### Core
-
-```console
-$ cargo build
+```bash
+cargo build
 ```
 
-### Runtime
+### Runtime (Chromium + libcarbonyl)
 
-Few notes:
+> ⚠️ Building Chromium takes considerable wall time, disk space, and memory. Expect **~100 GB of disk** and a heavy compile workload.
 
-- Building the runtime is almost the same as building Chromium with extra steps to patch and bundle the Rust library. Scripts in the `scripts/` directory are simple wrappers around `gn`, `ninja`, etc..
-- Building Chromium for arm64 on Linux requires an amd64 processor
-- Carbonyl is only tested on Linux and macOS, other platforms likely require code changes to Chromium
-- Chromium is huge and takes a long time to build, making your computer mostly unresponsive. An 8-core CPU such as an M1 Max or an i9 9900k with 10 Gbps fiber takes around ~1 hour to fetch and build. It requires around 100 GB of disk space.
+Notes:
+- Building the runtime is essentially the Chromium build flow with extra steps to patch and bundle the Rust library.
+- Scripts in `scripts/` are thin wrappers around `gn`, `ninja`, etc.
+- Cross-compiling Chromium for arm64 on Linux requires an amd64 processor.
+- Tested on Linux and macOS.
 
-#### Fetch
+#### Fetch Chromium sources
 
-> Fetch Chromium's code.
-
-```console
-$ ./scripts/gclient.sh sync
+```bash
+./scripts/gclient.sh sync
 ```
 
-#### Apply patches
+#### Apply Carbonyl patches
 
-> Any changes made to Chromium will be reverted, make sure to save any changes you made.
+> Any existing changes in `chromium/src/` will be stashed. Save your work first.
 
-```console
-$ ./scripts/patches.sh apply
+```bash
+./scripts/patches.sh apply
 ```
 
-#### Configure
+#### Configure the GN build
 
-```console
-$ ./scripts/gn.sh args out/Default
+```bash
+./scripts/gn.sh args out/Default
 ```
 
-> `Default` is the target name, you can use multiple ones and pick any name you'd like, i.e.:
->
-> ```console
-> $ ./scripts/gn.sh args out/release
-> $ ./scripts/gn.sh args out/debug
-> # or if you'd like to build a multi-platform image
-> $ ./scripts/gn.sh args out/arm64
-> $ ./scripts/gn.sh args out/amd64
-> ```
-
-When prompted, enter the following arguments:
+When prompted, enter:
 
 ```gn
 import("//carbonyl/src/browser/args.gn")
 
-# uncomment this to build for arm64
+# uncomment to build for arm64
 # target_cpu = "arm64"
 
-# comment this to disable ccache
+# comment to disable ccache
 cc_wrapper = "env CCACHE_SLOPPINESS=time_macros ccache"
 
-# comment this for a debug build
+# comment for a debug build
 is_debug = false
 symbol_level = 0
 is_official_build = true
@@ -225,39 +247,113 @@ is_official_build = true
 
 #### Build binaries
 
-```console
-$ ./scripts/build.sh Default
+```bash
+./scripts/build.sh Default
 ```
 
-This should produce the following outputs:
-
-- `out/Default/headless_shell`: browser binary
+Produces:
+- `out/Default/headless_shell` — browser binary
 - `out/Default/icudtl.dat`
 - `out/Default/libEGL.so`
 - `out/Default/libGLESv2.so`
 - `out/Default/v8_context_snapshot.bin`
 
-#### Build Docker image
+#### Build the Docker image
 
-```console
-# Build arm64 Docker image using binaries from the Default target
-$ ./scripts/docker-build.sh Default arm64
-# Build amd64 Docker image using binaries from the Default target
-$ ./scripts/docker-build.sh Default amd64
+```bash
+./scripts/docker-build.sh Default arm64
+./scripts/docker-build.sh Default amd64
 ```
 
 #### Run
 
+```bash
+./scripts/run.sh Default https://wikipedia.org
 ```
-$ ./scripts/run.sh Default https://wikipedia.org
-```
+
+See [MAINTENANCE.md](MAINTENANCE.md) for detailed upgrade procedures, patch rebasing guidance, and the rebase SOP used to move M111 → M147.
+
+---
+
+## Documentation
+
+- [MAINTENANCE.md](MAINTENANCE.md) — upgrade procedure, patch reference commits, GN args notes
+- [changelog.md](changelog.md) — full rebase history (M111 → M147)
+- [AIWG.md](AIWG.md) — AIWG framework integration
+- [docs/architecture.md](docs/architecture.md) — cross-layer architecture notes
+- [chromium/patches/chromium/](chromium/patches/chromium/) — the 24 tracked patches
+
+---
+
+## Contributing
+
+PRs and issues welcome at [git.integrolabs.net/roctinam/carbonyl](https://git.integrolabs.net/roctinam/carbonyl) or [github.com/jmagly/carbonyl](https://github.com/jmagly/carbonyl).
+
+Most meaningful changes to the Python automation path belong in [`carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent). This repo is the Chromium side — patches, build scripts, runtime infrastructure.
+
+---
+
+## Community & Support
+
+- **Issues**: [git.integrolabs.net/roctinam/carbonyl/issues](https://git.integrolabs.net/roctinam/carbonyl/issues)
+- **GitHub Discussions**: [github.com/jmagly/carbonyl/discussions](https://github.com/jmagly/carbonyl/discussions)
+
+---
+
+## License
+
+**MIT License** — see [LICENSE](LICENSE).
+
+Carbonyl includes Chromium, which is BSD-licensed. See `chromium/src/LICENSE` after a checkout for upstream terms.
+
+---
 
 ## Sponsors
 
-This project is supported by:
+<table>
+<tr>
+<td width="33%" align="center">
 
-- **[Roko Network](https://roko.network)** — The Temporal Layer for Web3. Enterprise-grade timing infrastructure for blockchain applications.
-- **[Selfient](https://selfient.xyz)** — No-Code Smart Contracts for Everyone. Democratizing Web3 by making blockchain-based agreements accessible without coding.
-- **[Integro Labs](https://integrolabs.io)** — AI-Powered Automation Solutions. Custom AI and blockchain solutions for digital automation and transformation.
+### [Roko Network](https://roko.network)
 
-Interested in sponsoring? Open a [GitHub Discussion](https://github.com/jmagly/carbonyl/discussions).
+**The Temporal Layer for Web3**
+
+Enterprise-grade timing infrastructure for blockchain applications.
+
+</td>
+<td width="33%" align="center">
+
+### [Selfient](https://selfient.xyz)
+
+**No-Code Smart Contracts for Everyone**
+
+Making blockchain-based agreements accessible to all.
+
+</td>
+<td width="33%" align="center">
+
+### [Integro Labs](https://integrolabs.io)
+
+**AI-Powered Automation Solutions**
+
+Custom AI and blockchain solutions for the digital age.
+
+</td>
+</tr>
+</table>
+
+**Interested in sponsoring?** Open a [GitHub Discussion](https://github.com/jmagly/carbonyl/discussions).
+
+---
+
+## Acknowledgments
+
+Built on top of [Carbonyl](https://github.com/fathyb/carbonyl) by Fathy Boundjadj, which in turn sits on [Chromium](https://www.chromium.org/) and [Skia](https://skia.org/). The M111→M147 rebase path was informed by [CEF](https://github.com/chromiumembedded/cef)'s `blink_glue.cc` pattern for the Path A structural fix. Thanks to the Chromium cppgc / Oilpan maintainers for the underlying template machinery (see [issue #27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)).
+
+---
+
+<div align="center">
+
+**[⬆ Back to Top](#carbonyl)**
+
+</div>
