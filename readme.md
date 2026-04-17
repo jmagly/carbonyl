@@ -281,6 +281,8 @@ See [MAINTENANCE.md](MAINTENANCE.md) for detailed upgrade procedures, patch reba
 - [changelog.md](changelog.md) — full rebase history (M111 → M147)
 - [AIWG.md](AIWG.md) — AIWG framework integration
 - [docs/architecture.md](docs/architecture.md) — cross-layer architecture notes
+- [docs/rust-chromium-boundary.md](docs/rust-chromium-boundary.md) — Rust/C++ layer map, FFI boundary overview, rebuild recipes by change type, verification patterns
+- [docs/chromium-integration.md](docs/chromium-integration.md) — catalog of every Carbonyl modification to Chromium (patches, injected sources, FFI, build flags)
 - [chromium/patches/chromium/](chromium/patches/chromium/) — the 24 tracked patches
 
 ---

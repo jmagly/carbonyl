@@ -123,7 +123,15 @@ impl Renderer {
         Ok(())
     }
 
-    /// Draw the background from a pixel array encoded in RGBA8888
+    /// Draw the background from a pixel array encoded in RGBA8888.
+    ///
+    /// Quadrant-rendering invariant: each terminal cell displays four sub-pixels
+    /// sampled from a fixed 2x4 block of source pixels. The inner loop is
+    /// clamped to `viewport = cells`, so it reads up to `cells * (2, 4)` source
+    /// pixels starting at the damage rect origin. If the Chromium-side raster
+    /// is larger than the sampled region, the terminal displays the upper-left
+    /// `cells * (2, 4)` window of it (and the rest is invisible — #37). Set
+    /// `--viewport=WxH` to the size you want Blink to lay out against.
     pub fn draw_background(&mut self, pixels: &[u8], pixels_size: Size, rect: Rect) {
         let viewport = self.size.cast::<usize>();
 
@@ -136,6 +144,8 @@ impl Renderer {
             return;
         }
 
+        // Convert the damage rect from source pixels to cell coordinates: one cell
+        // corresponds to exactly 2 source pixels wide and 4 tall.
         let origin = rect.origin.cast::<f32>().max(0.0) / (2.0, 4.0);
         let size = rect.size.cast::<f32>().max(0.0) / (2.0, 4.0);
         let top = (origin.y.floor() as usize).min(viewport.height);

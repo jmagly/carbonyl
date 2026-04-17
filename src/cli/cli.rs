@@ -11,6 +11,12 @@ pub struct CommandLine {
     pub bitmap: bool,
     pub program: CommandLineProgram,
     pub shell_mode: bool,
+    /// Optional consumer-provided CSS viewport override as (width, height).
+    /// When set, Chromium lays out against this viewport regardless of
+    /// terminal cell count, and the terminal samples a view onto the
+    /// resulting physical raster. When unset, falls back to the legacy
+    /// cells-derived viewport. Set via `--viewport=WIDTHxHEIGHT`.
+    pub viewport: Option<(u32, u32)>,
 }
 
 pub enum EnvVar {
@@ -42,6 +48,7 @@ impl CommandLine {
         let mut debug = false;
         let mut bitmap = false;
         let mut shell_mode = false;
+        let mut viewport: Option<(u32, u32)> = None;
         let mut program = CommandLineProgram::Main;
         let args = env::args().skip(1).collect::<Vec<String>>();
 
@@ -77,10 +84,23 @@ impl CommandLine {
                 "-z" | "--zoom" => set_f32!(zoom = zoom / 100.0),
                 "-d" | "--debug" => set!(debug, Debug),
                 "-b" | "--bitmap" => set!(bitmap, Bitmap),
+                "--viewport" => {
+                    if let Some(value) = value {
+                        if let Some((w, h)) = parse_viewport(value) {
+                            viewport = Some((w, h));
+                        }
+                    }
+                }
 
                 "-h" | "--help" => program = CommandLineProgram::Help,
                 "-v" | "--version" => program = CommandLineProgram::Version,
                 _ => (),
+            }
+        }
+
+        if viewport.is_none() {
+            if let Ok(value) = env::var("CARBONYL_VIEWPORT") {
+                viewport = parse_viewport(&value);
             }
         }
 
@@ -104,6 +124,19 @@ impl CommandLine {
             bitmap,
             program,
             shell_mode,
+            viewport,
         }
     }
+}
+
+/// Parse "WIDTHxHEIGHT" (case-insensitive 'x') into positive `(u32, u32)`.
+/// Returns None on malformed input or zero dimensions.
+fn parse_viewport(value: &str) -> Option<(u32, u32)> {
+    let (w, h) = value.split_once(|c: char| c == 'x' || c == 'X')?;
+    let w: u32 = w.parse().ok()?;
+    let h: u32 = h.parse().ok()?;
+    if w == 0 || h == 0 {
+        return None;
+    }
+    Some((w, h))
 }

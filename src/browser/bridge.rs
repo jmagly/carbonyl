@@ -291,6 +291,22 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
     });
 }
 
+/// Return the CSS viewport size Chromium should lay out and raster against.
+///
+/// Two regimes:
+///
+/// * **Consumer-provided viewport** (`--viewport=WxH` or `CARBONYL_VIEWPORT=WxH`).
+///   The returned size equals the requested viewport verbatim, and `dpi = 1.0`.
+///   Chromium rasters at that exact physical size. The terminal samples a
+///   `cells * (2, 4)` window of it; whatever doesn't fit is handled by the
+///   consumer (scroll, pan, quadrant stitching).
+///
+/// * **Legacy (terminal-derived) viewport** — no `--viewport` set. The returned
+///   size is `cells * scale` where `scale = (2, 4) / dpi`. This is what older
+///   builds did; it lays Blink out against a CSS viewport whose size depends on
+///   terminal cell count and is the source of the #37 "only upper-left visible"
+///   report at small terminals. Kept for backward compatibility; new consumers
+///   should provide an explicit viewport.
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_get_size(bridge: RendererPtr) -> CSize {
     let bridge = unsafe { bridge.as_ref() };
