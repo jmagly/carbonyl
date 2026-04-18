@@ -21,6 +21,8 @@ Initiative CI must cover:
 | `carbonyl-agent` | None visible at planning time | — | Greenfield; this plan proposes the inaugural set |
 | `carbonyl-agent-qa` | None | — | Greenfield; private repo |
 | `carbonyl-fleet` | None visible | — | Greenfield; Phase 4 scope |
+| `wreq` (roctinam/wreq, Gitea) | None | titan or generic | **New**: Gitea-primary fork; CI inaugural set proposed below |
+| `carbonyl-fingerprint-corpus` (roctinam, Gitea, private) | None | generic | **New**: data repo; corpus refresh bot writes here; consumed by carbonyl-agent at build |
 
 ## Target workflow inventory by repo
 
@@ -42,7 +44,7 @@ All greenfield. Proposed inaugural set:
 | Workflow | Trigger | Purpose | Phase |
 |----------|---------|---------|-------|
 | `check.yml` | PR, push main | Python `ruff` + `mypy` + `pytest` unit; Rust `cargo test` for humanization crate | 1+ |
-| `wreq-pin-audit.yml` (**NEW**) | weekly cron + manual | Compare pinned `jmagly/wreq` version against upstream; emit issue on drift | 3+ |
+| `wreq-pin-audit.yml` (**NEW**) | weekly cron + manual | Compare pinned `roctinam/wreq` tag against the fork's latest `carbonyl.*` release; emit issue on drift | 3+ |
 | `corpus-refresh.yml` (**NEW**) | weekly cron + on new Chrome stable release | Detect stable Chrome via `chromiumdash` / omahaproxy; capture reference JA4/UA-CH via `tls.peet.ws`; open PR to update corpus | 3+ |
 | `persona-lint.yml` (**NEW**) | push touching personas | Validate every persona passes the registry consistency validator before merge | 3+ |
 | `integration.yml` (**NEW**) | push main + nightly | Spawn Carbonyl+agent, drive against local fixtures; uses a matching `carbonyl` runtime tarball (pulled via `build-local.sh` runtime-hash matching) | 1+ |
@@ -68,6 +70,27 @@ Phase 4. Inherits `carbonyl-agent` workflow patterns plus:
 | Workflow | Trigger | Purpose | Phase |
 |----------|---------|---------|-------|
 | `fleet-multi-instance.yml` | push main + nightly | N=10 concurrent Carbonyl spawns; per-instance QA assertions via uinput namespacing | 4 |
+
+### `roctinam/wreq` (Gitea-primary fork, public)
+
+See the dedicated §"roctinam/wreq (Gitea primary) fork lifecycle" section below for the full branching policy and sync flow. Workflows (all on Gitea; no CI lives on the GitHub mirror):
+
+| Workflow | Trigger | Purpose | Phase |
+|----------|---------|---------|-------|
+| `upstream-sync.yml` | weekly cron + manual | Rebase `main` onto `0x676e67/wreq` upstream; push to origin (Gitea) | 3+ |
+| `build.yml` | push, PR | `cargo test --all-features` inside `wreq-ci` builder container | 3+ |
+| `security-scan.yml` | daily cron | `cargo-audit`, RUSTSEC alerts; opens issue on findings | 3+ |
+| `release.yml` | tag `v*-carbonyl.*` | Gitea release; triggers mirror.yml to sync to GitHub release | 3+ |
+| `mirror.yml` | push main + tag push | One-way origin (Gitea) → `github.com/jmagly/wreq` | 3+ |
+
+### `roctinam/carbonyl-fingerprint-corpus` (Gitea, private)
+
+Data repo, not a build target. CI is light — validate corpus integrity and coordinate downstream pin bumps. `roctibot` is a write collaborator so the refresh pipeline running in `carbonyl-agent` can open PRs here.
+
+| Workflow | Trigger | Purpose | Phase |
+|----------|---------|---------|-------|
+| `validate.yml` | push, PR | Schema validation on corpus files; lint personas; assert no persona regresses the consistency validator | 3+ |
+| `notify-consumers.yml` | tag push `corpus-*` | Open PR in `carbonyl-agent` bumping the corpus pin | 3+ |
 
 ## Cross-repo coordination
 
@@ -99,7 +122,7 @@ Bumped manually when a dependent ships a breaking change; automated PR when all 
 
 **Optional**: a dispatcher workflow in a fifth control repo (or in the agent repo) listens for tag pushes from carbonyl/agent and opens compat-bump PRs automatically.
 
-## `jmagly/wreq` fork lifecycle
+## `roctinam/wreq` (Gitea primary) fork lifecycle
 
 ### Branching policy
 
@@ -111,25 +134,33 @@ Bumped manually when a dependent ships a breaking change; automated PR when all 
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ upstream 0x676e67/wreq                                           │
+│ upstream github.com/0x676e67/wreq       (fetch-only)             │
 └───────────────┬──────────────────────────────────────────────────┘
                 │ fetch (weekly cron + on-demand for CVE)
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ jmagly/wreq main  (rebased tracker)                              │
+│ origin: git.integrolabs.net/roctinam/wreq  main  (Gitea primary) │
+│   rebased tracker; CI runs here                                  │
 └───────────────┬──────────────────────────────────────────────────┘
-                │ rebase (quarterly or on-demand)
+                │ rebase (quarterly or on-demand) + mirror push
+                │
+                ├─────→ github.com/jmagly/wreq  (publish mirror)
+                │
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ jmagly/wreq carbonyl/carbonyl                                     │
+│ roctinam/wreq  branch: carbonyl/carbonyl                          │
 │   ↳ tag v6.0.0-rc.28-carbonyl.1 when ready for downstream bump    │
+│   ↳ Gitea release + mirrored GitHub release                       │
 └───────────────┬──────────────────────────────────────────────────┘
                 │ pin bump PR
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│ carbonyl-agent  Cargo.toml                                       │
-│   wreq = { git = "https://github.com/jmagly/wreq",                │
+│ carbonyl-agent  Cargo.toml                                        │
+│   wreq = { git = "https://git.integrolabs.net/roctinam/wreq",     │
 │            tag = "v6.0.0-rc.28-carbonyl.1" }                      │
+│                                                                   │
+│   (consumers who can't reach Gitea use the GitHub mirror URL      │
+│    as a fallback; Cargo's `git` key supports any https URL)       │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -191,6 +222,24 @@ Bumped manually when a dependent ships a breaking change; automated PR when all 
 
 ## Runner + container strategy
 
+### The rule: every job runs inside a builder container
+
+All CI across the initiative inherits the **no-host-toolchain** discipline established in `docs/ci-cd-plan.md` for carbonyl core, which itself follows the pattern set by the **Fortemi** project (`Fortemi/fortemi` on Gitea). Rationale: our runners — especially `titan` — are shared hosts. Installing Rust toolchains, clang, Python environments, or Chromium build deps directly on the host pollutes it and conflicts with other projects sharing the same worker.
+
+**Policy**: every CI job is launched inside a pinned builder image pulled from the Gitea Container Registry. Host state beyond Docker + git + the runner daemon is forbidden.
+
+Per-repo builder images:
+
+| Repo | Builder image | Contents | Notes |
+|------|---------------|----------|-------|
+| `carbonyl` | `git.integrolabs.net/roctinam/carbonyl-builder:sha-<pin>` | Ubuntu + depot_tools + Rust + clang | Existing; see `docs/ci-cd-plan.md` |
+| `carbonyl-agent` | `git.integrolabs.net/roctinam/carbonyl-agent-ci:sha-<pin>` | Python + Rust + minimal runtime deps | **New** |
+| `carbonyl-agent-qa` | `git.integrolabs.net/roctinam/carbonyl-agent-qa-runner:sha-<pin>` | Python + Carbonyl runtime bind-mount hooks + persistent profile volume | **New** |
+| `wreq` (roctinam/wreq) | `git.integrolabs.net/roctinam/wreq-ci:sha-<pin>` | Rust + BoringSSL build deps | **New** |
+| `carbonyl-fingerprint-corpus` | `git.integrolabs.net/roctinam/carbonyl-agent-ci:sha-<pin>` | Reuses agent-ci image for corpus validation | **Shared** |
+
+Each builder image has its own `build-builder.yml` workflow following the Fortemi pattern: triggered on Dockerfile change, publishes `latest` + `sha-<7chars>`, downstream workflows pin to the SHA tag (never `latest`). Promotion is an explicit edit of the pin in consumer workflows.
+
 ### carbonyl core (inherited)
 
 Single `titan` runner, builder container pattern per `docs/ci-cd-plan.md`. No changes.
@@ -212,7 +261,8 @@ N=10 concurrent Carbonyl instances require a host with sufficient memory + `/dev
 
 | Secret | Scope | Used by | Notes |
 |--------|-------|---------|-------|
-| `JMAGLY_WREQ_TOKEN` | GitHub PAT with write on `jmagly/wreq` | fork `upstream-sync.yml`, `release.yml` | Scoped to fork repo only |
+| `WREQ_GITHUB_MIRROR_TOKEN` | GitHub PAT with write on `jmagly/wreq` | `mirror.yml` on `roctinam/wreq` (Gitea → GitHub push) | 1y; scoped to the mirror repo only |
+| `WREQ_SYNC_TOKEN` | Gitea PAT with write on `roctinam/wreq` | `upstream-sync.yml` rebase-and-push | 1y |
 | `QA_THROWAWAY_X_CREDS` | Scoped to `carbonyl-agent-qa` only | `qa-reference-sites.yml` x.com flow | Rotated per quarter; credentials for throwaway test account |
 | `QA_THROWAWAY_CF_CREDS` | Same | Cloudflare Turnstile demo runs | May not be needed; Turnstile demo is open |
 | `FINGERPRINT_CAPTURE_USER_AGENT` | carbonyl-agent | `corpus-refresh.yml` | Identifies our refresh bot to fingerprint sites (operational courtesy) |
@@ -260,5 +310,5 @@ Initiative CI issues filed per-repo under their standard workflow-issue pattern.
 ## Open questions
 
 - **Runner label segmentation**: add `light` and `heavy` labels, or keep all-on-titan? Revisit if QA nightly queueing becomes a problem.
-- **GitHub Actions for `jmagly/wreq` fork vs. Gitea mirror**: fork lives on GitHub, workflows naturally live there. Do we need to mirror fork CI state to Gitea? Low priority; decide per-demand.
+- ~~**GitHub Actions for `jmagly/wreq` fork vs. Gitea mirror**~~ **Resolved 2026-04-18**: Gitea is primary (`roctinam/wreq`); all fork CI lives on Gitea. GitHub `jmagly/wreq` is publish-mirror only, no CI there.
 - **Corpus privacy**: if we ever sample personas from consented telemetry instead of BrowserForge, the corpus becomes sensitive. Plan: keep corpus in a private sub-repo or encrypted branch; defer until we actually need it.

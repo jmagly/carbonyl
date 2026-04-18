@@ -33,6 +33,7 @@ Derived from `roctinam/carbonyl#57` (uinput for trusted input) after discovery t
 
 ## Upstream dependencies
 
-- **`jmagly/wreq`** — TLS/HTTP2 fingerprint library fork (forked from `0x676e67/wreq`). Phase 3 egress library. Fork lifecycle in `09-ci-plan.md`.
-- **BrowserForge** — joint-distribution persona corpus (MIT). Phase 3A.2 dependency. Vendored into `carbonyl-fingerprint` crate at known version.
+- **`roctinam/wreq`** (Gitea primary) — TLS/HTTP2 fingerprint library fork (of `0x676e67/wreq`). Phase 3 egress library. `jmagly/wreq` on GitHub is the one-way publish mirror. Fork lifecycle in `09-ci-plan.md`.
+- **`roctinam/carbonyl-fingerprint-corpus`** (Gitea, private) — joint-distribution persona tuples + reference fingerprints per Chrome version. Consumed by `carbonyl-fingerprint` crate at build.
+- **BrowserForge** — upstream corpus source (MIT). Phase 3A.2 dependency; our corpus bootstraps from and extends it.
 - **Chromium M147** (current) — Carbonyl's upstream. Fingerprint corpus tracks stable Chrome; see `docs/chromium-upgrade-plan.md` for the rebase cadence.

@@ -94,7 +94,7 @@ Phase 2 full corpus (all fingerprint patches, all humanization refinement) and P
 | Upstream | We depend on | Risk | Mitigation |
 |----------|--------------|------|------------|
 | Chromium upstream | Every major version bump rebases patches | High — ongoing tax | Keep patch count minimal; prefer flags + content scripts |
-| `jmagly/wreq` fork | Chrome-profile coverage, BoringSSL currency, post-quantum TLS | Medium — solo upstream, we now own the fork | Sync cadence policy (see §CI below); self-maintain if upstream stalls |
+| `roctinam/wreq` (Gitea, our fork of `0x676e67/wreq`) | Chrome-profile coverage, BoringSSL currency, post-quantum TLS | Medium — solo upstream, we now own the fork | Sync cadence policy (see §CI below); self-maintain if upstream stalls; GitHub mirror at `jmagly/wreq` for external-consumer access |
 | BrowserForge corpus | Joint-distribution persona data | Low — MIT, we can mirror | Vendor a snapshot into `carbonyl-fingerprint` crate |
 | CreepJS | Fingerprint probe ground truth | Low — we consume, not depend-on-CI | Pin to known-good snapshot in QA repo |
 | omahaproxy API (Chrome release detection) | Refresh pipeline trigger | Low | Fallback: scrape chromiumdash or use a polling script |
@@ -113,9 +113,9 @@ Phase 2 full corpus (all fingerprint patches, all humanization refinement) and P
 - **Quarterly drift audit**: Phase 3C.3 measures Carbonyl-emitted JA4 against current stable Chrome. Audit report filed `.aiwg/reports/drift-audit-YYYYqQ.md`. Outcome feeds Phase 3E activation decision.
 - **wreq fork sync review**: quarterly cadence (or on-demand for CVEs). Upstream changes reviewed + merged into `jmagly/wreq`; breaking changes documented; downstream pin bumped in `carbonyl-agent`.
 
-## Critical component: `jmagly/wreq` fork
+## Critical component: `roctinam/wreq` fork (Gitea primary)
 
-Operating the fork (not just consuming upstream) changes the Phase 3 risk profile meaningfully:
+Operating the fork (not just consuming upstream) changes the Phase 3 risk profile meaningfully. Per ecosystem convention, **Gitea is primary** (`roctinam/wreq`), GitHub is publish-mirror (`jmagly/wreq`).
 
 **Benefits gained by forking:**
 - Pin-to-commit stability — no surprise breakage on `cargo update`
@@ -130,9 +130,10 @@ Operating the fork (not just consuming upstream) changes the Phase 3 risk profil
 - Release tagging on the fork so `Cargo.toml` can reference stable refs
 
 **Planned policy:**
-- `jmagly/wreq` `main` tracks upstream `0x676e67/wreq` `main`, rebased not merged
+- `roctinam/wreq` `main` tracks upstream `0x676e67/wreq` `main`, rebased not merged
 - Local patches live on named branches (`carbonyl/*`) that rebase onto `main` on each sync
-- `carbonyl-agent`'s `Cargo.toml` pins to a specific fork tag (`jmagly/wreq` tag `v6.0.0-carbonyl.1` etc.), never a branch or `main`
+- `carbonyl-agent`'s `Cargo.toml` pins to a specific fork tag from Gitea (e.g. `git.integrolabs.net/roctinam/wreq` tag `v6.0.0-rc.28-carbonyl.1`), never a branch or `main`
+- Gitea → GitHub one-way mirror for external-consumer access (`jmagly/wreq`)
 - Sync cadence: quarterly; accelerated for CVE or Chrome major release
 
 Full sync workflow specified in `09-ci-plan.md`.
@@ -141,9 +142,10 @@ Full sync workflow specified in `09-ci-plan.md`.
 
 **Done:**
 - Research tracks R1–R3, R5, R7, R8, R9 with citations
-- SDLC doc corpus v2 (vision, requirements, architecture, threat model, test strategy, phase plan, research index, fingerprint registry design, this roadmap)
-- Epic #58 and Phase 1 + Phase 3 umbrella issues filed
-- wreq fork identified and adopted (`jmagly/wreq`)
+- SDLC doc corpus v3 (vision, requirements, architecture, threat model, test strategy, phase plan, research index, fingerprint registry design, roadmap, CI plan)
+- Epic #58 and Phase 1 + Phase 3 + CI umbrella issues filed
+- wreq fork adopted; Gitea-primary mirror created (`roctinam/wreq`, Gitea #149) with GitHub publish target at `jmagly/wreq`
+- Fingerprint corpus repo created (`roctinam/carbonyl-fingerprint-corpus`, private, Gitea #150) with `roctibot` as write collaborator
 
 **Immediate next:**
 - Phase 0 validation spike (uinput → Ozone → `isTrusted`)

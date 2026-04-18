@@ -204,8 +204,11 @@ Derived flags and content scripts:
 ### 6.2 To carbonyl-agent egress (wreq)
 
 ```rust
-// Cargo.toml pins to jmagly/wreq fork
-//   wreq = { git = "https://github.com/jmagly/wreq", tag = "v6.0.0-rc.28-carbonyl.1" }
+// Cargo.toml pins to roctinam/wreq on Gitea (primary):
+//   wreq = { git = "https://git.integrolabs.net/roctinam/wreq",
+//            tag = "v6.0.0-rc.28-carbonyl.1" }
+// External consumers unable to reach Gitea may use the GitHub mirror
+// (github.com/jmagly/wreq) as a fallback URL.
 let persona = registry.load("persona-ghost-01")?;
 let client = wreq::Client::builder()
     .impersonate(persona.network.chrome_profile())  // wreq-util profile
@@ -225,7 +228,14 @@ Behavioural persona (typing style, mouse persona) selected from a parallel regis
 
 Per `06-research-index.md` R7:
 
-**Egress library: `jmagly/wreq` (fork of `0x676e67/wreq`)** — pure Rust, reqwest-shaped, Chrome 100–146 profiles via `wreq-util`, BoringSSL backend. Upstream is pre-1.0 (6.0.0-rc) and solo-maintained; the fork at `github.com/jmagly/wreq` gives us pin-to-commit stability, local-patch capacity, and CVE response autonomy. Upstream rebase on quarterly cadence (or on-demand for CVEs). See `09-ci-plan.md` for the fork lifecycle policy.
+**Egress library: `roctinam/wreq` on Gitea (primary), mirrored to `jmagly/wreq` on GitHub** — fork of `0x676e67/wreq`. Pure Rust, reqwest-shaped, Chrome 100–146 profiles via `wreq-util`, BoringSSL backend.
+
+Remote convention (Gitea primary; matches the rest of the ecosystem):
+- `origin` → `git.integrolabs.net/roctinam/wreq` — pushes land here first; all CI runs here
+- `github` → `github.com/jmagly/wreq` — publish mirror, one-way from Gitea
+- `upstream` → `github.com/0x676e67/wreq` — fetch-only; source for rebases
+
+Upstream is pre-1.0 (6.0.0-rc) and solo-maintained; operating the fork gives us pin-to-commit stability, local-patch capacity, and CVE response autonomy. Upstream rebase on quarterly cadence (or on-demand for CVEs). See `09-ci-plan.md` for the fork lifecycle policy.
 
 **Fallback: `tls-client` (Go, via C shared lib)** if HTTP/3 support becomes necessary before wreq adds it. Adds cgo runtime weight; preferred to stay pure-Rust.
 
