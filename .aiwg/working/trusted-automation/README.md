@@ -18,6 +18,8 @@
 | 05 | [Phase Gate Plan](05-phase-plan.md) | Flow-gate track with validation milestones |
 | 06 | [Research Index](06-research-index.md) | Consolidated research findings, citations, open questions |
 | 07 | [Fingerprint Registry Design](07-fingerprint-registry-design.md) | Owned persona registry: schema, sampler, validator, library choice |
+| 08 | [Roadmap](08-roadmap.md) | Consolidated executive view: phase dependencies, repo matrix, critical path, governance |
+| 09 | [CI Plan](09-ci-plan.md) | Per-repo workflows, cross-repo coordination, `jmagly/wreq` fork lifecycle, corpus refresh pipeline |
 
 ## Issue map
 
@@ -28,3 +30,9 @@ See `05-phase-plan.md` for the dependency graph.
 ## Origin
 
 Derived from `roctinam/carbonyl#57` (uinput for trusted input) after discovery that `isTrusted: false` is only one of ~6 detection layers. This corpus generalises #57 into a full trust/automation program.
+
+## Upstream dependencies
+
+- **`jmagly/wreq`** — TLS/HTTP2 fingerprint library fork (forked from `0x676e67/wreq`). Phase 3 egress library. Fork lifecycle in `09-ci-plan.md`.
+- **BrowserForge** — joint-distribution persona corpus (MIT). Phase 3A.2 dependency. Vendored into `carbonyl-fingerprint` crate at known version.
+- **Chromium M147** (current) — Carbonyl's upstream. Fingerprint corpus tracks stable Chrome; see `docs/chromium-upgrade-plan.md` for the rebase cadence.

@@ -204,6 +204,8 @@ Derived flags and content scripts:
 ### 6.2 To carbonyl-agent egress (wreq)
 
 ```rust
+// Cargo.toml pins to jmagly/wreq fork
+//   wreq = { git = "https://github.com/jmagly/wreq", tag = "v6.0.0-rc.28-carbonyl.1" }
 let persona = registry.load("persona-ghost-01")?;
 let client = wreq::Client::builder()
     .impersonate(persona.network.chrome_profile())  // wreq-util profile
@@ -223,7 +225,7 @@ Behavioural persona (typing style, mouse persona) selected from a parallel regis
 
 Per `06-research-index.md` R7:
 
-**Egress library: `wreq` (formerly `rquest`)** — pure Rust, reqwest-shaped, Chrome 100–146 profiles via `wreq-util`, BoringSSL backend. Pre-1.0 (6.0.0-rc) and solo-maintained; accepted bus-factor risk.
+**Egress library: `jmagly/wreq` (fork of `0x676e67/wreq`)** — pure Rust, reqwest-shaped, Chrome 100–146 profiles via `wreq-util`, BoringSSL backend. Upstream is pre-1.0 (6.0.0-rc) and solo-maintained; the fork at `github.com/jmagly/wreq` gives us pin-to-commit stability, local-patch capacity, and CVE response autonomy. Upstream rebase on quarterly cadence (or on-demand for CVEs). See `09-ci-plan.md` for the fork lifecycle policy.
 
 **Fallback: `tls-client` (Go, via C shared lib)** if HTTP/3 support becomes necessary before wreq adds it. Adds cgo runtime weight; preferred to stay pure-Rust.
 
@@ -280,7 +282,8 @@ If observed ≠ declared, either:
 
 | Risk | Mitigation |
 |------|-----------|
-| wreq maintainer burnout (solo) | Watch for signals; have a migration plan to tls-client cgo fallback documented |
+| upstream wreq maintainer burnout (solo) | We operate `jmagly/wreq` fork; can self-maintain indefinitely. Migration plan to tls-client cgo documented in ADR-005 if the fork-maintenance burden itself becomes unsustainable |
+| CVE in BoringSSL or h2 upstream of wreq | Daily `security-scan.yml` on the fork; SLA 72h cherry-pick to `carbonyl/carbonyl` branch + tag |
 | Chromium stock fingerprint diverges from personas we declare | Either patch Chromium's BoringSSL (Phase 3E, deferred) or accept Carbonyl-version as the declared version, drop personas to match |
 | Corpus staleness | Auto-refresh CI; alert on >1 major Chrome release without corpus update |
 | CreepJS updates its detection faster than our validator | Validator is a gate, not a guarantee; QA harness is the ground truth |
