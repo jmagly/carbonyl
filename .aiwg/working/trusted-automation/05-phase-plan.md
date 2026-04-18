@@ -1,0 +1,199 @@
+# Phase Gate Plan — Trusted Automation
+
+## Phase model
+
+This initiative is organized as a **flow-gate track** with four phases. Each phase has:
+- Explicit entry preconditions (gate open)
+- A set of workstreams
+- Concrete exit criteria (gate for next phase)
+- A validation spike before committing construction work
+
+Effort is expressed in **agent-oriented units** (scope count, agent roles, parallelism map, pass estimate) per the `no-time-estimates` rule. No wall-clock estimates.
+
+## Dependency graph
+
+```mermaid
+flowchart LR
+    P0[Phase 0<br/>Validation spike]
+    P1[Phase 1<br/>Trusted input<br/>Layers 1 + 6-profile]
+    P2[Phase 2<br/>Fingerprint + Humanization<br/>Layers 2 + 3 + 4]
+    P3[Phase 3<br/>Network fingerprint<br/>Layer 5]
+    P4[Phase 4<br/>Fleet integration]
+
+    P0 --> P1
+    P1 --> P2
+    P1 -.parallel.-> P2H[Humanization subtrack<br/>carbonyl-agent only]
+    P2 --> P3
+    P2 --> P4
+
+    style P0 fill:#ffd
+    style P3 stroke-dasharray: 5 5
+```
+
+## Phase 0 — Validation spike
+
+**Objective**: Confirm the core architectural assumption before committing Chromium-patch work.
+
+**Question to answer**: Will wiring `EventFactoryEvdev` into Carbonyl's headless Ozone make events dispatched from a user-space `/dev/uinput` device reach Blink with `isTrusted: true`?
+
+**Workstream** (1 agent, research+prototyping):
+- Build Carbonyl with an experimental patch that enables `//ui/events/ozone:evdev` in the headless platform BUILD.gn and swaps `StubInputController` for `InputControllerEvdev`
+- Create a Python script using the `python-uinput` library that emits a keypress to a virtual device
+- Load a test page with the Layer 1 `isTrusted` logger (see `04-test-strategy.md`)
+- Verify the keypress reaches the page with `isTrusted: true`
+
+**Exit criteria** (gate to Phase 1):
+- Keypress dispatched via uinput arrives at page with `isTrusted: true` ✓ → proceed to Phase 1
+- Keypress dispatched via uinput arrives with `isTrusted: false` or does not arrive → decision point: either (a) investigate the Ozone input pipeline deeper, or (b) fall back to CDP `Input.dispatchKeyEvent` and reduce Phase 1 scope
+- Document findings in `docs/adr-002-trusted-input-approach.md`
+
+**Deliverable**: ADR-002 committed; phase-1 scope decided.
+
+## Phase 1 — Trusted input (Layer 1) + session profile (Layer 6 partial)
+
+**Objective**: X/Twitter login flow advances past username→password→MFA with `carbonyl-agent` driving a Carbonyl instance.
+
+**Workstreams** (parallelism map: W1.1 ∥ W1.2, then W1.3; W1.4 ∥ W1.1 from the start):
+
+| ID | Workstream | Repo | Issue | Parallel with |
+|----|-----------|------|-------|---------------|
+| W1.1 | Enable evdev in Chromium headless Ozone + patch-set | carbonyl | #57 (repurpose) | W1.2, W1.4 |
+| W1.2 | Rust uinput emitter + CLI flags `--input-mode`, `--uinput-device-name` | carbonyl | NEW carbonyl#A | W1.1 |
+| W1.3 | Wire carbonyl-agent SDK to pick `uinput` backend; add backend-switch API | carbonyl-agent | NEW agent#A | depends on W1.1, W1.2 |
+| W1.4 | Durable user-data-dir profile management in agent SDK | carbonyl-agent | NEW agent#B | W1.1 (fully independent) |
+| W1.5 | Layer 1 + Layer 6-partial test harness | carbonyl-agent-qa | NEW qa#A | anytime |
+
+**Agent roles**:
+- W1.1: Chromium C++ developer (patch, build, iterate; long compile cycles)
+- W1.2: Rust systems developer (uinput, libc, CLI)
+- W1.3: SDK integrator (Python + Rust FFI in agent)
+- W1.4: SDK developer (profile lifecycle)
+- W1.5: QA/test engineer
+
+**Pass estimate**: W1.1 is the long-tail due to Chromium rebuilds; expect multiple iteration passes. W1.2–W1.5 are single-pass with review.
+
+**Exit criteria** (gate to Phase 2):
+- FR-1.1 through FR-1.5 pass their acceptance tests (§04 Layer 1)
+- Layer 1 test harness nightly-passes on `main`
+- x.com login flow advances past username step on a warmed profile (manual verification acceptable for gate)
+- ADR-003 drafted (humanization location decision) in prep for Phase 2
+
+## Phase 2 — Fingerprint normalization + humanization (Layers 2, 3, 4)
+
+Phase 2 runs as **two parallel subtracks** that merge at the exit gate.
+
+### Subtrack A — Fingerprint (Layers 2, 3)
+
+| ID | Workstream | Repo | Issue |
+|----|-----------|------|-------|
+| W2A.1 | Remove `(Carbonyl)` UA suffix; verify `--disable-blink-features=AutomationControlled` default | carbonyl | NEW carbonyl#B |
+| W2A.2 | WebGL vendor/renderer spoof patch | carbonyl | NEW carbonyl#C |
+| W2A.3 | `navigator.plugins` populate patch | carbonyl | NEW carbonyl#D |
+| W2A.4 | `Notification.permission` default patch | carbonyl | NEW carbonyl#E |
+| W2A.5 | Client Hints + `window.chrome.runtime` content-script injector | carbonyl-agent | NEW agent#C |
+| W2A.6 | Fingerprint probe test suite | carbonyl-agent-qa | NEW qa#B |
+
+### Subtrack B — Humanization (Layer 4)
+
+| ID | Workstream | Repo | Issue |
+|----|-----------|------|-------|
+| W2B.1 | Persona config schema + loader | carbonyl-agent | NEW agent#D |
+| W2B.2 | Keystroke scheduler (log-logistic + bigram table) | carbonyl-agent | NEW agent#E |
+| W2B.3 | Mouse motion generator (WindMouse or Bézier+Fitts+overshoot) | carbonyl-agent | NEW agent#F |
+| W2B.4 | Tremor + velocity profile shaping | carbonyl-agent | NEW agent#G |
+| W2B.5 | SDK API surface: `click`, `type`, `mouse_path` with `humanize` param | carbonyl-agent | NEW agent#H |
+| W2B.6 | Behavioral test harness | carbonyl-agent-qa | NEW qa#C |
+
+**Parallelism**: W2A.* and W2B.* are fully parallel. Within W2A, items .1–.4 are parallel Chromium patches (each its own patch file). Within W2B, .1 blocks .2–.5; .2, .3, .4 run parallel.
+
+**Agent roles**:
+- Subtrack A: Chromium C++ developer (×3–4 parallel for patches), SDK integrator for W2A.5, QA for W2A.6
+- Subtrack B: Rust systems developer (×2 parallel on keystroke + motion), SDK developer for W2B.5, QA for W2B.6
+
+**Exit criteria** (gate to Phase 3):
+- FR-2.* all pass acceptance tests
+- FR-3.* all pass statistical acceptance tests (KS test, bigram ratio, overshoot rate, Fitts coefficient)
+- creepjs / bot.sannysoft probe results within documented tolerance
+- Cloudflare Turnstile passes on ≥90% of 100 fresh sessions in nightly CI
+
+## Phase 3 — Network fingerprint (Layer 5)
+
+**Gate**: Phase 2 complete; ADR-005 authored with approach decision (BoringSSL patch vs. uTLS proxy intermediary).
+
+**Workstreams depend on ADR-005 direction.** Two candidate shapes:
+
+**Option A — BoringSSL patch**:
+- W3.1: ClientHello customization patch in `third_party/boringssl/src/ssl/`
+- W3.2: HTTP/2 SETTINGS frame customization
+- W3.3: Test harness for JA4/HTTP2 fingerprint regression
+
+**Option B — uTLS proxy intermediary**:
+- W3.1: Rust proxy server using `rustls` or a uTLS-like customization
+- W3.2: Carbonyl proxy-routing config
+- W3.3: Test harness as above
+
+**Exit criteria**:
+- FR-5.1, FR-5.2 pass against `tls.browserleaks.com` and `http2.pro` within tolerance
+- Matches current stable Chrome on same major version
+
+**Explicitly deferrable**: Phase 3 may remain deferred indefinitely if Phase 2 proves sufficient for target use cases. The team should re-evaluate at Phase 2 close.
+
+## Phase 4 — Fleet integration
+
+**Gate**: Phase 1 complete (earliest); concurrent with Phase 2 is acceptable.
+
+**Workstreams** (all in carbonyl-fleet):
+- W4.1: Server-side uinput device namespacing (`--uinput-device-name` fed per-instance)
+- W4.2: Multi-tenant profile isolation
+- W4.3: Per-instance persona assignment
+- W4.4: Observability / metrics aggregation across fleet
+
+**Exit criteria**: N=10 concurrent Carbonyl instances on a single host drive independent agent flows without uinput crosstalk; end-to-end test against reference corpus passes per-instance.
+
+## Cross-cutting deliverables
+
+- **ADRs**: 002 (input approach), 003 (humanization location), 004 (fingerprint mitigation priority), 005 (TLS approach)
+- **Docs**: `carbonyl/docs/trusted-automation.md` (public-facing), `carbonyl/docs/uinput-setup.md` (operator guide), `carbonyl-agent/docs/personas.md`
+- **Observability**: per-session metric counters (events, humanization profile, fingerprint spoofs active)
+- **Security review**: explicit sign-off on uinput permissions model, content-script injection surface, and non-goal boundaries
+
+## Issue map (to be filed in Phase 0 close)
+
+```
+roctinam/carbonyl (Gitea)
+├─ #57          Trusted input via /dev/uinput  (existing; repurpose as W1.1)
+├─ #NEW-A       Rust uinput emitter + CLI flags
+├─ #NEW-B       Remove Carbonyl UA suffix + verify automation flag default
+├─ #NEW-C       WebGL vendor/renderer spoof patch
+├─ #NEW-D       navigator.plugins populate patch
+├─ #NEW-E       Notification.permission default patch
+└─ #UMBRELLA    Trusted Automation Initiative (this plan)
+
+roctinam/carbonyl-agent (Gitea)
+├─ #NEW-A       Backend-switch API (synthetic|uinput)
+├─ #NEW-B       Durable user-data-dir profile management
+├─ #NEW-C       Client Hints + window.chrome content-script injector
+├─ #NEW-D       Persona config schema + loader
+├─ #NEW-E       Keystroke scheduler
+├─ #NEW-F       Mouse motion generator
+├─ #NEW-G       Tremor + velocity shaping
+└─ #NEW-H       Humanize API surface
+
+roctinam/carbonyl-agent-qa (Gitea)
+├─ #NEW-A       Layer 1 + Layer 6-partial test harness
+├─ #NEW-B       Fingerprint probe test suite
+└─ #NEW-C       Behavioral test harness
+
+roctinam/carbonyl-fleet (Gitea, Phase 4)
+└─ (workstreams to be filed after Phase 1 close)
+```
+
+## Definition of Done (initiative level)
+
+Initiative is complete when:
+- All FR-1 through FR-4 pass acceptance tests
+- Phase 3 (FR-5) either complete or explicitly deferred with ADR-005 signed
+- Reference-site corpus nightly pass rate documented and monitored
+- Public documentation (`trusted-automation.md`, `personas.md`, `uinput-setup.md`) shipped
+- Security review sign-off recorded
+- `carbonyl-fleet` Phase 4 either complete or scheduled
