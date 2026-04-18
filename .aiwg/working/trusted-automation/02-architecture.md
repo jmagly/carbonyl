@@ -200,7 +200,11 @@ Green = fully addressed by Phases 1–2. Red dashed = TLS layer, deferred to Pha
 | Reference test sites & fingerprint probes | | | ✓ | |
 | Integration test runner | | | ✓ | |
 | Multi-instance device namespacing | ✓ (primitive) | | | ✓ (orchestration, later) |
-| TLS/HTTP2 fingerprint (Phase 3) | ? | ? | | |
+| **Fingerprint registry + sampler + validator** (Phase 3A) | | ✓ (as `carbonyl-fingerprint` crate) | | |
+| **Persona → Chromium applier** (Phase 3C) | | ✓ (flags + content scripts) | | |
+| **Agent-side `wreq` egress** (Phase 3B) | | ✓ | | |
+| **Consistency testing (per-persona)** (Phase 3D) | | | ✓ | |
+| Deep BoringSSL patching (Phase 3E, deferred) | ✓ | | | |
 
 ## 6. Architectural decision records to produce
 
@@ -209,7 +213,8 @@ Following `docs/adr-001-language-architecture.md` format, the following ADRs sho
 - **ADR-002**: Choose evdev+uinput over CDP-based trusted input
 - **ADR-003**: Humanization lives in carbonyl-agent (Rust generation, Python policy)
 - **ADR-004**: Fingerprint mitigations prefer CLI flags → content scripts → Chromium patches (in that order)
-- **ADR-005** (Phase 3): TLS fingerprint approach (BoringSSL patch vs uTLS proxy intermediary)
+- **ADR-005** (Phase 3): Owned fingerprint registry — `wreq` primary library, `tls-client` fallback for HTTP/3, `cloudflare/boring` as deep-control escape hatch. See `07-fingerprint-registry-design.md`.
+- **ADR-006** (conditional, Phase 3E only): BoringSSL patch strategy for Carbonyl's Chromium if drift audit warrants
 
 ## 7. Risks & mitigations
 

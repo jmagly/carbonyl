@@ -46,10 +46,19 @@ The initiative succeeds when, on the reference test corpus in `carbonyl-agent-qa
 | Carbonyl core maintainers | Minimal Chromium patch burden; upgrade path preserved |
 | Security / ethics review | Clear non-goals; no supply-chain risk from new deps |
 
+## Correction from prior draft — Phase 3 is not deferred
+
+Earlier drafts of this vision described TLS/HTTP2 fingerprint impersonation as "deferred pending a proxy-vs-patch decision." Follow-on research (`06-research-index.md` R7–R9) clarified that:
+
+- Carbonyl, like Playwright and Puppeteer, already emits real Chrome's JA4 because it wraps real Chromium. The TLS-impersonation tools (uTLS, curl-impersonate, rquest) exist to *rescue* non-browser scrapers, not to fix browser-based automation.
+- The actual Layer 5+ problem is **coherence across the persona bundle** — JA4, UA-CH, WebGL, canvas, fonts, timezone, H2 Akamai fingerprint, and ~30 other signals must agree. A mismatch is a stronger bot signal than any individual fingerprint.
+- This is best solved not by a proxy, but by an **owned fingerprint registry** shared across the stack. See `07-fingerprint-registry-design.md`.
+
 ## Intentionally deferred
 
-- **TLS/HTTP2 fingerprint impersonation** — high-value but requires either invasive BoringSSL patching or a proxy intermediary (uTLS/curl-impersonate). Deferred to Phase 3 with its own research spike; see `02-architecture.md`.
 - **Fleet-scale uinput device namespacing** — solvable but only relevant once single-instance automation works. Carbonyl Phase 1 includes the namespacing primitive (`--uinput-device-name`); fleet integration is a separate initiative.
+- **Chromium BoringSSL patching for persona-perfect network fingerprints** (Phase 3E) — only attempted if empirical measurement shows Chromium's stock fingerprint drift is causing real blocks on the target workload. Most deployments won't need this.
+- **Firefox / mobile personas** — registry is Chrome-desktop only for MVP; multi-browser support blocked on upstream library (`wreq`) adding matching profiles.
 
 ## Out of this doc
 

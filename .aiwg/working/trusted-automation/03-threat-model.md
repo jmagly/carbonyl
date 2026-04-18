@@ -139,21 +139,34 @@ Medium. Humanization can match published feature distributions, but detectors tr
 
 ---
 
-## Layer 5 — Network (TLS + HTTP/2)
+## Layer 5 — Network (TLS + HTTP/2, including coherence with other layers)
 
 ### Signals
-JA4/JA4+ TLS fingerprint, HTTP/2 SETTINGS ordering + initial window size, pseudo-header order, ALPN order, X25519Kyber768 post-quantum key share presence.
+JA4/JA4+ TLS fingerprint, JA4H (HTTP-layer), HTTP/2 Akamai fingerprint (`S|WU|P|PS` per Black Hat EU 2017), ALPN order, post-quantum key share, HTTP/3 transport parameters, pseudo-header order.
 
 ### Current Carbonyl exposure
-Stock BoringSSL. Matches current Chromium M147 fingerprint. Becomes stale as stable Chrome advances past M147.
+**Chromium-emitted traffic**: stock BoringSSL JA4, matching real Chrome M147. Drifts behind stable Chrome as Carbonyl lags upstream.
 
-### Mitigation (Phase 3, deferred)
-Two paths under ADR-005:
-- **BoringSSL patching**: intrusive, high rebase cost, always up-to-date with Chrome
-- **uTLS/curl-impersonate proxy intermediary**: runs alongside Carbonyl, terminates TLS on behalf of Chromium. Lower Chromium-side impact; requires re-implementing HTTP/2 correctly.
+**Agent-side Python egress** (`carbonyl-agent` making its own HTTP requests outside the browser): stock Python `requests`/`httpx` JA4 — distinctively non-browser, trivially fingerprinted as a script.
+
+### Reframed threat
+
+Browser-based automation tools (including Carbonyl) **already emit real-Chrome JA4** because they wrap real Chromium. TLS-impersonation libraries exist to rescue non-browser scrapers; they are not the correct tool for us on Chromium-emitted traffic.
+
+The real Layer 5+ risk is **cross-layer incoherence**: a persona that declares "Chrome 147 on Linux" through its UA/UA-CH but emits stock Chromium-147 JA4 and Python `requests` JA4 from the same session is more suspicious than stock Chromium, because the signals disagree. CreepJS exists specifically to detect this.
+
+### Mitigation (Phase 3, owned fingerprint registry)
+
+See `07-fingerprint-registry-design.md` for the full design.
+
+- **Chromium-emitted traffic**: accept Chromium's stock JA4 as ground truth; personas declare a Chrome version matching the actual Carbonyl build. Refresh corpus when Carbonyl upgrades Chromium.
+- **Agent-side egress**: route all agent-initiated HTTP through `wreq` (or fallback `tls-client`) with the matching persona profile. Any library that bypasses this is audited and flagged.
+- **Cross-layer coherence**: enforced by the registry's validator. No persona is usable without passing UA↔UA-CH↔JA4↔H2↔WebGL↔fonts consistency checks.
+- **Quarterly JA4 drift audit**: CI measures Carbonyl's observed JA4 vs current stable Chrome; flags when drift exceeds tolerance.
+- **Phase 3E (deferred sub-phase)**: if drift audit reveals Chromium-version lag is causing real blocks, consider BoringSSL patching to let personas override Chromium's stock JA4. Hard rebase cost; only justified empirically.
 
 ### Residual risk
-Until Phase 3 completes, TLS fingerprint ages with the Carbonyl Chromium version. Acceptable for MVP; detection vendors rarely hard-block on TLS alone.
+Low-to-medium. Persona-bundle coherence is the actual adversary signal; the registry directly addresses it. Chromium-version drift is a slow-moving concern, audited but not patched unless empirically warranted.
 
 ---
 

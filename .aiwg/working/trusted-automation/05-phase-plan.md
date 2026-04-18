@@ -116,27 +116,67 @@ Phase 2 runs as **two parallel subtracks** that merge at the exit gate.
 - creepjs / bot.sannysoft probe results within documented tolerance
 - Cloudflare Turnstile passes on ≥90% of 100 fresh sessions in nightly CI
 
-## Phase 3 — Network fingerprint (Layer 5)
+## Phase 3 — Owned fingerprint registry (Layer 5 + cross-layer coherence)
 
-**Gate**: Phase 2 complete; ADR-005 authored with approach decision (BoringSSL patch vs. uTLS proxy intermediary).
+**Reframed** from earlier "deferred TLS impersonation." Per `07-fingerprint-registry-design.md` and research findings R7–R9, the correct primitive is a **persona bundle** — a frozen tuple of every fingerprintable signal, sampled from joint real-traffic distributions, validated for internal consistency, and applied coherently across Chromium and agent-side egress. This is not a proxy bolt-on; it's a first-class component.
 
-**Workstreams depend on ADR-005 direction.** Two candidate shapes:
+**Gate**: Phase 2 complete; ADR-005 authored (library choice: `wreq` primary, `tls-client` fallback); ADR-006 authored if deeper BoringSSL work is warranted.
 
-**Option A — BoringSSL patch**:
-- W3.1: ClientHello customization patch in `third_party/boringssl/src/ssl/`
-- W3.2: HTTP/2 SETTINGS frame customization
-- W3.3: Test harness for JA4/HTTP2 fingerprint regression
+### Sub-phase 3A — Registry foundation (carbonyl-agent or new crate)
 
-**Option B — uTLS proxy intermediary**:
-- W3.1: Rust proxy server using `rustls` or a uTLS-like customization
-- W3.2: Carbonyl proxy-routing config
-- W3.3: Test harness as above
+| ID | Workstream | Repo |
+|----|-----------|------|
+| W3A.1 | `carbonyl-fingerprint` crate foundation: schema + storage + API | carbonyl-agent (or new repo) |
+| W3A.2 | Joint-distribution corpus + sampler (BrowserForge integration or port) | carbonyl-agent |
+| W3A.3 | Validator — UA↔UA-CH↔JA4↔H2↔WebGL↔fonts consistency rules (see design §5) | carbonyl-agent |
+| W3A.4 | Refresh pipeline — detect stable Chrome releases, capture reference fingerprints, update corpus | carbonyl-agent + CI |
 
-**Exit criteria**:
-- FR-5.1, FR-5.2 pass against `tls.browserleaks.com` and `http2.pro` within tolerance
-- Matches current stable Chrome on same major version
+### Sub-phase 3B — Agent-side egress fingerprinting
 
-**Explicitly deferrable**: Phase 3 may remain deferred indefinitely if Phase 2 proves sufficient for target use cases. The team should re-evaluate at Phase 2 close.
+| ID | Workstream | Repo |
+|----|-----------|------|
+| W3B.1 | `wreq` integration as the default egress HTTP client in carbonyl-agent | carbonyl-agent |
+| W3B.2 | Persona → `wreq` profile binding (consume persona.network.*) | carbonyl-agent |
+| W3B.3 | Audit + flag any non-wreq HTTP call sites in the SDK | carbonyl-agent |
+
+### Sub-phase 3C — Persona → Chromium applier
+
+| ID | Workstream | Repo |
+|----|-----------|------|
+| W3C.1 | Persona applier: derive Carbonyl CLI flags + content-script bundle from persona | carbonyl-agent |
+| W3C.2 | Rewire Phase 2A fingerprint patches to consume persona values (not hardcoded) | carbonyl + carbonyl-agent |
+| W3C.3 | Quarterly Chromium-JA4 drift audit CI job | carbonyl-agent-qa |
+
+### Sub-phase 3D — Validation and QA
+
+| ID | Workstream | Repo |
+|----|-----------|------|
+| W3D.1 | Per-persona consistency harness: declared vs observed | carbonyl-agent-qa |
+| W3D.2 | Nightly observed-fingerprint regression suite | carbonyl-agent-qa |
+| W3D.3 | CreepJS + tls.peet.ws + http2.pro probe integration | carbonyl-agent-qa |
+
+### Sub-phase 3E — Deep Chromium control (deferred, trigger-gated)
+
+Only attempted if quarterly drift audit (W3C.3) shows Carbonyl's Chromium-emitted fingerprint is causing real blocks on the target workload AND Phase 3A–3D alone are insufficient.
+
+| ID | Workstream | Repo |
+|----|-----------|------|
+| W3E.1 | BoringSSL patch for Carbonyl's Chromium: accept persona-declared ClientHello values | carbonyl |
+| W3E.2 | H2 SETTINGS/pseudo-header patch in Chromium's HTTP/2 stack | carbonyl |
+| W3E.3 | Maintenance discipline: per-Chrome-version patch refresh | carbonyl |
+
+High rebase cost; enter this sub-phase only with explicit ADR and empirical justification.
+
+### Exit criteria (Phase 3 without 3E)
+
+- FR-5.1, FR-5.2 pass against `tls.peet.ws` and `http2.pro` for agent-side egress traffic
+- Every supported persona passes consistency validation in CI
+- Carbonyl's Chromium-emitted JA4 is measured, logged, and within tolerance of current stable Chrome (or within documented drift)
+- Registry auto-refresh demonstrated across at least one Chrome stable release cycle
+
+### Explicit option: stop at Phase 3 without 3E
+
+If Phase 3A–3D deliver passing metrics on the reference corpus, Phase 3E remains deferred. This is a legitimate end state, recorded in ADR-005 with empirical justification.
 
 ## Phase 4 — Fleet integration
 
@@ -152,7 +192,7 @@ Phase 2 runs as **two parallel subtracks** that merge at the exit gate.
 
 ## Cross-cutting deliverables
 
-- **ADRs**: 002 (input approach), 003 (humanization location), 004 (fingerprint mitigation priority), 005 (TLS approach)
+- **ADRs**: 002 (input approach), 003 (humanization location), 004 (fingerprint mitigation priority), 005 (fingerprint registry library choice — wreq primary, tls-client fallback), 006 (conditional: if Phase 3E activated, BoringSSL patch strategy)
 - **Docs**: `carbonyl/docs/trusted-automation.md` (public-facing), `carbonyl/docs/uinput-setup.md` (operator guide), `carbonyl-agent/docs/personas.md`
 - **Observability**: per-session metric counters (events, humanization profile, fingerprint spoofs active)
 - **Security review**: explicit sign-off on uinput permissions model, content-script injection surface, and non-goal boundaries

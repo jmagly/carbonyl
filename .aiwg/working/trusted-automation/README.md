@@ -17,6 +17,7 @@
 | 04 | [Test Strategy](04-test-strategy.md) | Per-layer acceptance tests, integration harness design |
 | 05 | [Phase Gate Plan](05-phase-plan.md) | Flow-gate track with validation milestones |
 | 06 | [Research Index](06-research-index.md) | Consolidated research findings, citations, open questions |
+| 07 | [Fingerprint Registry Design](07-fingerprint-registry-design.md) | Owned persona registry: schema, sampler, validator, library choice |
 
 ## Issue map
 
