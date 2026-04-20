@@ -39,9 +39,10 @@ Build Carbonyl with `ozone_platform=x11` instead of `headless`. Container bundle
 - Operator gets CPU/GPU choice via env var (`CARBONYL_GPU_MODE=auto|cpu|gpu`) and matching `/dev/dri` passthrough on `docker run`.
 - Same pattern Chrome OS and every normal Linux desktop already uses — not a novel code path.
 - Fingerprint provenance is real-kernel, same property we wanted from rev 1.
+- **(Amended 2026-04-20 after W0.1 paper audit)** Carbonyl's 24 patches target the `chromium/src/headless/` shell, not the `ui/ozone/platform/headless/` Ozone backend. No patch touches the Ozone platform source tree, so switching `ozone_platform=x11` applies all 24 patches cleanly at the file level. See `.aiwg/reports/phase0-w01-patch-audit.md`.
 
 **Cons:**
-- Carbonyl must build with `ozone_platform=x11`. Its existing patches (0001–0024) target `headless`; some may need rework. **This is what the Phase 0 spike now validates** — whether the rendering bridge patches still work when Chromium thinks it has an X display.
+- Carbonyl must build with `ozone_platform=x11`. Patches apply cleanly at the file level (W0.1 audit confirmed). **Semantic risk remains on 5 of 24 patches** (`0003`, `0006`, `0009`, `0013`, `0023`) that hook the rendering bridge into Chromium's viz/compositor. Phase 0 W0.2 (`#57`) validates at runtime that frames still route through Carbonyl's bridge when Chromium has an X display in addition. Predicted outcome: **1 clean apply + 1–2 runtime triage passes**, not a revise-N-patches effort.
 - Slightly larger container image (Xorg + video driver + tooling — on the order of tens of MB).
 - One more process (Xorg) per container, which is mostly idle but uses some RAM/fds.
 

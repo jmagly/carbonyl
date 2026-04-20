@@ -36,13 +36,15 @@ flowchart LR
 
 **New question to answer**: Can Carbonyl build and run with `ozone_platform=x11`, preserving its terminal rendering, when deployed under Xorg-in-container, with uinput-emitted keystrokes arriving at Blink with `isTrusted: true`?
 
-**Workstreams**:
+**Workstreams** (status as of 2026-04-20):
 
-1. **Carbonyl x11-Ozone build**: change `args.gn` to `ozone_platform="x11"` + `ozone_platform_x11=true`; rebuild; verify patches 0001–0024 apply cleanly. Audit the rendering bridge patches (0003, 0006, 0009–0014) — these touch the compositor/viz layer and are the risk surface.
-2. **Container image**: `carbonyl-agent-qa-runner` Docker image bundles Xorg (with the `dummy` driver installed AND the `modesetting` driver installed — operator picks at runtime via `CARBONYL_GPU_MODE`), uinput passthrough, capture tools (`scrot`, `ffmpeg`).
-3. **isTrusted logger re-run**: inside the container, start Xorg, load `istrusted_logger.html` in the x11-Ozone Carbonyl, run `test_uinput_istrusted.py`. High-confidence PASS given the 2026-04-19 host-side result.
-4. **Capture validation**: `scrot` and `ffmpeg -f x11grab` produce images/video from `DISPLAY=:99` while Carbonyl is running.
-5. **Text-render parity**: terminal output from x11-Ozone Carbonyl matches (within fidelity tolerance) the headless-Ozone baseline on the same page.
+0. ✅ **W0.a host-side sanity check** (2026-04-19, grissom): uinput → host Xorg → real browser = `isTrusted: true` end-to-end. Validates the pipeline concept.
+1. ✅ **W0.1 patch paper-audit** (`#61` closed 2026-04-20): All 24 Carbonyl patches target `chromium/src/headless/` (the shell) not `ui/ozone/platform/headless/` (the Ozone backend). File-apply risk is 0/24. Semantic risk carries in 5/24 patches (`0003`, `0006`, `0009`, `0013`, `0023`) that hook the rendering bridge — validated at runtime in W0.2. Report: `.aiwg/reports/phase0-w01-patch-audit.md`.
+2. **W0.2 Carbonyl x11-Ozone build** (`#57`): change `args.gn` to `ozone_platform="x11"` + `ozone_platform_x11=true`; apply patches (expected clean); rebuild; runtime-validate the 5 yellow patches per the audit's risk register.
+3. **W0.3 Container image** (`carbonyl-agent#37`): `carbonyl-agent-qa-runner` Docker image bundles Xorg (`dummy` + `modesetting` drivers installed; operator picks at runtime via `CARBONYL_GPU_MODE`), uinput passthrough, capture tools (`scrot`, `ffmpeg`). Can proceed in parallel with W0.2 using a stand-in Carbonyl.
+4. **W0.4 In-container isTrusted re-run** (covered by `carbonyl-agent-qa#1`): reuse the driver + logger fixtures, run inside the container. High-confidence PASS.
+5. **W0.5 Capture validation** (covered by `carbonyl-agent-qa#1`): `scrot` / `ffmpeg -f x11grab` from `DISPLAY=:99` produces a non-blank framebuffer while Carbonyl renders.
+6. **W0.6 Text-render parity** (`#62`): terminal output from x11-Ozone Carbonyl matches (within fidelity tolerance) the headless-Ozone baseline on 3 reference pages.
 
 **Exit criteria** (gate to Phase 1):
 - All five workstreams PASS → ADR-002 approved, Option A confirmed, Phase 1 scope shifts per the new plan

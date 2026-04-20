@@ -47,7 +47,7 @@ gantt
 
 | Phase | Shape | Primary repo(s) | Gate exit criterion | State |
 |-------|-------|------------------|---------------------|-------|
-| **0** | Single spike | carbonyl + agent-qa | Carbonyl `ozone_platform=x11` build retains rendering + uinput→Xorg→Blink `isTrusted: true` in container (**ADR-002 rev 2 pivot 2026-04-19**) | Sanity check PASSED host-side; full container spike pending ADR-002 approval |
+| **0** | 6 workstreams (W0.a host sanity, W0.1 patch audit, W0.2 build, W0.3 container, W0.4+5 harness, W0.6 text parity) | carbonyl + agent + agent-qa | Carbonyl `ozone_platform=x11` build retains rendering + uinput→Xorg→Blink `isTrusted: true` in container + `scrot` capture + text parity | W0.a + W0.1 ✅; W0.2–W0.6 pending; tracker `#60` |
 | **1** | 5 workstreams, partial parallel | carbonyl + carbonyl-agent + carbonyl-agent-qa | x.com login advances past username on warmed profile in container | Tickets filed (#57 rescoped, #59 closed, agent #33, qa #1) |
 | **2** | Two parallel subtracks (2A fingerprint × 5, 2B humanization × 6) | carbonyl + carbonyl-agent + carbonyl-agent-qa | Turnstile + DataDome demo ≥90% pass on 100 fresh sessions | Filed at Phase 1 close |
 | **3** | Registry + egress + applier + QA | carbonyl-agent (primary) + carbonyl-agent-qa | Every persona: observed = declared on JA4 + JA4H + H2 + CreepJS | Filed (agent #34); ADR-005 pending |
@@ -154,6 +154,8 @@ Full sync workflow specified in `09-ci-plan.md`.
 - First pin of `jmagly/wreq` with Chrome 147 profile for corpus bootstrap
 
 **Sanity check completed (2026-04-19, grissom)**: `python-uinput` → host Xorg → real browser on `istrusted_logger.html` delivered `isTrusted: true` events. This validates the uinput half of the pipeline and supports the architectural pivot from "patch headless Ozone" to "run Xorg-in-container".
+
+**W0.1 patch audit completed (2026-04-20)**: All 24 Carbonyl patches target the `chromium/src/headless/` shell (Ozone-agnostic), not `ui/ozone/platform/headless/` (the backend being replaced). File-apply risk: 0/24. 5 patches carry runtime semantic risk for the rendering-bridge path — validated in W0.2. Phase 0 risk downgraded from "2–4 rebuild passes for patch triage" to "1 clean apply + 1–2 runtime triage passes". Report: `.aiwg/reports/phase0-w01-patch-audit.md` (commit `279eed2`). Closed `carbonyl#61`.
 
 **Open questions:**
 - Corpus provenance: use BrowserForge public corpus as-is, or sample our own from consented telemetry? Defer to Phase 3A kickoff
