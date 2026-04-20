@@ -39,7 +39,7 @@ flowchart LR
         RUST[Rust core<br/>src/input/, src/browser/]
         UINPUT[uinput emitter<br/>NEW: src/input/uinput.rs]
         BRIDGE[FFI bridge<br/>bridge.rs ↔ bridge.cc]
-        CHROMIUM[Patched Chromium<br/>headless Ozone + evdev wiring]
+        CHROMIUM[Patched Chromium<br/>ozone_platform=x11<br/>(Xorg in container reads evdev)]
         FP[Fingerprint patches<br/>navigator, WebGL, plugins]
     end
 
@@ -227,7 +227,7 @@ Following `docs/adr-001-language-architecture.md` format, the following ADRs sho
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| Wiring evdev into headless Ozone has Chromium-side complexity we don't foresee (thread coordination between Carbonyl FFI and EventThreadEvdev) | Medium | High | Phase 1 starts with a validation spike (Python uinput + existing Carbonyl) before committing to Chromium patches |
+| Carbonyl's rendering bridge patches may route differently under `ozone_platform=x11` than under `headless` (5 yellow patches per W0.1 audit) | Low (audit predicts clean apply) / Medium (runtime behavior) | Medium | Phase 0 W0.2 (`#57`) runtime-validates frame flow; if broken, fall back to ADR-002 Option C (rev-1 plan: patch headless Ozone with evdev) — PoC patch pre-committed at `roctinam/carbonyl-agent-qa/tests/spike/poc-chromium-patch.patch` |
 | Chromium upgrade rebases break new patches | High (over time) | Medium | Prefer flags/content-scripts; document every patch in `MAINTENANCE.md`; target rebase-friendliness |
 | Detection vendors update scoring faster than we can iterate | High | Medium | QA corpus in carbonyl-agent-qa runs nightly; regression detection catches vendor updates early |
 | uinput permissions friction in container/systemd-nspawn deployments | Medium | Low | Documentation + pre-flight `doctor` command in agent SDK |
