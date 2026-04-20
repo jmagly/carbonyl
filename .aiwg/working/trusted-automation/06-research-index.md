@@ -4,7 +4,9 @@ Consolidated findings from five parallel research tracks (R1–R5). Full outputs
 
 ## R1 — Headless Ozone evdev path (carbonyl repo, Chromium tree)
 
-**Question**: Does Carbonyl's headless Ozone platform read `/dev/input`, or can it be wired to?
+**Status (2026-04-19)**: Partly obsoleted by the plan pivot to `ozone_platform=x11` + Xorg-in-container (ADR-002 rev 2). The findings below remain accurate and are the reference for the **fallback path** (Option C in ADR-002) — retained in case the Phase 0 spike reveals the `x11` Ozone switch breaks Carbonyl's rendering bridge.
+
+**Question** (original): Does Carbonyl's headless Ozone platform read `/dev/input`, or can it be wired to?
 
 **Key findings** (all file:line verified in the Carbonyl tree):
 

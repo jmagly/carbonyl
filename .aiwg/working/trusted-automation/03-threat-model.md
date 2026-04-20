@@ -35,10 +35,14 @@ Green = addressed in Phases 1–2. Light red = Phase 3. Orange = partially addre
 A single boolean property on every DOM event. Set by Blink based on event provenance: real kernel input device → `true`; `element.dispatchEvent()` → `false`; CDP `Input.dispatchKeyEvent` → `true` (privileged process); direct `ForwardKeyboardEvent` FFI call (Carbonyl today) → `false`.
 
 ### Current Carbonyl exposure
-100% of events are `isTrusted: false`. React-controlled forms clear on next render, bot libraries refuse to fire handlers, MFA flows fail silently.
+100% of events are `isTrusted: false` in the current `ozone_platform=headless` build: synthetic dispatch via `ForwardKeyboardEvent`. React-controlled forms clear on next render, bot libraries refuse to fire handlers, MFA flows fail silently.
 
-### Mitigation
-See architecture §3.1. Wire `EventFactoryEvdev` into headless Ozone; events originate from `/dev/input/eventN` reads and carry proper provenance.
+### Mitigation (per ADR-002 rev 2 — revised 2026-04-19)
+Build Carbonyl with `ozone_platform=x11` and deploy under a containerized Xorg (driver = `dummy` for CPU, `modesetting`/vendor for GPU operator opt-in). Agent SDK emits keystrokes into the container via uinput (device passthrough `--device=/dev/uinput`). Xorg reads `/dev/input/eventN` and dispatches X11 events into Chromium exactly as it does on every normal Linux desktop. `isTrusted: true` follows by construction — no Chromium patch required.
+
+Validated 2026-04-19 by a host-side sanity check: `python-uinput` driver → kernel → host Xorg → real browser on `istrusted_logger.html` = `isTrusted: true` end-to-end.
+
+See architecture §3.1 for the revised sequence diagram.
 
 ### Residual risk
 Very low once implemented. `isTrusted` is a binary property; the kernel input pipeline cannot fake provenance to Blink.

@@ -70,40 +70,47 @@ flowchart LR
 
 ## 3. Component detail — the three critical paths
 
-### 3.1 Trusted input path (FR-1)
+### 3.1 Trusted input path (FR-1) — revised 2026-04-19 (see ADR-002 rev 2)
 
 ```mermaid
 sequenceDiagram
-    participant A as carbonyl-agent SDK
-    participant H as Humanizer (Rust in agent)
-    participant C as Carbonyl Rust core
-    participant U as uinput emitter
-    participant K as Linux kernel
-    participant E as evdev reader<br/>(Chromium Ozone)
-    participant B as Blink
+    participant A as carbonyl-agent SDK<br/>(Python, outside container)
+    participant H as Humanizer (Rust, in agent)
+    participant U as uinput (python-uinput or Rust)
+    participant K as Linux kernel<br/>/dev/uinput + /dev/input/eventN
+    participant X as Xorg (in container,<br/>driver=dummy or modesetting)
+    participant O as Chromium x11 Ozone
+    participant B as Blink (isTrusted=true)
 
     A->>H: type("hello", persona=fast_typist)
-    H->>H: generate keystroke schedule<br/>(log-logistic, bigram-aware)
+    H->>H: log-logistic schedule, bigram-aware
     loop each keystroke
-        H->>C: emit(key, ts)
-        C->>U: write EV_KEY KEY_H down + EV_SYN
-        U->>K: ioctl + write
-        K->>E: deliver on /dev/input/eventN
-        E->>B: ui::Event with isTrusted=true
-        C->>U: write EV_KEY KEY_H up + EV_SYN
+        H->>U: emit KEY_H down + EV_SYN
+        U->>K: write /dev/uinput
+        K->>X: deliver on /dev/input/eventN
+        X->>O: X11 KeyPress event (real provenance)
+        O->>B: ui::Event + isTrusted=true
+        H->>U: emit KEY_H up + EV_SYN
     end
 ```
 
-The critical architectural change: **Carbonyl's headless Ozone platform currently uses `StubInputController` and calls `ForwardKeyboardEvent()` directly on the RenderWidgetHost, bypassing the Ozone event source entirely**. For `isTrusted` to be `true`, events must flow through the `ui::PlatformEventSource` → `ui::EventFactoryEvdev` pipeline that Chrome OS already uses.
+The earlier draft of this section (commit `3a49b0b`) proposed patching Chromium's headless Ozone to wire in `EventFactoryEvdev`. That plan is now **shelved** in favor of a deployment-level fix: **run Carbonyl with `ozone_platform=x11` under a containerized Xorg**. The rationale is empirical — on 2026-04-19 a uinput spike on a real X11 host (grissom) confirmed `uinput → kernel → X → browser = isTrusted: true` works with stock Chromium when an X server sits in the middle. Combined with the deployment requirement to also capture visual screenshots of the rendered page alongside Carbonyl's terminal output (which itself requires an X server in the container), the decision to put Xorg in the container made the Chromium patch unnecessary.
 
-The good news from research track R1: the full `ui/events/ozone/evdev/` subsystem exists in the Carbonyl tree; it is just not compiled or wired into the headless platform (the BUILD.gn deps exclude it). The work is to:
+Key properties of this path:
 
-1. Add `//ui/events/ozone:evdev` to headless platform deps
-2. Replace `StubInputController` with `InputControllerEvdev` in `OzonePlatformHeadlessImpl::InitializeUI()`
-3. Instantiate `DeviceManager` scanning `/dev/input`
-4. Keep the existing `OnKeyPressInput`/`OnMouseXxxInput` callbacks available as a fallback (`--input-mode=synthetic`) for debugging
+- **No Chromium input patch** — stock `ozone_platform=x11` handles kernel input through the X server, same as every normal Linux desktop
+- **Kernel-pipeline provenance preserved** — events originate from a real `/dev/input/eventN` device, same property we wanted from the rev-1 approach
+- **Observability as a side effect** — `scrot`, `ffmpeg -f x11grab`, or `x11vnc` against `DISPLAY=:99` produce real browser screenshots/streams. This is what "alongside the text render" in the deployment requirement means in practice
+- **Operator GPU choice** — `CARBONYL_GPU_MODE=auto|cpu|gpu` env var drives `Xorg` to load `dummy` (CPU-only) or `modesetting`/vendor (GPU passthrough via `/dev/dri`)
+- **No `--input-mode=synthetic|uinput` flag in Carbonyl itself** — input injection moves entirely to the agent SDK side; Carbonyl just listens on its X display
 
-Alternative considered: write a new Ozone platform (`ozone_platform_carbonyl`) that merges headless rendering with evdev input. Rejected as higher-cost without offsetting benefit; the headless+evdev combo is the minimal change.
+**Phase 0 spike (revised)** validates:
+1. Carbonyl builds with `ozone_platform=x11`
+2. Carbonyl's rendering bridge patches (0001–0024) are compatible with `x11` Ozone (the real risk)
+3. `uinput → Xorg → Chromium` inside a container delivers `isTrusted: true` (high confidence, given the host-side result)
+4. `scrot`/`ffmpeg` capture a valid image from the same running Carbonyl
+
+Fallback: if (1) or (2) fails, fall back to rev-1's plan (patch headless Ozone with evdev). Tracked in ADR-002 as Option C.
 
 ### 3.2 Fingerprint normalization (FR-2)
 

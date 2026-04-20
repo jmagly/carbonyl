@@ -35,7 +35,7 @@ Mostly inherited from `docs/ci-cd-plan.md`. Additions for the initiative:
 | `check.yml` (existing, migrated) | PR, push main | Rust fmt + clippy + tests | 1+ |
 | `build-runtime.yml` (existing, migrated) | patch change; manual | Chromium build + runtime tarball | 1+ |
 | `patch-audit.yml` (**NEW**) | patch file change in `chromium/patches/` | Validates each patch applies cleanly on pinned Chromium; runs `scripts/patches.sh apply --dry-run` | 2 |
-| `initiative-smoke.yml` (**NEW**) | push main | Spin up Carbonyl with `--input-mode=uinput`; assert device creates and tears down cleanly | 1+ |
+| `initiative-smoke.yml` (**NEW**) | push main | Spin up Carbonyl x11 build inside `carbonyl-agent-qa-runner` container on `DISPLAY=:99`; confirm uinput→Xorg→Chromium path alive and `scrot` returns a non-blank framebuffer | 1+ |
 
 ### `carbonyl-agent`
 
@@ -233,8 +233,8 @@ Per-repo builder images:
 | Repo | Builder image | Contents | Notes |
 |------|---------------|----------|-------|
 | `carbonyl` | `git.integrolabs.net/roctinam/carbonyl-builder:sha-<pin>` | Ubuntu + depot_tools + Rust + clang | Existing; see `docs/ci-cd-plan.md` |
-| `carbonyl-agent` | `git.integrolabs.net/roctinam/carbonyl-agent-ci:sha-<pin>` | Python + Rust + minimal runtime deps | **New** |
-| `carbonyl-agent-qa` | `git.integrolabs.net/roctinam/carbonyl-agent-qa-runner:sha-<pin>` | Python + Carbonyl runtime bind-mount hooks + persistent profile volume | **New** |
+| `carbonyl-agent` | `git.integrolabs.net/roctinam/carbonyl-agent-ci:sha-<pin>` | Python + Rust + minimal runtime deps | **New**; no X |
+| `carbonyl-agent-qa` | `git.integrolabs.net/roctinam/carbonyl-agent-qa-runner:sha-<pin>` | Python + **Xorg (dummy + modesetting drivers)** + `python-uinput` + `scrot`/`ffmpeg`/`x11vnc` + Carbonyl x11 runtime + persistent profile volume | **New**; container entrypoint starts Xorg on `:99`, respects `CARBONYL_GPU_MODE` env |
 | `wreq` (roctinam/wreq) | `git.integrolabs.net/roctinam/wreq-ci:sha-<pin>` | Rust + BoringSSL build deps | **New** |
 | `carbonyl-fingerprint-corpus` | `git.integrolabs.net/roctinam/carbonyl-agent-ci:sha-<pin>` | Reuses agent-ci image for corpus validation | **Shared** |
 
@@ -246,12 +246,43 @@ Single `titan` runner, builder container pattern per `docs/ci-cd-plan.md`. No ch
 
 ### carbonyl-agent, carbonyl-agent-qa
 
+Per ADR-002 rev 2, integration and reference-site containers bundle **Xorg** (with both `dummy` and `modesetting` drivers installed so the entrypoint can pick at runtime) and pass `/dev/uinput` through. `CARBONYL_GPU_MODE=auto|cpu|gpu` env var picks the Xorg driver + Chromium GL backend; `auto` detects `/dev/dri/card0` presence.
+
 | Job class | Runner | Container | Notes |
 |-----------|--------|-----------|-------|
-| Python/Rust unit tests | generic (any capacity) | `carbonyl-agent-ci` builder (new, lightweight) | No Chromium deps; fast |
-| Integration with Carbonyl runtime | titan (only place Carbonyl binary lives) | `carbonyl-agent-ci` + bind-mount to runtime tarball | Heavier; gated per-PR |
-| Reference-site QA | titan | `carbonyl-agent-qa-runner` (includes network egress tolerance) | Nightly only; needs persistent profile volume for aged personas |
+| Python/Rust unit tests | generic (any capacity) | `carbonyl-agent-ci` builder (lightweight; no X) | No Chromium deps; fast |
+| Integration with Carbonyl runtime | titan | `carbonyl-agent-qa-runner` (Xorg + `dummy`/`modesetting` + uinput + capture tools + Carbonyl x11 build) | Heavier; `CARBONYL_GPU_MODE=cpu` in CI for determinism |
+| Reference-site QA | titan | same `carbonyl-agent-qa-runner` | Nightly; needs persistent profile volume for aged personas; `scrot`/`ffmpeg` capture alongside terminal render |
 | Persona capture (tls.peet.ws, creepjs fetch) | generic | `carbonyl-agent-ci` + Carbonyl runtime | Nightly; outbound-internet required |
+
+#### `carbonyl-agent-qa-runner` container contents
+
+- Ubuntu base (match carbonyl-builder OS version)
+- Xorg + `xserver-xorg-video-dummy` + `xserver-xorg-video-modesetting` + input drivers
+- `uinput` kernel module requires no in-container install — comes from host via `--device=/dev/uinput`
+- Capture tooling: `scrot`, `ffmpeg`, optionally `x11vnc` for remote-display streaming
+- Carbonyl x11 build + agent SDK + `python-uinput`
+- Entrypoint: `/usr/local/bin/carbonyl-agent-qa-entrypoint` picks driver + GL backend per `CARBONYL_GPU_MODE`, starts Xorg on `:99`, exports `DISPLAY=:99`, execs the job command
+
+#### Docker run patterns
+
+```bash
+# CPU (CI default; works anywhere)
+docker run --rm --device=/dev/uinput --group-add input \
+  -e CARBONYL_GPU_MODE=cpu \
+  carbonyl-agent-qa-runner  pytest tests/layer1
+
+# GPU operator opt-in
+docker run --rm --device=/dev/uinput --group-add input \
+  --device=/dev/dri --gpus all \
+  -e CARBONYL_GPU_MODE=gpu \
+  carbonyl-agent-qa-runner  pytest tests/layer1
+
+# Auto (tries GPU, falls back to CPU based on /dev/dri presence)
+docker run --rm --device=/dev/uinput --group-add input \
+  --device=/dev/dri:/dev/dri \
+  carbonyl-agent-qa-runner  pytest tests/layer1
+```
 
 ### carbonyl-fleet (Phase 4)
 

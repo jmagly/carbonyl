@@ -47,8 +47,8 @@ gantt
 
 | Phase | Shape | Primary repo(s) | Gate exit criterion | State |
 |-------|-------|------------------|---------------------|-------|
-| **0** | Single spike | carbonyl | uinput → Ozone evdev → Blink produces `isTrusted: true` | Filed; ADR-002 pending |
-| **1** | 5 workstreams, partial parallel | carbonyl + carbonyl-agent + carbonyl-agent-qa | x.com login advances past username on warmed profile | Tickets filed (#57, #59, agent #33, qa #1) |
+| **0** | Single spike | carbonyl + agent-qa | Carbonyl `ozone_platform=x11` build retains rendering + uinput→Xorg→Blink `isTrusted: true` in container (**ADR-002 rev 2 pivot 2026-04-19**) | Sanity check PASSED host-side; full container spike pending ADR-002 approval |
+| **1** | 5 workstreams, partial parallel | carbonyl + carbonyl-agent + carbonyl-agent-qa | x.com login advances past username on warmed profile in container | Tickets filed (#57 rescoped, #59 closed, agent #33, qa #1) |
 | **2** | Two parallel subtracks (2A fingerprint × 5, 2B humanization × 6) | carbonyl + carbonyl-agent + carbonyl-agent-qa | Turnstile + DataDome demo ≥90% pass on 100 fresh sessions | Filed at Phase 1 close |
 | **3** | Registry + egress + applier + QA | carbonyl-agent (primary) + carbonyl-agent-qa | Every persona: observed = declared on JA4 + JA4H + H2 + CreepJS | Filed (agent #34); ADR-005 pending |
 | **3E** | Trigger-gated; BoringSSL patching | carbonyl | Only if drift audit justifies | Deferred |
@@ -148,10 +148,12 @@ Full sync workflow specified in `09-ci-plan.md`.
 - Fingerprint corpus repo created (`roctinam/carbonyl-fingerprint-corpus`, private, Gitea #150) with `roctibot` as write collaborator
 
 **Immediate next:**
-- Phase 0 validation spike (uinput → Ozone → `isTrusted`)
-- ADR-002 authorship
-- CI plan approval (`09-ci-plan.md` + issues)
+- Full Phase 0 validation spike, now container-based: build Carbonyl `ozone_platform=x11`, package with Xorg+dummy/modesetting, run uinput→isTrusted test + visual capture in container (ADR-002 rev 2)
+- Finalize ADR-002 rev 2 (DRAFT → APPROVED post-spike)
+- Rescope #57, close #59, file replacement issues for container workstream and agent-side input module
 - First pin of `jmagly/wreq` with Chrome 147 profile for corpus bootstrap
+
+**Sanity check completed (2026-04-19, grissom)**: `python-uinput` → host Xorg → real browser on `istrusted_logger.html` delivered `isTrusted: true` events. This validates the uinput half of the pipeline and supports the architectural pivot from "patch headless Ozone" to "run Xorg-in-container".
 
 **Open questions:**
 - Corpus provenance: use BrowserForge public corpus as-is, or sample our own from consented telemetry? Defer to Phase 3A kickoff

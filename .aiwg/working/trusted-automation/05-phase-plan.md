@@ -30,53 +30,55 @@ flowchart LR
     style P3 stroke-dasharray: 5 5
 ```
 
-## Phase 0 — Validation spike
+## Phase 0 — Validation spike (revised 2026-04-19)
 
-**Objective**: Confirm the core architectural assumption before committing Chromium-patch work.
+**Context**: An earlier revision of this phase asked whether uinput events reach Blink via a Chromium evdev-in-headless-Ozone patch. That question was partly answered on 2026-04-19: a host-side sanity check proved uinput → kernel → X → browser = `isTrusted: true` works with stock Chromium when an X server is in the loop. Combined with the container-deployment requirement to capture visual screenshots alongside Carbonyl's terminal render (which also requires X in the container), the plan pivoted to **Xorg-in-container + Carbonyl `ozone_platform=x11`** (ADR-002 rev 2). The Phase 0 question changed with it.
 
-**Question to answer**: Will wiring `EventFactoryEvdev` into Carbonyl's headless Ozone make events dispatched from a user-space `/dev/uinput` device reach Blink with `isTrusted: true`?
+**New question to answer**: Can Carbonyl build and run with `ozone_platform=x11`, preserving its terminal rendering, when deployed under Xorg-in-container, with uinput-emitted keystrokes arriving at Blink with `isTrusted: true`?
 
-**Workstream** (1 agent, research+prototyping):
-- Build Carbonyl with an experimental patch that enables `//ui/events/ozone:evdev` in the headless platform BUILD.gn and swaps `StubInputController` for `InputControllerEvdev`
-- Create a Python script using the `python-uinput` library that emits a keypress to a virtual device
-- Load a test page with the Layer 1 `isTrusted` logger (see `04-test-strategy.md`)
-- Verify the keypress reaches the page with `isTrusted: true`
+**Workstreams**:
+
+1. **Carbonyl x11-Ozone build**: change `args.gn` to `ozone_platform="x11"` + `ozone_platform_x11=true`; rebuild; verify patches 0001–0024 apply cleanly. Audit the rendering bridge patches (0003, 0006, 0009–0014) — these touch the compositor/viz layer and are the risk surface.
+2. **Container image**: `carbonyl-agent-qa-runner` Docker image bundles Xorg (with the `dummy` driver installed AND the `modesetting` driver installed — operator picks at runtime via `CARBONYL_GPU_MODE`), uinput passthrough, capture tools (`scrot`, `ffmpeg`).
+3. **isTrusted logger re-run**: inside the container, start Xorg, load `istrusted_logger.html` in the x11-Ozone Carbonyl, run `test_uinput_istrusted.py`. High-confidence PASS given the 2026-04-19 host-side result.
+4. **Capture validation**: `scrot` and `ffmpeg -f x11grab` produce images/video from `DISPLAY=:99` while Carbonyl is running.
+5. **Text-render parity**: terminal output from x11-Ozone Carbonyl matches (within fidelity tolerance) the headless-Ozone baseline on the same page.
 
 **Exit criteria** (gate to Phase 1):
-- Keypress dispatched via uinput arrives at page with `isTrusted: true` ✓ → proceed to Phase 1
-- Keypress dispatched via uinput arrives with `isTrusted: false` or does not arrive → decision point: either (a) investigate the Ozone input pipeline deeper, or (b) fall back to CDP `Input.dispatchKeyEvent` and reduce Phase 1 scope
-- Document findings in `docs/adr-002-trusted-input-approach.md`
+- All five workstreams PASS → ADR-002 approved, Option A confirmed, Phase 1 scope shifts per the new plan
+- Build or text-render workstream fails → audit patch compatibility; escalate to patch-revision effort or fall back to ADR-002 Option C (rev-1 plan: patch headless Ozone with evdev)
+- isTrusted fails in-container (unusual) → diagnose; likely container-specific, not architectural
 
-**Deliverable**: ADR-002 committed; phase-1 scope decided.
+**Deliverable**: ADR-002 finalized; Phase 1 issues updated per the container-based path; rendering bridge patch audit report (filed in `.aiwg/reports/`).
 
-## Phase 1 — Trusted input (Layer 1) + session profile (Layer 6 partial)
+## Phase 1 — Trusted input (Layer 1) + session profile (Layer 6 partial) — revised 2026-04-19
 
-**Objective**: X/Twitter login flow advances past username→password→MFA with `carbonyl-agent` driving a Carbonyl instance.
+**Objective**: X/Twitter login flow advances past username→password→MFA with `carbonyl-agent` driving a containerized Carbonyl (`ozone_platform=x11` under Xorg + uinput).
 
-**Workstreams** (parallelism map: W1.1 ∥ W1.2, then W1.3; W1.4 ∥ W1.1 from the start):
+**Workstreams** (per ADR-002 rev 2; W1.1 and W1.2 are substantially simpler than rev 1):
 
 | ID | Workstream | Repo | Issue | Parallel with |
 |----|-----------|------|-------|---------------|
-| W1.1 | Enable evdev in Chromium headless Ozone + patch-set | carbonyl | #57 (repurpose) | W1.2, W1.4 |
-| W1.2 | Rust uinput emitter + CLI flags `--input-mode`, `--uinput-device-name` | carbonyl | NEW carbonyl#A | W1.1 |
-| W1.3 | Wire carbonyl-agent SDK to pick `uinput` backend; add backend-switch API | carbonyl-agent | NEW agent#A | depends on W1.1, W1.2 |
-| W1.4 | Durable user-data-dir profile management in agent SDK | carbonyl-agent | NEW agent#B | W1.1 (fully independent) |
-| W1.5 | Layer 1 + Layer 6-partial test harness | carbonyl-agent-qa | NEW qa#A | anytime |
+| W1.1 | Carbonyl build variant with `ozone_platform=x11`; patch-compatibility audit for patches 0001–0024 under x11 Ozone | carbonyl | #57 (rescoped) | W1.2, W1.4 |
+| W1.2 | Container image (`carbonyl-agent-qa-runner`): Xorg with `dummy` + `modesetting` drivers; uinput passthrough; entrypoint switching on `CARBONYL_GPU_MODE` | carbonyl-agent (or new builder repo) | NEW (replaces #59) | W1.1 |
+| W1.3 | carbonyl-agent Python uinput emitter module (wraps `python-uinput`); wired into the SDK's `type()` / `click()` / `mouse_move()` APIs | carbonyl-agent | NEW agent#C-input | depends on W1.2 |
+| W1.4 | Durable user-data-dir profile management in agent SDK | carbonyl-agent | #33 (unchanged) | W1.1 (independent) |
+| W1.5 | Layer 1 + Layer 6-partial test harness, **run inside the container** | carbonyl-agent-qa | #1 (revised container shape) | anytime |
 
 **Agent roles**:
-- W1.1: Chromium C++ developer (patch, build, iterate; long compile cycles)
-- W1.2: Rust systems developer (uinput, libc, CLI)
-- W1.3: SDK integrator (Python + Rust FFI in agent)
+- W1.1: Chromium C++ / GN developer (patch audit + x11 Ozone build)
+- W1.2: Container / Dockerfile author (Xorg + driver packaging + entrypoint)
+- W1.3: Python/Rust SDK developer
 - W1.4: SDK developer (profile lifecycle)
-- W1.5: QA/test engineer
+- W1.5: QA engineer (containerized harness)
 
-**Pass estimate**: W1.1 is the long-tail due to Chromium rebuilds; expect multiple iteration passes. W1.2–W1.5 are single-pass with review.
+**Pass estimate**: W1.1 is the dominant uncertainty — whether existing rendering patches survive the Ozone switch. Rebuild cycle per audit iteration is hours. W1.2–W1.5 are single-pass with review. No Rust uinput crate in Carbonyl itself; input emission lives entirely in carbonyl-agent (Python-first, optional Rust speedup later).
 
 **Exit criteria** (gate to Phase 2):
-- FR-1.1 through FR-1.5 pass their acceptance tests (§04 Layer 1)
-- Layer 1 test harness nightly-passes on `main`
-- x.com login flow advances past username step on a warmed profile (manual verification acceptable for gate)
+- FR-1.1 through FR-1.5 pass their acceptance tests (§04 Layer 1) in the container harness
+- x.com login flow advances past username step on a warmed profile in the container (manual verification acceptable for gate)
 - ADR-003 drafted (humanization location decision) in prep for Phase 2
+- Visual capture (`scrot`/`ffmpeg`) works alongside terminal render — documented in a `docs/capture-streaming.md` operator guide
 
 ## Phase 2 — Fingerprint normalization + humanization (Layers 2, 3, 4)
 
