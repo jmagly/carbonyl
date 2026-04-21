@@ -190,6 +190,9 @@ jobs:
                 if [ -d "$d/.git" ]; then
                   echo "[reset] cleaning $d"
                   cd "$d"
+                  # Clean up interrupted git am / rebase state first.
+                  git am --abort 2>/dev/null || true
+                  git rebase --abort 2>/dev/null || true
                   git reset --hard HEAD
                   git clean -fd || true
                 fi
