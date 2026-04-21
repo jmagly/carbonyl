@@ -172,6 +172,30 @@ jobs:
               ;;
           esac
 
+      - name: Reset Chromium source to clean state (in container)
+        # Belt-and-suspenders against the state leftover from prior failed
+        # builds. patches.sh expects a clean tree (at either the patched
+        # or upstream-baseline HEAD). Interrupted prior runs can leave
+        # embedded git repos under third_party/* in an "added" state that
+        # blocks `git am`. This step resets + cleans up.
+        run: |
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:/workspace" \
+            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash -c '
+              git config --global --add safe.directory "*"
+              for d in /chromium/src /chromium/src/third_party/skia /chromium/src/third_party/webrtc; do
+                if [ -d "$d/.git" ]; then
+                  echo "[reset] cleaning $d"
+                  cd "$d"
+                  git reset --hard HEAD
+                  git clean -fd || true
+                fi
+              done
+            '
+
       - name: Apply patches to Chromium source (in container)
         run: |
           docker run --rm \
