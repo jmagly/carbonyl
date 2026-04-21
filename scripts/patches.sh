@@ -37,8 +37,14 @@ if [[ "$1" == "apply" ]]; then
         # the build but aren't considered part of any patching operation.
         git reset --hard "$upstream_sha"
 
-        echo "Applying patches from $patches_dir.."
-        git am --committer-date-is-author-date "$patches_dir"/*
+        # Skip git am when patches dir is empty — current state for
+        # skia and webrtc, which have no Carbonyl-specific patches yet.
+        if ! compgen -G "$patches_dir/*.patch" > /dev/null; then
+            echo "No patches in $patches_dir — skipping git am"
+        else
+            echo "Applying patches from $patches_dir.."
+            git am --committer-date-is-author-date "$patches_dir"/*.patch
+        fi
 
         "$CARBONYL_ROOT/scripts/restore-mtime.sh" "$upstream_sha"
     }
