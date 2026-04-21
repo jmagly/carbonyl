@@ -42,8 +42,11 @@ RUN apt-get update && apt-get install -y \
     # - pkg-config: locates system libraries
     gperf bison flex pkg-config \
     # Chromium build-time + runtime dependencies
+    # - libgbm1, libegl1, libgl1: needed at build time when the build
+    #   system actually runs tool binaries like v8_context_snapshot_generator
     libasound2 libexpat1 libfontconfig1 libnss3 \
     libdbus-1-dev libglib2.0-dev libnss3-dev libxtst-dev \
+    libgbm1 libegl1 libgl1 libxkbcommon0 \
     # Tooling
     jq \
     ca-certificates \
