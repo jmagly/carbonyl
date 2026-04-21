@@ -183,7 +183,13 @@ jobs:
             -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
             -w /workspace \
             "${BUILDER_IMAGE}" \
-            bash -c 'source scripts/env.sh && bash scripts/patches.sh apply'
+            bash -c '
+              # Belt-and-suspenders: set safe.directory at runtime too, so
+              # this works even against a pre-fix builder image.
+              git config --global --add safe.directory "*"
+              source scripts/env.sh
+              bash scripts/patches.sh apply
+            '
 
       - name: Run gn gen (in container)
         run: |

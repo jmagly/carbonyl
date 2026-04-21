@@ -60,10 +60,18 @@ RUN curl -sSf https://sh.rustup.rs | sh -s -- -y \
     echo 'linker = "aarch64-linux-gnu-gcc"' >> /usr/local/cargo/config.toml && \
     rustc --version && cargo --version
 
+# ── Git safe.directory ────────────────────────────────────────────────────────
+# The build bind-mounts /chromium/src (and the workspace) into the container
+# from the host runner. git refuses to operate on repos it thinks have
+# "dubious ownership" when uid(file) != uid(process). Allow any directory
+# system-wide inside this image — all git access here is trusted CI.
+RUN git config --system --add safe.directory '*'
+
 # ── Verify tools ──────────────────────────────────────────────────────────────
 RUN ninja --version && \
     python3 --version && \
     curl --version | head -1 && \
-    jq --version
+    jq --version && \
+    git --version
 
 WORKDIR /workspace
