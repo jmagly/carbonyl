@@ -91,9 +91,10 @@ jobs:
 
       - name: Log in to registry (for pulling the builder image)
         run: |
+          # Use github.actor (Gitea aliases the github context). Fortemi pattern.
           echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
             docker login git.integrolabs.net \
-              -u "${{ gitea.actor }}" \
+              -u "${{ github.actor }}" \
               --password-stdin
 
       - name: Pull builder image
