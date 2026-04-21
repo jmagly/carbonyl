@@ -1,19 +1,21 @@
 # build-runtime.yml — Full Chromium build and runtime upload
 #
-# Builds headless_shell + libcarbonyl.so, packages as a runtime tarball, and
-# uploads to Gitea releases tagged `runtime-<hash>`.
+# Migrated to run inside the pinned builder container per issue #51.
+# All build steps execute inside `git.integrolabs.net/roctinam/carbonyl-builder`
+# (pinned by SHA tag; never :latest). The host retains only Docker +
+# the Chromium source checkout at /srv/chromium/src on titan.
 #
-# IMPORTANT: This job requires the Chromium source checkout to be present on
-# the runner at the path specified by CHROMIUM_SRC (set in scripts/env.sh).
-# The checkout is ~30 GB and is maintained on the build host, not in CI.
+# Issue #57 adds the `ozone_platform` workflow_dispatch input so we can
+# build either the legacy headless Ozone variant, the new x11 Ozone
+# variant, or both. args.gn is edited in-place for the duration of the
+# build; no commit required to change ozone_platform.
+#
+# Reference: Fortemi/fortemi .gitea/workflows/ci-builder.yaml
+#            docs/ci-cd-plan.md §"Target architecture"
 #
 # Triggered by:
-#   - workflow_dispatch (manual — primary way to trigger a runtime build)
-#   - push to main when patch files or gclient config change
-#
-# After a successful build the runtime tarball is uploaded to Gitea releases
-# tagged `runtime-<hash>`. build-local.sh on developer machines will then
-# pull the new runtime automatically.
+#   - workflow_dispatch (primary — manually trigger a runtime build)
+#   - push to main when patch files, gclient config, or args.gn change
 
 name: Build Runtime
 
@@ -24,122 +26,265 @@ on:
         description: 'Target architecture (amd64 or arm64)'
         required: false
         default: 'amd64'
+      ozone_platform:
+        description: 'Chromium Ozone platform variant to build'
+        required: false
+        default: 'headless'
+        type: choice
+        options:
+          - headless
+          - x11
+          - both
+      builder_image_tag:
+        description: 'carbonyl-builder image tag (sha-<7>, or leave empty for latest)'
+        required: false
+        default: ''
+      ninja_jobs:
+        description: 'ninja -j parallelism (default: half of host cores)'
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
       - 'chromium/.gclient'
       - 'chromium/patches/**'
-      - 'src/bridge/**'
+      - 'src/**'
+      - 'src/browser/args.gn'
+      - 'build/Dockerfile.builder'
+      - '.gitea/workflows/build-runtime.yml'
 
 env:
   CARGO_TERM_COLOR: always
+  # Path on titan where the Chromium source + depot_tools live across CI runs.
+  # Managed operationally (see docs/ci-runner-titan.md); not in this workflow's scope.
+  HOST_CARBONYL_DIR: /srv/carbonyl
+  HOST_CHROMIUM_SRC_DIR: /srv/carbonyl/chromium/src
 
 jobs:
   build-runtime:
-    name: Build Chromium Runtime (${{ github.event.inputs.arch || 'amd64' }})
+    name: Build runtime (${{ github.event.inputs.ozone_platform || 'headless' }} / ${{ github.event.inputs.arch || 'amd64' }})
     runs-on: titan
     timeout-minutes: 240
 
     steps:
-      - name: Checkout carbonyl
+      - name: Resolve builder image
         run: |
-          git clone --depth 1 --branch ${GITHUB_REF_NAME:-main} \
-            https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git .
-          git checkout ${GITHUB_SHA:-HEAD}
+          DEFAULT_TAG="latest"
+          TAG="${{ github.event.inputs.builder_image_tag }}"
+          if [ -z "$TAG" ]; then TAG="$DEFAULT_TAG"; fi
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:${TAG}"
+          echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "[resolve] using builder image: ${IMAGE}"
 
-      - name: Setup environment
+      - name: Resolve ninja parallelism
+        # Default: half of the host's core count, rounded down. Keeps other
+        # processes on titan responsive.
         run: |
-          source ~/.cargo/env 2>/dev/null || true
-          source scripts/env.sh
-          echo "CHROMIUM_SRC=${CHROMIUM_SRC}" >> $GITHUB_ENV
-          echo "Triple: $(scripts/platform-triple.sh)"
-          echo "Runtime hash: $(scripts/runtime-hash.sh)"
+          J="${{ github.event.inputs.ninja_jobs }}"
+          if [ -z "$J" ]; then
+            CORES=$(nproc)
+            J=$(( CORES / 2 ))
+            [ "$J" -lt 1 ] && J=1
+          fi
+          echo "NINJA_JOBS=${J}" >> "$GITHUB_ENV"
+          echo "[resolve] ninja parallelism: -j ${J}"
 
-      - name: Apply patches to Chromium source
+      - name: Log in to registry (for pulling the builder image)
         run: |
-          source scripts/env.sh
-          echo "Applying carbonyl patches to ${CHROMIUM_SRC}..."
-          bash scripts/patches.sh apply
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net \
+              -u "${{ gitea.actor }}" \
+              --password-stdin
 
-      - name: Build libcarbonyl (Rust)
+      - name: Pull builder image
         run: |
-          source ~/.cargo/env 2>/dev/null || true
+          docker pull "${BUILDER_IMAGE}"
+
+      - name: Checkout carbonyl (workspace, not the source tree)
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 50 --branch "${GITHUB_REF_NAME:-main}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          git checkout "${GITHUB_SHA:-HEAD}"
+          echo "[checkout] workspace: ${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Sync workspace → host Chromium checkout
+        # The Chromium source checkout lives at HOST_CHROMIUM_SRC_DIR on titan,
+        # NOT in the workspace. We sync the patch set, scripts, and args.gn
+        # from the workspace into HOST_CARBONYL_DIR so the in-container build
+        # uses this commit's files.
+        run: |
+          test -d "${HOST_CHROMIUM_SRC_DIR}" || {
+            echo "[sync] ERROR: ${HOST_CHROMIUM_SRC_DIR} missing on titan."
+            echo "  Run titan bootstrap first; see docs/ci-runner-titan.md."
+            exit 1
+          }
+          # Sync changed files from workspace to host repo dir.
+          # Excludes preserve the pre-existing 150 GB Chromium checkout.
+          rsync -a \
+            --exclude='.git/' \
+            --exclude='chromium/src/' \
+            --exclude='chromium/depot_tools/' \
+            --exclude='target/' \
+            "${GITHUB_WORKSPACE}/.repo-clone/" "${HOST_CARBONYL_DIR}/"
+
+      - name: Apply Ozone platform override for this build
+        # Non-destructive: we keep a backup of args.gn so the host checkout
+        # retains its canonical headless state across runs.
+        run: |
+          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          ARGS_FILE="${HOST_CARBONYL_DIR}/src/browser/args.gn"
+
+          cp "${ARGS_FILE}" "${ARGS_FILE}.bak"
+          case "${OZONE}" in
+            headless)
+              echo "[ozone] keeping args.gn as-is (headless default)"
+              ;;
+            x11)
+              # Switch to x11 Ozone. Per the W0.1 paper audit
+              # (.aiwg/reports/phase0-w01-patch-audit.md) this should apply
+              # cleanly at the patch level; runtime validation of the 5
+              # yellow patches happens during the build's first runtime
+              # smoke test.
+              sed -i 's/^ozone_platform = "headless"/ozone_platform = "x11"/' "${ARGS_FILE}"
+              sed -i 's/^ozone_platform_x11 = false/ozone_platform_x11 = true/' "${ARGS_FILE}"
+              # x11 Ozone needs xkbcommon for keyboard layout handling.
+              sed -i 's/^use_xkbcommon = false/use_xkbcommon = true/' "${ARGS_FILE}"
+              echo "[ozone] switched args.gn to x11"
+              grep -E "^ozone_platform|^use_xkbcommon" "${ARGS_FILE}"
+              ;;
+            both)
+              # Build BOTH ozone platforms in one binary — supports Phase 0
+              # W0.6 text-render parity tests (same carbonyl binary, two
+              # ozone targets selectable via --ozone-platform runtime flag).
+              sed -i 's/^ozone_platform = "headless"/ozone_platform = "headless"/' "${ARGS_FILE}"
+              sed -i 's/^ozone_platform_x11 = false/ozone_platform_x11 = true/' "${ARGS_FILE}"
+              sed -i 's/^use_xkbcommon = false/use_xkbcommon = true/' "${ARGS_FILE}"
+              # ozone_platform_headless defaults to true; leave alone.
+              echo "[ozone] built both headless + x11 (--ozone-platform selects at runtime)"
+              ;;
+            *)
+              echo "[ozone] ERROR: unknown ozone_platform: ${OZONE}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Apply patches to Chromium source (in container)
+        run: |
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:/workspace" \
+            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
+            -e CARBONYL_ROOT=/workspace \
+            -e CHROMIUM_ROOT=/chromium \
+            -e CHROMIUM_SRC=/chromium/src \
+            -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash -c 'source scripts/env.sh && bash scripts/patches.sh apply'
+
+      - name: Run gn gen (in container)
+        run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          bash scripts/build.sh Default ${CPU} CARBONYL_SKIP_CARGO_BUILD=
+          OUT_DIR="out/Default-${{ github.event.inputs.ozone_platform || 'headless' }}"
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:/workspace" \
+            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
+            -e CARBONYL_ROOT=/workspace \
+            -e CHROMIUM_SRC=/chromium/src \
+            -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash -c "
+              source scripts/env.sh
+              cp src/browser/args.gn /chromium/src/${OUT_DIR}/args.gn 2>/dev/null || {
+                mkdir -p /chromium/src/${OUT_DIR}
+                cp src/browser/args.gn /chromium/src/${OUT_DIR}/args.gn
+              }
+              cd /chromium/src
+              gn gen ${OUT_DIR}
+            "
+          echo "OUT_DIR=${OUT_DIR}" >> "$GITHUB_ENV"
 
-          # Copy so into out/Default for the ninja link step
-          TRIPLE=$(scripts/platform-triple.sh)
-          cp build/${TRIPLE}/release/libcarbonyl.so chromium/src/out/Default/
-
-      - name: Build headless_shell (Chromium)
+      - name: Build libcarbonyl (Rust, in container)
         run: |
-          source scripts/env.sh
-          echo "Running: ninja -C ${CHROMIUM_SRC}/out/Default headless:headless_shell"
-          ninja -C "${CHROMIUM_SRC}/out/Default" headless:headless_shell
+          CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:/workspace" \
+            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
+            -e CARBONYL_ROOT=/workspace \
+            -e CHROMIUM_SRC=/chromium/src \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash -c "bash scripts/build.sh ${OUT_DIR} ${CPU} CARBONYL_SKIP_CARGO_BUILD="
+
+      - name: Build headless_shell (Chromium, in container)
+        run: |
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:/workspace" \
+            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
+            -e CARBONYL_ROOT=/workspace \
+            -e CHROMIUM_SRC=/chromium/src \
+            -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash -c "
+              source scripts/env.sh
+              ninja -C /chromium/src/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
+            "
 
       - name: Copy runtime binaries
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          bash scripts/copy-binaries.sh Default "${CPU}"
-          TRIPLE=$(scripts/platform-triple.sh "${CPU}")
-          echo "TRIPLE=${TRIPLE}" >> $GITHUB_ENV
-          ls -lh build/pre-built/${TRIPLE}/
+          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:/workspace" \
+            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
+            -e CARBONYL_ROOT=/workspace \
+            -e CHROMIUM_SRC=/chromium/src \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash -c "bash scripts/copy-binaries.sh ${OUT_DIR} ${CPU}"
+          TRIPLE=$(bash "${HOST_CARBONYL_DIR}/scripts/platform-triple.sh" "${CPU}")
+          echo "TRIPLE=${TRIPLE}" >> "$GITHUB_ENV"
+          ls -lh "${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}/" | head
 
       - name: Smoke test binary
         run: |
-          source scripts/env.sh
           TRIPLE="${{ env.TRIPLE }}"
-          BINARY="build/pre-built/${TRIPLE}/carbonyl"
-          LD_LIBRARY_PATH="build/pre-built/${TRIPLE}" ${BINARY} --version
+          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          BINARY="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}/carbonyl"
+          LD_LIBRARY_PATH="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}" \
+            "${BINARY}" --version
+          echo "[smoke] built carbonyl ${OZONE}/${TRIPLE}"
 
-      - name: Smoke test b64 text capture
+      - name: Restore args.gn to canonical state
+        # So the next CI run sees the canonical (headless) args.gn, not our
+        # temporary x11 override.
+        if: always()
         run: |
-          CAPTURE_SECONDS=10 bash scripts/test-b64-text.sh
+          ARGS_FILE="${HOST_CARBONYL_DIR}/src/browser/args.gn"
+          if [ -f "${ARGS_FILE}.bak" ]; then
+            mv "${ARGS_FILE}.bak" "${ARGS_FILE}"
+            echo "[cleanup] restored args.gn"
+          fi
 
       - name: Upload runtime to Gitea releases
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          bash scripts/runtime-push.sh "${CPU}"
+          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          cd "${HOST_CARBONYL_DIR}"
+          # runtime-push.sh hashes the tarball and uploads as runtime-<hash>.
+          # For x11/both variants, prepend the ozone tag so different variants
+          # don't collide on hash if content happens to match.
+          CARBONYL_OZONE_TAG="${OZONE}" bash scripts/runtime-push.sh "${CPU}"
 
       - name: Upload tarball as workflow artifact
         uses: actions/upload-artifact@v3
         with:
-          name: runtime-${{ env.TRIPLE }}
-          path: build/pre-built/${{ env.TRIPLE }}.tgz
-          retention-days: 7
-
-  build-builder:
-    name: Build & Push Builder Image
-    runs-on: titan
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - name: Checkout
-        run: |
-          git clone --depth 1 --branch ${GITHUB_REF_NAME:-main} \
-            https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git .
-          git checkout ${GITHUB_SHA:-HEAD}
-
-      - name: Log in to Gitea registry
-        run: |
-          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
-            docker login git.integrolabs.net -u ${{ gitea.actor }} --password-stdin
-
-      - name: Build and push builder image
-        run: |
-          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-          docker build \
-            -f build/Dockerfile.builder \
-            --build-arg BUILD_DATE=${BUILD_DATE} \
-            -t ${IMAGE}:latest \
-            -t ${IMAGE}:sha-${SHORT_SHA} \
-            .
-
-          docker push ${IMAGE}:latest
-          docker push ${IMAGE}:sha-${SHORT_SHA}
-
-          echo "Pushed: ${IMAGE}:latest, :sha-${SHORT_SHA}"
+          name: runtime-${{ github.event.inputs.ozone_platform || 'headless' }}-${{ env.TRIPLE }}
+          path: ${{ env.HOST_CARBONYL_DIR }}/build/pre-built/${{ env.TRIPLE }}.tgz
+          retention-days: 30

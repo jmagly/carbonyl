@@ -1,0 +1,106 @@
+# build-builder.yml — Build and publish the Carbonyl builder image
+#
+# Decoupled from build-runtime.yml (issue #49) so the builder image has
+# its own cadence, separate from runtime rebuilds.
+#
+# Triggers:
+#   - push to main that changes build/Dockerfile.builder or this workflow
+#   - manual workflow_dispatch
+#
+# Publishes to:
+#   - git.integrolabs.net/roctinam/carbonyl-builder:sha-<7>  (pinned, canonical)
+#   - git.integrolabs.net/roctinam/carbonyl-builder:latest   (floating; downstream
+#     workflows should NOT pin to :latest — always pin to :sha-<7>)
+#
+# Reference: Fortemi/fortemi .gitea/workflows/build-builder.yaml
+# CI plan: docs/ci-cd-plan.md §"Planned workflows"
+
+name: Build Builder Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'build/Dockerfile.builder'
+      - '.gitea/workflows/build-builder.yml'
+  workflow_dispatch:
+    inputs:
+      force_latest:
+        description: 'Also push :latest tag (use when promoting a builder version)'
+        required: false
+        default: 'false'
+
+jobs:
+  build-and-publish:
+    name: Build + push carbonyl-builder
+    # Runs on titan but on the BARE host (docker daemon only). Inside-container
+    # doesn't apply here — we're building the container itself.
+    runs-on: titan
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout carbonyl
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${GITHUB_REF_NAME:-main}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          git checkout "${GITHUB_SHA:-HEAD}"
+          echo "REPO_DIR=${GITHUB_WORKSPACE}/.repo-clone" >> "$GITHUB_ENV"
+
+      - name: Log in to Gitea container registry
+        run: |
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net \
+              -u "${{ gitea.actor }}" \
+              --password-stdin
+
+      - name: Resolve tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "SHORT_SHA=${SHORT_SHA}" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=${BUILD_DATE}" >> "$GITHUB_ENV"
+          echo "[build-builder] IMAGE=${IMAGE}  SHA=${SHORT_SHA}"
+
+      - name: Build builder image
+        working-directory: ${{ env.REPO_DIR }}
+        run: |
+          docker build \
+            -f build/Dockerfile.builder \
+            --build-arg "BUILD_DATE=${BUILD_DATE}" \
+            -t "${IMAGE}:sha-${SHORT_SHA}" \
+            .
+
+      - name: Push sha-pinned tag (always)
+        run: |
+          docker push "${IMAGE}:sha-${SHORT_SHA}"
+          echo "[build-builder] published ${IMAGE}:sha-${SHORT_SHA}"
+
+      - name: Push :latest (opt-in)
+        # Only push :latest on manual dispatch with force_latest=true, or on
+        # push-to-main (not PRs). This matches the CI-plan decision that
+        # downstream workflows must pin to sha tags, never :latest.
+        if: |
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' &&
+           github.event.inputs.force_latest == 'true')
+        run: |
+          docker tag "${IMAGE}:sha-${SHORT_SHA}" "${IMAGE}:latest"
+          docker push "${IMAGE}:latest"
+          echo "[build-builder] published ${IMAGE}:latest (promoted sha-${SHORT_SHA})"
+
+      - name: Summary
+        run: |
+          echo "Published:"
+          echo "  ${IMAGE}:sha-${SHORT_SHA}"
+          if [ "${{ github.event_name }}" = "push" ] || \
+             [ "${{ github.event.inputs.force_latest }}" = "true" ]; then
+            echo "  ${IMAGE}:latest → sha-${SHORT_SHA}"
+          fi
+          echo ""
+          echo "Downstream workflows should pin to the sha tag:"
+          echo "  container: ${IMAGE}:sha-${SHORT_SHA}"
