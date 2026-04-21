@@ -251,7 +251,7 @@ jobs:
             -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
             -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
-            bash -c "bash scripts/build.sh ${OUT_DIR} ${CPU} CARBONYL_SKIP_CARGO_BUILD="
+            bash -c "bash scripts/build.sh ${OUT_DIR} ${CPU}"
 
       - name: Build headless_shell (Chromium, in container)
         run: |
