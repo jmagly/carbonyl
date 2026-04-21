@@ -221,7 +221,9 @@ jobs:
       - name: Run gn gen (in container)
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          OUT_DIR="out/Default-${{ github.event.inputs.ozone_platform || 'headless' }}"
+          # scripts/build.sh and scripts/copy-binaries.sh prepend "out/"
+          # themselves; pass OUT_DIR as just the subdir name.
+          OUT_DIR="Default-${{ github.event.inputs.ozone_platform || 'headless' }}"
           docker run --rm \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
             -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
@@ -231,12 +233,12 @@ jobs:
             "${BUILDER_IMAGE}" \
             bash -c "
               source scripts/env.sh
-              cp ${HOST_CARBONYL_DIR}/src/browser/args.gn ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR}/args.gn 2>/dev/null || {
-                mkdir -p ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR}
-                cp ${HOST_CARBONYL_DIR}/src/browser/args.gn ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR}/args.gn
+              cp ${HOST_CARBONYL_DIR}/src/browser/args.gn ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}/args.gn 2>/dev/null || {
+                mkdir -p ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}
+                cp ${HOST_CARBONYL_DIR}/src/browser/args.gn ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}/args.gn
               }
               cd ${HOST_CHROMIUM_SRC_DIR}
-              gn gen ${OUT_DIR}
+              gn gen out/${OUT_DIR}
             "
           echo "OUT_DIR=${OUT_DIR}" >> "$GITHUB_ENV"
 
@@ -262,7 +264,7 @@ jobs:
             "${BUILDER_IMAGE}" \
             bash -c "
               source scripts/env.sh
-              ninja -C ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
+              ninja -C ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
             "
 
       - name: Copy runtime binaries
