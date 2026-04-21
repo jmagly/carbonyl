@@ -14,34 +14,38 @@ skia_upstream="d203629ce869dbb142ca186c7da60a97cfb1550d"      # DEPS @ 147.0.772
 webrtc_upstream="9179833d210d105aede5d4ec516734a6bd1ef2e8"    # DEPS @ 147.0.7727.94
 
 if [[ "$1" == "apply" ]]; then
-    echo "Stashing Chromium changes.."
-    git add -A .
-    git stash
+    # Force-reset each repo to its upstream baseline. The old
+    # "git add -A . && git stash" approach didn't handle Chromium's
+    # nested/embedded git repos under third_party (not submodules; not
+    # gitignored; their own .git dirs). CI has no WIP to protect, and
+    # interrupted runs left embedded-repo entries in the index that
+    # blocked subsequent `git am` calls with "Dirty index" errors.
 
-    echo "Applying Chromium patches.."
-    git checkout "$chromium_upstream"
-    git am --committer-date-is-author-date "$CARBONYL_ROOT/chromium/patches/chromium"/*
-    "$CARBONYL_ROOT/scripts/restore-mtime.sh" "$chromium_upstream"
+    reset_and_apply() {
+        local repo_path="$1"
+        local upstream_sha="$2"
+        local patches_dir="$3"
 
-    echo "Stashing Skia changes.."
-    cd "$CHROMIUM_SRC/third_party/skia"
-    git add -A .
-    git stash
+        echo "Resetting $repo_path to $upstream_sha.."
+        cd "$repo_path"
+        # Abort any stalled git-am/rebase from interrupted prior runs.
+        git am --abort >/dev/null 2>&1 || true
+        git rebase --abort >/dev/null 2>&1 || true
+        # Force-move to upstream; resets index + working tree to match.
+        # Doesn't touch untracked files (including embedded third_party
+        # repos on disk), which is what we want — they stay available for
+        # the build but aren't considered part of any patching operation.
+        git reset --hard "$upstream_sha"
 
-    echo "Applying Skia patches.."
-    git checkout "$skia_upstream"
-    git am --committer-date-is-author-date "$CARBONYL_ROOT/chromium/patches/skia"/*
-    "$CARBONYL_ROOT/scripts/restore-mtime.sh" "$skia_upstream"
+        echo "Applying patches from $patches_dir.."
+        git am --committer-date-is-author-date "$patches_dir"/*
 
-    echo "Stashing WebRTC changes.."
-    cd "$CHROMIUM_SRC/third_party/webrtc"
-    git add -A .
-    git stash
+        "$CARBONYL_ROOT/scripts/restore-mtime.sh" "$upstream_sha"
+    }
 
-    echo "Applying WebRTC patches.."
-    git checkout "$webrtc_upstream"
-    git am --committer-date-is-author-date "$CARBONYL_ROOT/chromium/patches/webrtc"/*
-    "$CARBONYL_ROOT/scripts/restore-mtime.sh" "$webrtc_upstream"
+    reset_and_apply "$CHROMIUM_SRC"                   "$chromium_upstream" "$CARBONYL_ROOT/chromium/patches/chromium"
+    reset_and_apply "$CHROMIUM_SRC/third_party/skia"  "$skia_upstream"     "$CARBONYL_ROOT/chromium/patches/skia"
+    reset_and_apply "$CHROMIUM_SRC/third_party/webrtc" "$webrtc_upstream"  "$CARBONYL_ROOT/chromium/patches/webrtc"
 
     echo "Patches successfully applied"
 elif [[ "$1" == "save" ]]; then
