@@ -466,13 +466,13 @@ index c81027ddbcb67..5f18761c89f03 100644
      "//components/version_info",
      "//content/public/app",
      "//content/public/browser",
-@@ -943,6 +945,7 @@ executable("headless_shell") {
+@@ -943,6 +945,6 @@ executable("headless_shell") {
  
    deps = [
      ":headless_shell_lib",
 +    "//carbonyl/src/browser:renderer",
      "//build:branding_buildflags",
-     "//carbonyl/src/browser:carbonyl",
+-    "//carbonyl/src/browser:carbonyl",
      "//components/os_crypt/common:switches",
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
 index 4d5707bece030..2446f07b906c2 100644
