@@ -36,9 +36,14 @@ RUN apt-get update && apt-get install -y \
     clang lld \
     # Cross-compilation support
     g++-aarch64-linux-gnu libc6-dev-arm64-cross \
-    # Chromium runtime dependencies (for smoke-testing the binary)
+    # Chromium code-generation tools (needed during ninja compile)
+    # - gperf: Blink CSS/HTML parser hash tables
+    # - bison, flex: Blink/V8 parser generators
+    # - pkg-config: locates system libraries
+    gperf bison flex pkg-config \
+    # Chromium build-time + runtime dependencies
     libasound2 libexpat1 libfontconfig1 libnss3 \
-    libdbus-1-dev libglib2.0-dev \
+    libdbus-1-dev libglib2.0-dev libnss3-dev libxtst-dev \
     # Tooling
     jq \
     ca-certificates \
