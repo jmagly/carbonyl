@@ -180,13 +180,12 @@ jobs:
         # blocks `git am`. This step resets + cleans up.
         run: |
           docker run --rm \
-            -v "${HOST_CARBONYL_DIR}:/workspace" \
-            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
-            -w /workspace \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c '
               git config --global --add safe.directory "*"
-              for d in /chromium/src /chromium/src/third_party/skia /chromium/src/third_party/webrtc; do
+              for d in ${HOST_CHROMIUM_SRC_DIR} ${HOST_CHROMIUM_SRC_DIR}/third_party/skia ${HOST_CHROMIUM_SRC_DIR}/third_party/webrtc; do
                 if [ -d "$d/.git" ]; then
                   echo "[reset] cleaning $d"
                   cd "$d"
@@ -202,13 +201,12 @@ jobs:
       - name: Apply patches to Chromium source (in container)
         run: |
           docker run --rm \
-            -v "${HOST_CARBONYL_DIR}:/workspace" \
-            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
-            -e CARBONYL_ROOT=/workspace \
-            -e CHROMIUM_ROOT=/chromium \
-            -e CHROMIUM_SRC=/chromium/src \
-            -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
-            -w /workspace \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_ROOT=${HOST_CARBONYL_DIR}/chromium \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -e DEPOT_TOOLS_ROOT=${HOST_CARBONYL_DIR}/chromium/depot_tools \
+            -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c '
               # Belt-and-suspenders: set git config at runtime too, so this
@@ -225,20 +223,19 @@ jobs:
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
           OUT_DIR="out/Default-${{ github.event.inputs.ozone_platform || 'headless' }}"
           docker run --rm \
-            -v "${HOST_CARBONYL_DIR}:/workspace" \
-            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
-            -e CARBONYL_ROOT=/workspace \
-            -e CHROMIUM_SRC=/chromium/src \
-            -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
-            -w /workspace \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -e DEPOT_TOOLS_ROOT=${HOST_CARBONYL_DIR}/chromium/depot_tools \
+            -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c "
               source scripts/env.sh
-              cp src/browser/args.gn /chromium/src/${OUT_DIR}/args.gn 2>/dev/null || {
-                mkdir -p /chromium/src/${OUT_DIR}
-                cp src/browser/args.gn /chromium/src/${OUT_DIR}/args.gn
+              cp ${HOST_CARBONYL_DIR}/src/browser/args.gn ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR}/args.gn 2>/dev/null || {
+                mkdir -p ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR}
+                cp ${HOST_CARBONYL_DIR}/src/browser/args.gn ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR}/args.gn
               }
-              cd /chromium/src
+              cd ${HOST_CHROMIUM_SRC_DIR}
               gn gen ${OUT_DIR}
             "
           echo "OUT_DIR=${OUT_DIR}" >> "$GITHUB_ENV"
@@ -247,27 +244,25 @@ jobs:
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
           docker run --rm \
-            -v "${HOST_CARBONYL_DIR}:/workspace" \
-            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
-            -e CARBONYL_ROOT=/workspace \
-            -e CHROMIUM_SRC=/chromium/src \
-            -w /workspace \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c "bash scripts/build.sh ${OUT_DIR} ${CPU} CARBONYL_SKIP_CARGO_BUILD="
 
       - name: Build headless_shell (Chromium, in container)
         run: |
           docker run --rm \
-            -v "${HOST_CARBONYL_DIR}:/workspace" \
-            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
-            -e CARBONYL_ROOT=/workspace \
-            -e CHROMIUM_SRC=/chromium/src \
-            -e DEPOT_TOOLS_ROOT=/workspace/chromium/depot_tools \
-            -w /workspace \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -e DEPOT_TOOLS_ROOT=${HOST_CARBONYL_DIR}/chromium/depot_tools \
+            -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c "
               source scripts/env.sh
-              ninja -C /chromium/src/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
+              ninja -C ${HOST_CHROMIUM_SRC_DIR}/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
             "
 
       - name: Copy runtime binaries
@@ -275,11 +270,10 @@ jobs:
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
           OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
           docker run --rm \
-            -v "${HOST_CARBONYL_DIR}:/workspace" \
-            -v "${HOST_CHROMIUM_SRC_DIR}:/chromium/src" \
-            -e CARBONYL_ROOT=/workspace \
-            -e CHROMIUM_SRC=/chromium/src \
-            -w /workspace \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c "bash scripts/copy-binaries.sh ${OUT_DIR} ${CPU}"
           TRIPLE=$(bash "${HOST_CARBONYL_DIR}/scripts/platform-triple.sh" "${CPU}")
