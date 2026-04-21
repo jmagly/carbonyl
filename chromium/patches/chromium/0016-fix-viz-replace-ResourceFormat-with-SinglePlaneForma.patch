@@ -1,7 +1,7 @@
 From e5e6f0e1fd7208aa6ef3f23f6e41fca60976488d Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 01:56:59 -0400
-Subject: [PATCH 16/24] fix(viz): replace ResourceFormat with SinglePlaneFormat
+Subject: [PATCH 16/25] fix(viz): replace ResourceFormat with SinglePlaneFormat
  in M120
 
 ResourceFormat::RGBA_8888 was replaced with SinglePlaneFormat::kRGBA_8888

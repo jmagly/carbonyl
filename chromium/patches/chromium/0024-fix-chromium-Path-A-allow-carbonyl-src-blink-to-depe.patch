@@ -1,7 +1,7 @@
 From 2c51dece24b832c5d0270c955639b62f148ec31c Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Thu, 9 Apr 2026 18:18:30 -0400
-Subject: [PATCH 24/24] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
+Subject: [PATCH 24/25] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
  =?UTF-8?q?llow=20//carbonyl/src/blink=20to=20depend=20on=20blink=20intern?=
  =?UTF-8?q?als?=
 MIME-Version: 1.0
