@@ -184,9 +184,11 @@ jobs:
             -w /workspace \
             "${BUILDER_IMAGE}" \
             bash -c '
-              # Belt-and-suspenders: set safe.directory at runtime too, so
-              # this works even against a pre-fix builder image.
+              # Belt-and-suspenders: set git config at runtime too, so this
+              # works against a pre-fix builder image. New images bake this in.
               git config --global --add safe.directory "*"
+              git config --global user.email "ci@carbonyl.local"
+              git config --global user.name "Carbonyl CI"
               source scripts/env.sh
               bash scripts/patches.sh apply
             '

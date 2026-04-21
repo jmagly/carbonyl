@@ -60,12 +60,15 @@ RUN curl -sSf https://sh.rustup.rs | sh -s -- -y \
     echo 'linker = "aarch64-linux-gnu-gcc"' >> /usr/local/cargo/config.toml && \
     rustc --version && cargo --version
 
-# ── Git safe.directory ────────────────────────────────────────────────────────
+# ── Git safe.directory + CI identity ──────────────────────────────────────────
 # The build bind-mounts /chromium/src (and the workspace) into the container
 # from the host runner. git refuses to operate on repos it thinks have
 # "dubious ownership" when uid(file) != uid(process). Allow any directory
 # system-wide inside this image — all git access here is trusted CI.
-RUN git config --system --add safe.directory '*'
+# Also set a CI identity so `git am` / `git commit` work without nagging.
+RUN git config --system --add safe.directory '*' && \
+    git config --system user.email 'ci@carbonyl.local' && \
+    git config --system user.name 'Carbonyl CI'
 
 # ── Verify tools ──────────────────────────────────────────────────────────────
 RUN ninja --version && \
