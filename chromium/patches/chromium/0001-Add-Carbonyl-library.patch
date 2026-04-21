@@ -31,14 +31,7 @@ diff --git a/headless/BUILD.gn b/headless/BUILD.gn
 index c5ba46a82b4f4..c81027ddbcb67 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -382,6 +382,6 @@ source_set("headless_browser") {
-     "//base:base_static",
-     "//build:branding_buildflags",
-     "//build/config/linux/dbus:buildflags",
-     "//components/cookie_config",
-     "//components/embedder_support",
-     "//components/embedder_support:user_agent",
-@@ -921,6 +922,15 @@ if (should_strip_binary) {
+@@ -921,6 +921,15 @@ if (should_strip_binary) {
  }
  
  executable("headless_shell") {
@@ -54,10 +47,3 @@ index c5ba46a82b4f4..c81027ddbcb67 100644
    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
  
-@@ -934,6 +944,6 @@ executable("headless_shell") {
-   deps = [
-     ":headless_shell_lib",
-     "//build:branding_buildflags",
-     "//components/os_crypt/common:switches",
-     "//components/version_info",
-     "//content/public/app",
