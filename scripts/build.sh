@@ -37,4 +37,12 @@ fi
 
 cd "$CHROMIUM_SRC/out/$target"
 
-ninja headless:headless_shell "$@"
+# Build headless_shell plus the graphics runtime libs that
+# copy-binaries.sh copies into the final carbonyl runtime tarball:
+# ANGLE (libEGL.so, libGLESv2.so) and SwiftShader Vulkan
+# (libvk_swiftshader.so, libvulkan.so.1). Ninja accepts output-file
+# names as targets.
+ninja headless:headless_shell \
+    libEGL.so libGLESv2.so \
+    libvk_swiftshader.so libvulkan.so.1 \
+    "$@"
