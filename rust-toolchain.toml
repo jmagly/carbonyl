@@ -1,0 +1,20 @@
+# Pinned Rust toolchain for Carbonyl.
+#
+# Every place we build — titan CI host, the carbonyl-builder container,
+# and local developer machines — must use the same rustc/clippy so lint
+# behaviour and codegen are reproducible. rustup honours this file
+# automatically when `cargo` is invoked at the repo root or below.
+#
+# Bumping this value: open a PR, run the full build-runtime + check
+# pipelines, and address any new lints in the same change (don't float).
+#
+# 2026-04-23: pinned at 1.91.0. 1.92.0 introduced a batch of new clippy
+# lints (identity_op, new_without_default, needless_return, clone_on_copy,
+# print_literal, unsafe-buffer-usage) that break our tree wholesale
+# without a dedicated cleanup pass. Revisit when scheduling that work.
+
+[toolchain]
+channel = "1.91.0"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+profile = "minimal"

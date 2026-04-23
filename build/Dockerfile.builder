@@ -58,15 +58,22 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
 
+# Pin Rust to a specific version rather than floating `stable`. The repo
+# root also carries a rust-toolchain.toml at the same version; this pin
+# in the image keeps image builds reproducible and avoids a first-run
+# rustup download when the repo's toolchain file is respected. Bump this
+# in lockstep with rust-toolchain.toml.
+ARG RUST_VERSION=1.91.0
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y \
         --no-modify-path \
-        --default-toolchain stable \
-        --profile minimal && \
+        --default-toolchain "${RUST_VERSION}" \
+        --profile minimal \
+        --component rustfmt clippy && \
     rustup target add aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu && \
     # Cross-compilation linkers
     echo '[target.aarch64-unknown-linux-gnu]' >> /usr/local/cargo/config.toml && \
     echo 'linker = "aarch64-linux-gnu-gcc"' >> /usr/local/cargo/config.toml && \
-    rustc --version && cargo --version
+    rustc --version && cargo --version && clippy-driver --version
 
 # ── Git safe.directory + CI identity ──────────────────────────────────────────
 # The build bind-mounts /chromium/src (and the workspace) into the container
