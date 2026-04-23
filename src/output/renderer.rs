@@ -22,6 +22,12 @@ pub struct Renderer {
     size: Size,
 }
 
+impl Default for Renderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Renderer {
     pub fn new() -> Renderer {
         Renderer {
@@ -157,12 +163,9 @@ impl Renderer {
             .min(viewport.height)
             .max(top);
         let row_length = pixels_size.width as usize;
-        let pixel = |x, y| {
-            Color::new(
-                pixels[((x + y * row_length) * 4 + 2) as usize],
-                pixels[((x + y * row_length) * 4 + 1) as usize],
-                pixels[((x + y * row_length) * 4 + 0) as usize],
-            )
+        let pixel = |x: usize, y: usize| {
+            let base = (x + y * row_length) * 4;
+            Color::new(pixels[base + 2], pixels[base + 1], pixels[base])
         };
         let pair = |x, y| pixel(x, y).avg_with(pixel(x, y + 1));
 

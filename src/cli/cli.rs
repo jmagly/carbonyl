@@ -55,7 +55,7 @@ impl CommandLine {
         for arg in &args {
             let split: Vec<&str> = arg.split("=").collect();
             let default = arg.as_str();
-            let (key, value) = (split.get(0).unwrap_or(&default), split.get(1));
+            let (key, value) = (split.first().unwrap_or(&default), split.get(1));
 
             macro_rules! set {
                 ($var:ident, $enum:ident) => {{
@@ -68,7 +68,7 @@ impl CommandLine {
             macro_rules! set_f32 {
                 ($var:ident = $expr:expr) => {{
                     if let Some(value) = value {
-                        if let Some(value) = value.parse::<f32>().ok() {
+                        if let Ok(value) = value.parse::<f32>() {
                             $var = {
                                 let $var = value;
 
@@ -132,7 +132,7 @@ impl CommandLine {
 /// Parse "WIDTHxHEIGHT" (case-insensitive 'x') into positive `(u32, u32)`.
 /// Returns None on malformed input or zero dimensions.
 fn parse_viewport(value: &str) -> Option<(u32, u32)> {
-    let (w, h) = value.split_once(|c: char| c == 'x' || c == 'X')?;
+    let (w, h) = value.split_once(['x', 'X'])?;
     let w: u32 = w.parse().ok()?;
     let h: u32 = h.parse().ok()?;
     if w == 0 || h == 0 {

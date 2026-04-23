@@ -79,19 +79,14 @@ impl ResourceParser {
 }
 
 fn read_hex_string(str: &[u8]) -> Option<String> {
-    let mut iter = str.into_iter();
+    let mut iter = str.iter();
     let mut vec = Vec::with_capacity(str.len() / 2);
 
-    loop {
-        match (iter.next(), iter.next()) {
-            (Some(left), Some(right)) => {
-                let chunk = [*left, *right];
-                let hex = std::str::from_utf8(&chunk).ok()?;
+    while let (Some(left), Some(right)) = (iter.next(), iter.next()) {
+        let chunk = [*left, *right];
+        let hex = std::str::from_utf8(&chunk).ok()?;
 
-                vec.push(u8::from_str_radix(hex, 16).ok()?)
-            }
-            _ => break,
-        }
+        vec.push(u8::from_str_radix(hex, 16).ok()?)
     }
 
     Some(std::str::from_utf8(&vec).ok()?.to_owned())

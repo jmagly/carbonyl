@@ -9,6 +9,10 @@ pub struct Color<T: Copy = u8> {
 }
 
 impl Color {
+    // Name shadows `FromIterator::from_iter` but the signature differs
+    // (takes `&mut iterator`, returns `Option`). Renaming would ripple
+    // through every call site; the confusion is captured in the comment.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_iter<'a, T>(iter: &mut T) -> Option<Color>
     where
         T: Iterator<Item = &'a u8>,

@@ -1,3 +1,13 @@
+// This file is the FFI boundary between libcarbonyl (Rust) and the
+// Chromium C++ side. Every `pub extern "C" fn` here receives raw
+// pointers from C++ and dereferences them — that is the whole point
+// of the module. The clippy lint that insists these be `unsafe fn`
+// would add an annotation that has no effect at the C ABI level
+// (C callers don't see Rust's `unsafe` keyword) while forcing every
+// C++ invocation to stay semantically the same. We suppress it here
+// at the file level rather than decorating every function.
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -186,7 +196,7 @@ pub extern "C" fn carbonyl_renderer_resize(bridge: RendererPtr) {
     let bridge = unsafe { bridge.as_ref() };
     let mut bridge = bridge.unwrap().lock().unwrap();
     let window = bridge.window.update();
-    let cells = window.cells.clone();
+    let cells = window.cells;
 
     log::debug!("resizing renderer, terminal window: {:?}", window);
 
@@ -385,7 +395,7 @@ pub extern "C" fn carbonyl_renderer_listen(bridge: RendererPtr, delegate: *mut B
                         }
                     };
 
-                    return false;
+                    false
                 };
 
                 for event in std::mem::take(&mut events) {

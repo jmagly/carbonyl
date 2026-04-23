@@ -107,7 +107,7 @@ impl TTY {
         out.flush()
     }
 
-    fn as_raw_fd(self) -> RawFd {
+    fn into_raw_fd(self) -> RawFd {
         match self {
             TTY::Raw(fd) => fd,
             TTY::File(file) => file.as_raw_fd(),
@@ -140,7 +140,7 @@ impl TerminalSettings {
         let tty = TTY::stdin();
         let mut term = MaybeUninit::uninit();
         let data = unsafe {
-            libc::tcgetattr(tty.as_raw_fd(), term.as_mut_ptr()).to_err()?;
+            libc::tcgetattr(tty.into_raw_fd(), term.as_mut_ptr()).to_err()?;
 
             term.assume_init()
         };
@@ -173,6 +173,6 @@ impl TerminalSettings {
     fn apply(&self) -> io::Result<()> {
         let tty = TTY::stdin();
 
-        unsafe { libc::tcsetattr(tty.as_raw_fd(), libc::TCSANOW, &self.data).to_err() }
+        unsafe { libc::tcsetattr(tty.into_raw_fd(), libc::TCSANOW, &self.data).to_err() }
     }
 }

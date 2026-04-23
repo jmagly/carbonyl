@@ -68,7 +68,7 @@ RUN curl -sSf https://sh.rustup.rs | sh -s -- -y \
         --no-modify-path \
         --default-toolchain "${RUST_VERSION}" \
         --profile minimal \
-        --component rustfmt clippy && \
+        --component rustfmt,clippy && \
     rustup target add aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu && \
     # Cross-compilation linkers
     echo '[target.aarch64-unknown-linux-gnu]' >> /usr/local/cargo/config.toml && \

@@ -72,6 +72,9 @@ jobs:
       - name: Verify pinned toolchain (in container)
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e CARGO_HOME=/tmp/cargo \
+            -e RUSTUP_HOME=/usr/local/rustup \
             -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
             -w /workspace \
             "${BUILDER_IMAGE}" \
@@ -80,6 +83,9 @@ jobs:
       - name: cargo check (in container)
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e CARGO_HOME=/tmp/cargo \
+            -e RUSTUP_HOME=/usr/local/rustup \
             -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
             -w /workspace \
             "${BUILDER_IMAGE}" \
@@ -88,6 +94,9 @@ jobs:
       - name: cargo clippy (in container)
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e CARGO_HOME=/tmp/cargo \
+            -e RUSTUP_HOME=/usr/local/rustup \
             -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
             -w /workspace \
             "${BUILDER_IMAGE}" \
@@ -96,6 +105,9 @@ jobs:
       - name: cargo test (lib, in container)
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e CARGO_HOME=/tmp/cargo \
+            -e RUSTUP_HOME=/usr/local/rustup \
             -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
             -w /workspace \
             "${BUILDER_IMAGE}" \

@@ -19,6 +19,10 @@ pub trait Cast<T> {
 }
 
 pub trait ToIntUnchecked<T> {
+    /// # Safety
+    /// The caller must ensure the value is representable in `T`. Mirrors
+    /// `f32::to_int_unchecked` / `f64::to_int_unchecked` — undefined behavior
+    /// for NaN, infinity, or values outside `T`'s range.
     unsafe fn to_int_unchecked(self) -> T;
 }
 
@@ -326,6 +330,9 @@ macro_rules! impl_vector_traits {
     );
     ($struct:ident $vector:ident $type:ident float) => (
         impl $struct<$type> {
+            /// # Safety
+            /// Forwards each component through `<$type as ToIntUnchecked<U>>::to_int_unchecked`;
+            /// the caller must ensure every component is representable in `U`.
             pub unsafe fn to_int_unchecked<U>(&self) -> $struct<U>
             where
                 $type: super::ToIntUnchecked<U>,
