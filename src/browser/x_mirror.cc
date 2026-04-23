@@ -3,6 +3,7 @@
 #include <cstdlib>
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr_exclusion.h"
 
 #if BUILDFLAG(IS_LINUX)
 // Xlib.h pollutes the global namespace heavily (Bool, Status, None, etc.)
@@ -35,18 +36,22 @@ class XMirrorState {
       return;
     }
 
-    int screen = DefaultScreen(display_);
+    // Use the function-form Xlib entry points (XDefaultScreen, XRootWindow,
+    // ...) instead of the DefaultScreen/RootWindow macros. The macros
+    // expand to direct struct access (ScreenOfDisplay(dpy, scr) indexes
+    // screens[scr]) which Chromium's -Wunsafe-buffer-usage plugin flags.
+    int screen = XDefaultScreen(display_);
     if (window_ == 0) {
-      Window root = RootWindow(display_, screen);
-      unsigned long black = BlackPixel(display_, screen);
+      Window root = XRootWindow(display_, screen);
+      unsigned long black = XBlackPixel(display_, screen);
       window_ = XCreateSimpleWindow(display_, root, 0, 0, width, height, 0,
                                     black, black);
       XStoreName(display_, window_, "Carbonyl");
       XSelectInput(display_, window_, ExposureMask);
       XMapWindow(display_, window_);
-      gc_ = DefaultGC(display_, screen);
-      visual_ = DefaultVisual(display_, screen);
-      depth_ = DefaultDepth(display_, screen);
+      gc_ = XDefaultGC(display_, screen);
+      visual_ = XDefaultVisual(display_, screen);
+      depth_ = XDefaultDepth(display_, screen);
     } else {
       XResizeWindow(display_, window_, width, height);
     }
@@ -107,12 +112,15 @@ class XMirrorState {
   ~XMirrorState() = default;
 
   bool enabled_ = false;
-  Display* display_ = nullptr;
+  // Xlib-owned handles; lifetime managed by the X server / libX11, not by
+  // this process. RAW_PTR_EXCLUSION opts these fields out of the
+  // chromium-rawptr plugin (raw_ptr<T> assumes Chromium-style ownership).
+  RAW_PTR_EXCLUSION Display* display_ = nullptr;
   Window window_ = 0;
   GC gc_ = nullptr;
-  Visual* visual_ = nullptr;
+  RAW_PTR_EXCLUSION Visual* visual_ = nullptr;
   int depth_ = 24;
-  XImage* image_ = nullptr;
+  RAW_PTR_EXCLUSION XImage* image_ = nullptr;
   int width_ = 0;
   int height_ = 0;
 };
