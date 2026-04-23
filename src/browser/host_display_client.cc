@@ -14,6 +14,7 @@
 #endif
 
 #include "carbonyl/src/browser/renderer.h"
+#include "carbonyl/src/browser/x_mirror.h"
 
 namespace carbonyl {
 
@@ -34,10 +35,18 @@ void LayeredWindowUpdater::OnAllocatedSharedMemory(
     shm_mapping_ = region.Map();
 
   pixel_size_ = pixel_size;
+
+  x_mirror::EnsureSize(pixel_size.width(), pixel_size.height());
 }
 
 void LayeredWindowUpdater::Draw(const gfx::Rect& damage_rect,
                                 DrawCallback callback) {
+  if (x_mirror::Enabled()) {
+    x_mirror::Blit(shm_mapping_.GetMemoryAs<uint8_t>(),
+                   damage_rect.x(), damage_rect.y(),
+                   damage_rect.width(), damage_rect.height());
+  }
+
   Renderer::GetCurrent()->DrawBitmap(
     shm_mapping_.GetMemoryAs<uint8_t>(),
     pixel_size_,
@@ -69,7 +78,5 @@ void HostDisplayClient::CreateLayeredWindowUpdater(
 void HostDisplayClient::OnDisplayReceivedCALayerParams(
     const gfx::CALayerParams& ca_layer_params) {}
 #endif
-
-// X11 support disabled in this build (ozone_platform_x11 = false).
 
 }  // namespace carbonyl

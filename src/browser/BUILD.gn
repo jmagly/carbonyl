@@ -25,6 +25,8 @@ component("viz") {
   sources = [
     "host_display_client.cc",
     "host_display_client.h",
+    "x_mirror.cc",
+    "x_mirror.h",
   ]
 
   deps = [
@@ -34,6 +36,14 @@ component("viz") {
     "//services/viz/privileged/mojom",
     "//ui/gfx",
   ]
+
+  if (is_linux) {
+    # libX11 is provided by the Chromium Debian sysroot; optional X
+    # mirror surface in x_mirror.cc links against it unconditionally.
+    # Gated at runtime by CARBONYL_X_MIRROR=1 so headless deployments
+    # pay zero cost beyond the link.
+    libs = [ "X11" ]
+  }
 }
 
 config("lib") {
