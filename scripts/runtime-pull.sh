@@ -24,12 +24,22 @@ echo "Computing Chromium patches sha.."
 sha="$(scripts/runtime-hash.sh)"
 triple="$(scripts/platform-triple.sh "$@")"
 
+# Ozone variant (headless | x11). Defaults to "headless" so existing
+# consumers keep fetching the historical tag. `runtime-push.sh` writes
+# with the same rule: headless → "runtime-<hash>", others →
+# "runtime-<ozone>-<hash>".
+ozone="${CARBONYL_OZONE_TAG:-headless}"
+case "$ozone" in
+    headless) tag="runtime-$sha" ;;
+    *)        tag="runtime-$ozone-$sha" ;;
+esac
+
 if [ -f "build/pre-built/$triple.tgz" ]; then
     echo "==> Tarball already present at build/pre-built/$triple.tgz, skipping download"
     echo "    (delete it to force re-download)"
 else
     GITEA_BASE="${GITEA_BASE:-https://git.integrolabs.net}"
-    url="$GITEA_BASE/roctinam/carbonyl/releases/download/runtime-$sha/$triple.tgz"
+    url="$GITEA_BASE/roctinam/carbonyl/releases/download/$tag/$triple.tgz"
 
     echo "Downloading pre-built binaries from $url"
 
@@ -37,7 +47,7 @@ else
 
     if ! curl --silent --fail --location --output "build/pre-built/$triple.tgz" "$url"; then
         echo ""
-        echo "ERROR: Pre-built binaries not available for hash $sha ($triple)"
+        echo "ERROR: Pre-built binaries not available for $tag ($triple)"
         echo ""
         echo "This usually means the M135 runtime hasn't been uploaded yet."
         echo "Build it with Docker first, then push:"
