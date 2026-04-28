@@ -1,0 +1,91 @@
+# mirror.yml — One-way sync of origin → github remote.
+#
+# Per CLAUDE.md, Carbonyl pushes to Gitea (`origin`) first and then
+# mirrors to GitHub (`jmagly/carbonyl`). This workflow automates the
+# mirror so the GitHub copy doesn't drift.
+#
+# Scope: branches → main only (for now), tags → `v*` semantic releases
+# only. The internal `runtime-<hash>` tags from runtime-push.sh are
+# CI artefacts, not public releases — they stay Gitea-only to avoid
+# flooding GitHub with one tag per build. Pull requests and issues
+# are intentionally NOT mirrored — the GitHub copy is read-only from
+# the community's perspective.
+#
+# Force-with-lease only: an unexpected divergence rejects the push so
+# we don't silently overwrite GitHub-side changes (there shouldn't be
+# any, but defence-in-depth).
+#
+# Secret: GH_MIRROR_TOKEN — fine-grained GitHub PAT, contents:write +
+# metadata:read on jmagly/carbonyl. See docs/ci-secrets.md.
+#
+# Refs: roctinam/carbonyl#53
+
+name: Mirror to GitHub
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Specific branch or tag to mirror (defaults to current ref)'
+        required: false
+        default: ''
+
+env:
+  GITHUB_REPO: jmagly/carbonyl
+
+jobs:
+  mirror:
+    name: Mirror ${{ github.ref }} to ${{ github.repository_owner }}/${{ github.event.repository.name }} on github.com
+    runs-on: titan
+    # Lightweight job — needs only git + curl. No builder container.
+    steps:
+      - name: Validate token presence
+        run: |
+          if [ -z "${{ secrets.GH_MIRROR_TOKEN }}" ]; then
+            echo "ERROR: GH_MIRROR_TOKEN secret is not set on this repo." >&2
+            echo "       See docs/ci-secrets.md for provisioning." >&2
+            exit 1
+          fi
+
+      - name: Clone Gitea repo (full history + tags)
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.mirror-clone" 2>/dev/null || true
+          # Mirror clone: --bare with --mirror semantics gives us all
+          # branches and tags. We only push specific refs below, so
+          # the bare clone is just a transport buffer.
+          git clone --mirror \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.mirror-clone"
+
+      - name: Push branch + tag refs to GitHub (additive, force-with-lease)
+        run: |
+          cd "${GITHUB_WORKSPACE}/.mirror-clone"
+
+          # Auth via header avoids embedding the token in the remote
+          # URL (which would land in `git config` and `git remote -v`).
+          AUTH_HEADER="Authorization: Basic $(printf 'x-access-token:%s' "${{ secrets.GH_MIRROR_TOKEN }}" | base64 -w0)"
+          GH_REMOTE="https://github.com/${GITHUB_REPO}.git"
+
+          # Resolve which ref this run should push:
+          #   - workflow_dispatch with input.ref → that ref
+          #   - push to main → refs/heads/main
+          #   - push of v* / runtime-* tag → that tag
+          INPUT_REF="${{ github.event.inputs.ref }}"
+          REF="${INPUT_REF:-${GITHUB_REF}}"
+          echo "[mirror] pushing ref: ${REF}"
+
+          # --force-with-lease guards against silent overwrites; on a
+          # divergent GitHub history the push fails loudly. Never use
+          # --force here.
+          git -c "http.extraheader=${AUTH_HEADER}" \
+              push --force-with-lease "${GH_REMOTE}" "${REF}:${REF}"
+
+          # Tag pushes are additive: don't propagate Gitea-side tag
+          # deletions to GitHub. Tag deletion stays a manual action.
+
+      - name: Cleanup mirror clone
+        if: always()
+        run: rm -rf "${GITHUB_WORKSPACE}/.mirror-clone" || true
