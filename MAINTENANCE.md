@@ -319,3 +319,8 @@ an MPEG-LA license is required or replace with AV1/VP9 (`enable_h264 = false`).
 | `check` | `cargo check` + `cargo clippy` (fast, no linking) |
 | `test` | `cargo test --lib` |
 | `build-local` | Downloads runtime, builds Rust lib, smoke tests, uploads artifact |
+
+CI infrastructure references:
+- [`docs/ci-cd-plan.md`](docs/ci-cd-plan.md) — pipeline architecture
+- [`docs/ci-runner-titan.md`](docs/ci-runner-titan.md) — host state runbook
+- [`docs/ci-secrets.md`](docs/ci-secrets.md) — secrets inventory, rotation, leak response

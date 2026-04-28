@@ -87,16 +87,19 @@ Each workflow change is a separate PR with its own review. The issues filed alon
 - Secrets verified in Gitea repo settings before workflow goes live
 - `workflow_dispatch` enabled for manual rollback-of-cadence testing
 
-## Secrets inventory (planned)
+## Secrets inventory
 
-| Secret | Scope | Used by | Rotation |
-|--------|-------|---------|----------|
-| `BUILD_REPO_TOKEN` | Gitea PAT with `write:package`, `write:release` on `roctinam/carbonyl` | build-builder.yml, build-runtime.yml, release.yml | 1 year; revisit when the internal key-management service lands |
-| `GH_MIRROR_TOKEN` | GitHub PAT with `contents:write` on `jmagly/carbonyl` | mirror.yml, release.yml (mirror step) | 1 year |
-| `GHCR_TOKEN` | GitHub PAT with `write:packages` on `jmagly` namespace (for ghcr.io/jmagly/carbonyl-builder) | build-builder.yml mirror step (Phase 2) | 1 year |
-| `GITEA_REGISTRY_USER` | Literal actor name (or bot account) | docker login for registry push | N/A |
+The authoritative inventory + rotation procedure + leak-response
+playbook lives in [`docs/ci-secrets.md`](ci-secrets.md). Summary:
 
-Secrets are stored in Gitea repo settings → Actions. Nothing lives on disk on titan. Any developer with workflow approve permission can see `secrets.*` references but not values.
+| Secret | Used by |
+|---|---|
+| `BUILD_REPO_TOKEN` | build-builder.yml, build-runtime.yml, check.yml, release.yml |
+| `GH_MIRROR_TOKEN` | mirror.yml, release.yml (mirror step) |
+
+Secrets are stored in Gitea repo settings → Actions. Nothing lives on
+disk on titan. Any developer with workflow approve permission can see
+`secrets.*` references but not values.
 
 ## Runner + host state documentation (planned)
 
