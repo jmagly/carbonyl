@@ -84,6 +84,19 @@ carbonyl https://github.com
 # See: https://github.com/jmagly/carbonyl/releases
 ```
 
+### Runtime modes
+
+One binary, three deployment shapes:
+
+| Mode | Invocation | When to use |
+|---|---|---|
+| Terminal-only | `carbonyl <url>` | Read in a terminal; smallest surface |
+| x11 + trusted input | `DISPLAY=:99 carbonyl --ozone-platform=x11 <url>` | Automation against bot-detecting sites (kernel uinput → Xorg → `isTrusted=true` events) |
+| x11 + visual capture | `CARBONYL_X_MIRROR=1 DISPLAY=:99 carbonyl --ozone-platform=x11 <url>` | Same, plus blits compositor frames into an X window so `scrot`/`ffmpeg`/`x11vnc` can capture alongside the terminal render |
+
+Full operator reference, session-portability rules, and CLI/env-var
+matrix: [docs/runtime-modes.md](docs/runtime-modes.md).
+
 ---
 
 ## Active Fork — Continued Maintenance

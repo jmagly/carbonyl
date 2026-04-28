@@ -18,3 +18,18 @@ Options:
     -d, --debug                enable debug logs
     -h, --help                 display this help message
     -v, --version              output the version number
+
+Environment variables:
+    CARBONYL_VIEWPORT=WxH      same as --viewport
+    CARBONYL_ENV_DEBUG=1       same as --debug
+    CARBONYL_ENV_BITMAP=1      same as --bitmap
+    CARBONYL_X_MIRROR=1        with --ozone-platform=x11, also blit
+                               compositor frames into a visible X window
+                               on $DISPLAY so external tools (scrot,
+                               ffmpeg, x11vnc) can capture them alongside
+                               the terminal render. See docs/runtime-modes.md.
+
+Runtime modes (see docs/runtime-modes.md for the full operator guide):
+    terminal-only              carbonyl <url>
+    x11 + trusted input        carbonyl --ozone-platform=x11 <url>
+    x11 + visual capture       CARBONYL_X_MIRROR=1 carbonyl --ozone-platform=x11 <url>
