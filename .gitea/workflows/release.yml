@@ -1,0 +1,321 @@
+# release.yml — Publish a Carbonyl release on v* tag push.
+#
+# Pulls the matching `runtime-<hash>` (or `runtime-x11-<hash>`)
+# tarball already built by build-runtime.yml, repackages it under the
+# semantic version filename, creates a Gitea release at the v* tag,
+# uploads the assets, and mirrors the release to GitHub.
+#
+# Hard constraint: this workflow NEVER rebuilds Chromium. If the
+# matching runtime release isn't found, fail early with an actionable
+# error pointing at build-runtime.yml. Rebuilding here would produce
+# artefacts whose hash doesn't match what build-runtime published —
+# silent drift bug waiting to happen.
+#
+# Triggers:
+#   - push of a `v*` tag → automatic
+#   - workflow_dispatch with `tag` input → manual re-run / fix-up
+#
+# Refs: roctinam/carbonyl#52
+# Secrets: BUILD_REPO_TOKEN (Gitea), GH_MIRROR_TOKEN (GitHub).
+# See docs/ci-secrets.md.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing v* tag to publish (no leading refs/tags/)'
+        required: true
+      ozone_platform:
+        description: 'Ozone variant of the runtime to package'
+        required: false
+        default: 'headless'
+        type: choice
+        options:
+          - headless
+          - x11
+
+env:
+  CARGO_TERM_COLOR: always
+  HOST_CARBONYL_DIR: /srv/carbonyl
+
+jobs:
+  release:
+    name: Publish ${{ github.event.inputs.tag || github.ref_name }}
+    runs-on: titan
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve tag, version, builder image
+        run: |
+          # ref_name is "v0.2.0-alpha.2" on tag push; input.tag for manual.
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          [ -n "$TAG" ] || { echo "ERROR: no tag resolved" >&2; exit 1; }
+          # Strip leading "v" for the version string in filenames.
+          VERSION="${TAG#v}"
+          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:latest"
+
+          echo "TAG=${TAG}"             >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}"     >> "$GITHUB_ENV"
+          echo "OZONE=${OZONE}"         >> "$GITHUB_ENV"
+          echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "[release] tag=${TAG} version=${VERSION} ozone=${OZONE}"
+
+      - name: Validate token presence
+        run: |
+          if [ -z "${{ secrets.BUILD_REPO_TOKEN }}" ]; then
+            echo "ERROR: BUILD_REPO_TOKEN not set; see docs/ci-secrets.md" >&2; exit 1
+          fi
+          if [ -z "${{ secrets.GH_MIRROR_TOKEN }}" ]; then
+            echo "ERROR: GH_MIRROR_TOKEN not set; see docs/ci-secrets.md" >&2; exit 1
+          fi
+
+      - name: Log in to Gitea container registry
+        run: |
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net \
+              -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull builder image
+        run: docker pull "${BUILDER_IMAGE}"
+
+      - name: Checkout repo at the tag
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${TAG}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Compute runtime hash for the tagged commit
+        run: |
+          # The hash is computed over patches + bridge sources. Run
+          # inside the builder container so PATH / env match what
+          # build-runtime.yml used at the time of publication.
+          HASH="$(docker run --rm \
+            -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash scripts/runtime-hash.sh)"
+          [ -n "$HASH" ] || { echo "ERROR: runtime-hash.sh returned empty" >&2; exit 1; }
+
+          # Tag-shape rule mirrors runtime-push.sh: headless keeps the
+          # historical tag, other variants prepend the variant.
+          if [ "$OZONE" = "headless" ]; then
+            RUNTIME_TAG="runtime-${HASH}"
+          else
+            RUNTIME_TAG="runtime-${OZONE}-${HASH}"
+          fi
+          echo "HASH=${HASH}"               >> "$GITHUB_ENV"
+          echo "RUNTIME_TAG=${RUNTIME_TAG}" >> "$GITHUB_ENV"
+          echo "[release] runtime tag: ${RUNTIME_TAG}"
+
+      - name: Resolve target architecture (amd64 only for now)
+        run: |
+          # Multi-arch release is a follow-up. Today we publish amd64
+          # only. The runtime release may have been built for amd64
+          # on this same host.
+          TRIPLE="x86_64-unknown-linux-gnu"
+          echo "TRIPLE=${TRIPLE}" >> "$GITHUB_ENV"
+
+      - name: Verify runtime release exists (no Chromium rebuild here!)
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          API="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags/${RUNTIME_TAG}"
+          if ! curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API}" > /dev/null; then
+            echo "ERROR: runtime release '${RUNTIME_TAG}' not found." >&2
+            echo "       Build it first: trigger build-runtime.yml with" >&2
+            echo "       ozone_platform=${OZONE} on the tagged commit." >&2
+            echo "       Releasing without it would silently drift artefacts." >&2
+            exit 1
+          fi
+          echo "[release] runtime release '${RUNTIME_TAG}' present"
+
+      - name: Download runtime tarball
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          STAGE="${GITHUB_WORKSPACE}/.release-stage"
+          rm -rf "${STAGE}" && mkdir -p "${STAGE}"
+
+          URL="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${RUNTIME_TAG}/${TRIPLE}.tgz"
+          curl -sfL -H "Authorization: token ${GITEA_TOKEN}" \
+            -o "${STAGE}/${TRIPLE}.tgz" "${URL}"
+
+          # Repackage as carbonyl-<version>-<triple>.tgz so the public
+          # release asset is named after the semantic version, not the
+          # internal hash.
+          ASSET_NAME="carbonyl-${VERSION}-${OZONE}-${TRIPLE}.tgz"
+          if [ "$OZONE" = "headless" ]; then
+            # Preserve the historical headless naming convention from
+            # v0.2.0-alpha.1 release notes.
+            ASSET_NAME="carbonyl-${VERSION}-${TRIPLE}.tgz"
+          fi
+          mv "${STAGE}/${TRIPLE}.tgz" "${STAGE}/${ASSET_NAME}"
+
+          # Generate sha256 alongside the tarball so consumers can
+          # verify; carbonyl-agent install already does this.
+          cd "${STAGE}"
+          sha256sum "${ASSET_NAME}" > "${ASSET_NAME}.sha256"
+          ls -lh
+
+          echo "STAGE=${STAGE}"           >> "$GITHUB_ENV"
+          echo "ASSET_NAME=${ASSET_NAME}" >> "$GITHUB_ENV"
+
+      - name: Resolve release notes
+        run: |
+          # Convention: RELEASE-<tag>.md at repo root. Fall back to a
+          # generic note if missing.
+          NOTES_FILE="${GITHUB_WORKSPACE}/.repo-clone/RELEASE-${TAG}.md"
+          BODY_FILE="${GITHUB_WORKSPACE}/.release-body.md"
+          if [ -f "${NOTES_FILE}" ]; then
+            cp "${NOTES_FILE}" "${BODY_FILE}"
+            echo "[release] using ${NOTES_FILE}"
+          else
+            {
+              printf '# Carbonyl %s\n\n' "${VERSION}"
+              printf 'Pre-built Chromium runtime for Carbonyl, ozone variant: %s.\n\n' "${OZONE}"
+              printf 'Runtime hash: `%s`\n' "${HASH}"
+              printf 'Build artefact source: `%s`\n\n' "${RUNTIME_TAG}"
+              printf 'See https://git.integrolabs.net/%s/blob/%s/changelog.md\n' "${GITHUB_REPOSITORY}" "${TAG}"
+              printf 'for the change log entry.\n'
+            } > "${BODY_FILE}"
+            echo "[release] no RELEASE-${TAG}.md found; using generic body"
+          fi
+          echo "BODY_FILE=${BODY_FILE}" >> "$GITHUB_ENV"
+
+      - name: Create or reuse Gitea release
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          API="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases"
+
+          # Idempotent: if a release with this tag already exists,
+          # reuse it (matches runtime-push.sh's pattern).
+          existing="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" \
+            "${API}/tags/${TAG}" 2>/dev/null || true)"
+          if [ -n "$existing" ]; then
+            RELEASE_ID="$(echo "$existing" | jq '.id')"
+            echo "[release] Gitea release '${TAG}' already exists (id=${RELEASE_ID}); reusing"
+          else
+            BODY="$(jq -Rs '.' < "${BODY_FILE}")"
+            resp="$(curl -s -w '\n__HTTP__%{http_code}' \
+              -X POST "${API}" \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"tag_name\": \"${TAG}\",
+                \"name\": \"Carbonyl ${VERSION}\",
+                \"body\": ${BODY},
+                \"draft\": false,
+                \"prerelease\": $(echo "${TAG}" | grep -qE '\-(alpha|beta|rc)' && echo true || echo false)
+              }")"
+            code="${resp##*__HTTP__}"; body="${resp%__HTTP__*}"
+            if [ "$code" != "201" ] && [ "$code" != "200" ]; then
+              echo "ERROR: create-release HTTP ${code}: ${body}" >&2; exit 1
+            fi
+            RELEASE_ID="$(echo "$body" | jq '.id')"
+            echo "[release] created Gitea release id=${RELEASE_ID}"
+          fi
+          echo "RELEASE_ID=${RELEASE_ID}" >> "$GITHUB_ENV"
+
+      - name: Upload assets to Gitea release
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          API="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets"
+          for asset in "${STAGE}/${ASSET_NAME}" "${STAGE}/${ASSET_NAME}.sha256"; do
+            name="$(basename "${asset}")"
+            existing_id="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API}" \
+              | jq -r ".[] | select(.name == \"${name}\") | .id" 2>/dev/null || true)"
+            if [ -n "${existing_id}" ]; then
+              curl -sf -X DELETE -H "Authorization: token ${GITEA_TOKEN}" "${API}/${existing_id}"
+              echo "[release] replaced existing asset ${name}"
+            fi
+            curl -sf -X POST "${API}" \
+              -H "Authorization: token ${GITEA_TOKEN}" \
+              -F "attachment=@${asset};filename=${name}" > /dev/null
+            echo "[release] uploaded ${name}"
+          done
+
+      - name: Mirror release to GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+        run: |
+          GH_API="https://api.github.com/repos/jmagly/carbonyl"
+
+          PRERELEASE="$(echo "${TAG}" | grep -qE '\-(alpha|beta|rc)' && echo true || echo false)"
+          BODY="$(jq -Rs '.' < "${BODY_FILE}")"
+
+          # Mirror is idempotent. PATCH if release exists, POST if not.
+          existing="$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" \
+            "${GH_API}/releases/tags/${TAG}" 2>/dev/null || true)"
+          if [ -n "${existing}" ]; then
+            GH_RELEASE_ID="$(echo "${existing}" | jq '.id')"
+            curl -sf -X PATCH "${GH_API}/releases/${GH_RELEASE_ID}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -d "{\"name\": \"Carbonyl ${VERSION}\", \"body\": ${BODY}, \"prerelease\": ${PRERELEASE}}" \
+              > /dev/null
+            echo "[release] updated GitHub release id=${GH_RELEASE_ID}"
+          else
+            resp="$(curl -s -w '\n__HTTP__%{http_code}' \
+              -X POST "${GH_API}/releases" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -d "{
+                \"tag_name\": \"${TAG}\",
+                \"name\": \"Carbonyl ${VERSION}\",
+                \"body\": ${BODY},
+                \"draft\": false,
+                \"prerelease\": ${PRERELEASE}
+              }")"
+            code="${resp##*__HTTP__}"; body="${resp%__HTTP__*}"
+            if [ "${code}" != "201" ]; then
+              echo "ERROR: GitHub create-release HTTP ${code}: ${body}" >&2
+              echo "       (mirror requires the v* tag to already exist on GitHub —" >&2
+              echo "       confirm mirror.yml fired first.)" >&2
+              exit 1
+            fi
+            GH_RELEASE_ID="$(echo "${body}" | jq '.id')"
+            echo "[release] created GitHub release id=${GH_RELEASE_ID}"
+          fi
+
+          # Upload assets via the GitHub release upload URL.
+          for asset in "${STAGE}/${ASSET_NAME}" "${STAGE}/${ASSET_NAME}.sha256"; do
+            name="$(basename "${asset}")"
+            mime="$(file -b --mime-type "${asset}")"
+            # Delete existing same-name asset for idempotent re-runs.
+            old_id="$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" \
+              "${GH_API}/releases/${GH_RELEASE_ID}/assets" \
+              | jq -r ".[] | select(.name == \"${name}\") | .id" 2>/dev/null || true)"
+            if [ -n "${old_id}" ]; then
+              curl -sf -X DELETE -H "Authorization: Bearer ${GH_TOKEN}" \
+                "${GH_API}/releases/assets/${old_id}"
+            fi
+            curl -sf -X POST \
+              "https://uploads.github.com/repos/jmagly/carbonyl/releases/${GH_RELEASE_ID}/assets?name=${name}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Content-Type: ${mime}" \
+              --data-binary "@${asset}" > /dev/null
+            echo "[release] mirrored ${name} → GitHub"
+          done
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" \
+                 "${GITHUB_WORKSPACE}/.release-stage" \
+                 "${GITHUB_WORKSPACE}/.release-body.md" 2>/dev/null || true
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "==> Release published"
+          echo "    Gitea: https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          echo "    GitHub: https://github.com/jmagly/carbonyl/releases/tag/${TAG}"
+          echo "    Asset: ${ASSET_NAME}"
