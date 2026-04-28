@@ -18,10 +18,39 @@
 # (the former AWS-based script is preserved below in the R2 section).
 #
 # Usage:
-#   GITEA_TOKEN=<token> bash scripts/runtime-push.sh          # current platform
-#   GITEA_TOKEN=<token> bash scripts/runtime-push.sh arm64    # arm64 platform
+#   GITEA_TOKEN=<token> bash scripts/runtime-push.sh                     # headless, current cpu
+#   GITEA_TOKEN=<token> bash scripts/runtime-push.sh arm64               # headless, arm64
+#   GITEA_TOKEN=<token> bash scripts/runtime-push.sh --ozone=x11         # x11 variant
+#   GITEA_TOKEN=<token> bash scripts/runtime-push.sh --ozone x11 amd64   # explicit cpu + variant
+#
+# CARBONYL_OZONE_TAG env var also works (e.g. for CI). The CLI flag
+# wins when both are set.
 
 set -euo pipefail
+
+# Default ozone variant from env, overridden by --ozone=… below.
+ozone="${CARBONYL_OZONE_TAG:-headless}"
+
+positional=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --ozone=*) ozone="${1#--ozone=}" ;;
+        --ozone)
+            [ $# -ge 2 ] || { echo "ERROR: --ozone requires a value" >&2; exit 2; }
+            ozone="$2"
+            shift
+            ;;
+        -h|--help)
+            sed -n '2,28p' "$0" | sed 's/^# \?//'
+            exit 0
+            ;;
+        --) shift; while [ $# -gt 0 ]; do positional+=("$1"); shift; done; break ;;
+        -*) echo "ERROR: unknown option: $1" >&2; exit 2 ;;
+        *) positional+=("$1") ;;
+    esac
+    shift
+done
+set -- "${positional[@]+"${positional[@]}"}"
 
 export CARBONYL_ROOT=$(cd $(dirname -- "$0") && dirname -- $(pwd))
 
@@ -39,11 +68,9 @@ echo "Computing Chromium patches hash.."
 hash=$(scripts/runtime-hash.sh)
 triple=$(scripts/platform-triple.sh "${1:-}")
 
-# Ozone variant (headless | x11) is part of the release tag so variants
-# don't clobber each other's tarballs at the same source hash. Defaults
-# to "headless" to preserve the historical tag shape for existing
-# consumers. `runtime-pull.sh` reads the same env var.
-ozone="${CARBONYL_OZONE_TAG:-headless}"
+# Tag-shape rule (mirror of runtime-pull.sh):
+#   headless  → "runtime-<hash>"        (preserves historical tag)
+#   any other → "runtime-<ozone>-<hash>"
 case "$ozone" in
     headless) tag="runtime-$hash" ;;
     *)        tag="runtime-$ozone-$hash" ;;

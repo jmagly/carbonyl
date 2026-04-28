@@ -221,6 +221,27 @@ a contract. If you need to switch platforms, start with a fresh profile.
 
 ---
 
+## Fetching a runtime tarball
+
+`scripts/runtime-pull.sh` downloads the matching pre-built tarball
+from Gitea releases. Pass `--ozone=x11` for the x11 variant; default
+is headless.
+
+```bash
+# Headless runtime (default)
+bash scripts/runtime-pull.sh
+
+# x11 runtime — needed for modes 2 and 3
+bash scripts/runtime-pull.sh --ozone=x11
+```
+
+The CLI flag overrides the `CARBONYL_OZONE_TAG` env var when both are
+set; CI uses the env var, interactive operators should prefer the
+flag. `runtime-push.sh` accepts the same `--ozone=…` flag for
+symmetry. Tags published: `runtime-<hash>` (headless) and
+`runtime-x11-<hash>` (x11), keyed on hashes of the patch + bridge
+source set.
+
 ## Container-level deployment
 
 The `roctinam/carbonyl-agent` repo's `docker/qa-runner/` is the
