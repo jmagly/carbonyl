@@ -320,3 +320,65 @@ jobs:
           name: runtime-${{ github.event.inputs.ozone_platform || 'headless' }}-${{ env.TRIPLE }}
           path: ${{ env.HOST_CARBONYL_DIR }}/build/pre-built/${{ env.TRIPLE }}.tgz
           retention-days: 30
+
+      # ── X-mirror dual-output validation ──────────────────────────────────
+      # Only meaningful for the x11 ozone variant — the X-mirror code in
+      # x_mirror.cc is gated on CARBONYL_X_MIRROR=1 AND a real X display.
+      # For headless builds the binary still has the code but no $DISPLAY,
+      # so the test wouldn't exercise the path.
+      #
+      # Builds the qa-runner image fresh from carbonyl-agent's Dockerfile,
+      # pointed at the just-published x11 runtime release we made in the
+      # "Upload runtime to Gitea releases" step. Then runs the test
+      # harness inside the container.
+      #
+      # On failure: blocks the workflow (release is already published, but
+      # the next pipeline that depends on it will see the failed run and
+      # operators can re-dispatch with a fix).
+      - name: Build qa-runner image (x11 variant only)
+        if: github.event.inputs.ozone_platform == 'x11'
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          cd "${HOST_CARBONYL_DIR}"
+          HASH="$(bash scripts/runtime-hash.sh)"
+          RUNTIME_URL="https://git.integrolabs.net/roctinam/carbonyl/releases/download/runtime-x11-${HASH}/${TRIPLE}.tgz"
+          echo "[qa-runner] runtime URL: ${RUNTIME_URL}"
+
+          QA_DIR="${GITHUB_WORKSPACE}/.qa-runner-clone"
+          rm -rf "${QA_DIR}"
+          git clone --depth 1 \
+            "https://token:${{ github.token }}@git.integrolabs.net/roctinam/carbonyl-agent.git" \
+            "${QA_DIR}"
+
+          docker build \
+            --build-arg "CARBONYL_RUNTIME_URL=${RUNTIME_URL}" \
+            -t "carbonyl-agent-qa-runner:test-${GITHUB_SHA::7}" \
+            "${QA_DIR}/docker/qa-runner/"
+          echo "QA_RUNNER_IMAGE=carbonyl-agent-qa-runner:test-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Run dual-output validation (x11 variant only)
+        if: github.event.inputs.ozone_platform == 'x11'
+        run: |
+          docker run --rm \
+            --device=/dev/uinput \
+            --user 0 \
+            -v "${HOST_CARBONYL_DIR}:/repo:ro" \
+            -e CARBONYL_GPU_MODE=cpu \
+            "${QA_RUNNER_IMAGE}" \
+            bash -c '
+              # Pillow needed by the pixel-histogram assertion. Install in
+              # the running container; the qa-runner base image keeps its
+              # default surface lean.
+              if ! python3 -c "import PIL" 2>/dev/null; then
+                apt-get update >/dev/null 2>&1
+                apt-get install -y --no-install-recommends python3-pil >/dev/null 2>&1
+              fi
+              CAPTURE_SECONDS=12 bash /repo/scripts/test-x-mirror.sh
+            '
+
+      - name: Cleanup qa-runner image
+        if: always() && github.event.inputs.ozone_platform == 'x11'
+        run: |
+          docker rmi "${QA_RUNNER_IMAGE:-}" 2>/dev/null || true
+          rm -rf "${GITHUB_WORKSPACE}/.qa-runner-clone" || true
