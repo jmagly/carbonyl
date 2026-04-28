@@ -25,15 +25,15 @@ Install Rust via [rustup.rs](https://rustup.rs). All other tools via system pack
 git clone https://git.integrolabs.net/roctinam/carbonyl.git
 cd carbonyl
 
-# Python setup
+# Python setup — automation lives in the carbonyl-agent package
 python3 -m venv .venv
-.venv/bin/pip install -r automation/requirements.txt
+.venv/bin/pip install carbonyl-agent
 
 # Build local binary (downloads ~75MB Chromium runtime, builds Rust lib ~10s)
 bash scripts/build-local.sh
 
 # Smoke test
-.venv/bin/python automation/browser.py search "test query"
+.venv/bin/carbonyl-agent search "test query"
 ```
 
 ---
@@ -50,7 +50,6 @@ carbonyl/
 │   ├── output/            # Terminal rendering (renderer, painter, cells, quadrant)
 │   ├── ui/                # Browser chrome (navigation bar)
 │   └── utils/             # Logging, helpers
-├── automation/            # Python automation layer (browser, daemon, session, inspector)
 ├── chromium/              # Chromium source config, patches, .gclient
 ├── scripts/               # Build, patch, release scripts
 ├── build/                 # Build output (gitignored)
@@ -69,9 +68,9 @@ The core library compiled to `libcarbonyl.so`. Organized by concern:
 - `ui/` — Browser chrome rendered into the terminal (URL bar, indicators).
 - `utils/` — Logging macros and miscellaneous helpers shared across crates.
 
-### automation/ — Python layer
+### Python automation layer
 
-Python wraps the Rust library (and eventually the gRPC API) for scripting and test automation. Key modules: `browser.py` (CLI entrypoint), `daemon.py` (process lifecycle), `session.py` (session state), `inspector.py` (screen analysis).
+Lives in a sibling repo, [`roctinam/carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent), distributed via `pip install carbonyl-agent`. Wraps the Rust binary for scripting and test automation. Key modules: `browser.py` (CLI entrypoint), `daemon.py` (process lifecycle), `session.py` (session state), `inspector.py` (screen analysis).
 
 ### chromium/ — Chromium integration
 
@@ -113,10 +112,12 @@ The compiled library lands in `build/`. `build-local.sh` places the Chromium run
 
 ### Python changes
 
+Python automation lives in [`roctinam/carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent) — make changes there. To smoke-test against a freshly-built local binary in this repo:
+
 ```bash
 source .venv/bin/activate
-pytest tests/                                                         # when tests exist
-python automation/browser.py open https://example.com --wait 5        # manual test
+CARBONYL_BIN=$(pwd)/build/pre-built/$(scripts/platform-triple.sh)/carbonyl \
+  carbonyl-agent open https://example.com --wait 5
 ```
 
 ### Adding new Rust modules

@@ -18,15 +18,15 @@ Chromium runtime is downloaded once and cached.
 ## Quick Start
 
 ```bash
-# One-time setup
+# One-time setup — Python automation lives in carbonyl-agent now
 python3 -m venv .venv
-.venv/bin/pip install -r automation/requirements.txt
+.venv/bin/pip install carbonyl-agent
 
 # Build local binary (downloads ~75MB Chromium runtime, builds Rust lib ~10s)
 bash scripts/build-local.sh
 
 # Test it
-.venv/bin/python automation/browser.py search "duckduckgo test"
+.venv/bin/carbonyl-agent search "duckduckgo test"
 ```
 
 ## Keeping Dependencies Current
@@ -275,15 +275,22 @@ declare_args block" warnings.
 
 ## Automation Layer
 
-`automation/browser.py` uses the local binary when present, Docker otherwise:
+The Python automation layer was extracted into `roctinam/carbonyl-agent`
+as the `carbonyl-agent` PyPI package. Binary discovery order (in the
+package's `browser.py`):
 
-- **Local binary**: `build/pre-built/<triple>/carbonyl` (set by `build-local.sh`)
-- **Docker fallback**: `fathyb/carbonyl` image
+1. `CARBONYL_BIN` env var (explicit override)
+2. `~/.local/share/carbonyl/bin/<triple>/carbonyl` (installed via
+   `carbonyl-agent install`)
+3. `carbonyl` on `$PATH` (system-wide install)
+4. `build/pre-built/<triple>/carbonyl` (local dev — set by
+   `scripts/build-local.sh` in this repo)
+5. Docker fallback: `fathyb/carbonyl`
 
 The automation is consumed by agent testing loops:
 
 ```python
-from automation.browser import search_duckduckgo, CarbonylBrowser
+from carbonyl_agent import CarbonylBrowser, search_duckduckgo
 
 # Search and get clean text back
 results = search_duckduckgo("rust async runtime")
