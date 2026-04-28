@@ -1,0 +1,39 @@
+<!doctype html>
+<!--
+  Fixture for scripts/test-x-mirror.sh — exercises both the terminal
+  bridge and the optional X-mirror surface concurrently.
+
+  Constants the test asserts on:
+  - Background colour    #003366  →  rgb(0, 51, 102)   "primary blue"
+  - Banner block colour  #aa0000  →  rgb(170, 0, 0)    "alert red"
+  - Marker token         CARBONYL_X_MIRROR_TEST_MARKER  (unique string)
+
+  The marker is sized large enough that the terminal's quadrant rasteriser
+  emits glyphs (so the ANSI capture contains hits), but the colour blocks
+  occupy enough area that the X framebuffer test can assert thousands of
+  pixels at the expected RGB values regardless of Skia AA wiggle.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Carbonyl X-mirror dual-output test</title>
+<style>
+  body { background: #003366; margin: 0; font-family: sans-serif; color: white; }
+  /* Banner first, full-bleed at top so it lands inside the terminal's
+     top-left sample window (~160x96 CSS px at default 80x24 cells). */
+  .banner { background: #aa0000; padding: 16px 24px; font-size: 24px; }
+  h1      { font-size: 64px; margin: 40px 24px; }
+  .stamp  { font-size: 24px; margin: 24px; opacity: 0.9; }
+</style>
+</head>
+<body>
+  <!--
+    Order matters: the terminal renderer samples cells*(2,4) pixels off the
+    top-left of the rastered page. Put the banner first so it's within the
+    sampled viewport at the typical 80x24-cell terminal default (160x96 px).
+  -->
+  <div class="banner">RED_BANNER_BLOCK</div>
+  <h1>CARBONYL_X_MIRROR_TEST_MARKER</h1>
+  <p class="stamp">Generated for scripts/test-x-mirror.sh — do not edit.</p>
+</body>
+</html>
