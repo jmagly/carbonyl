@@ -4,6 +4,70 @@ All notable changes to this project will be documented in this file.
 
 ---
 
+## [v0.2.0-alpha.3] — 2026-04-29
+
+Trusted automation Phase 0 deliverables and CI hardening. Full
+release notes: `RELEASE-v0.2.0-alpha.3.md`.
+
+### Added
+
+- **X-mirror surface** (`CARBONYL_X_MIRROR=1`) — the x11 ozone variant
+  now blits each compositor frame into a real X window via
+  `XPutImage` alongside the terminal render. Single Chromium process,
+  fingerprint coherence preserved. Implementation: `src/browser/x_mirror.{h,cc}`.
+  (closes #63)
+- **Three-mode runtime**: terminal-only, x11+uinput trusted input,
+  x11+uinput+X-mirror. Operator reference: `docs/runtime-modes.md`.
+- **Per-ozone runtime release tags** — headless keeps `runtime-<hash>`,
+  x11 publishes to `runtime-x11-<hash>`. (closes #64)
+- **`--ozone=…` CLI flag** on `runtime-pull.sh` and `runtime-push.sh`.
+- **Dual-output validation harness** — `scripts/test-x-mirror.sh` with
+  `tests/fixtures/x-mirror.html`. Asserts on both terminal SGR stream
+  and X framebuffer pixels. Wired into `build-runtime.yml`.
+- **`mirror.yml` workflow** — automatic `origin → github` mirror on
+  push to main and on `v*` tag. `--force-with-lease` only. (closes #53)
+- **`release.yml` workflow** — `v*` tag → packaged Gitea + GitHub
+  release. Never rebuilds Chromium; pulls the matching `runtime-<hash>`
+  release. (closes #52)
+- **`docs/ci-secrets.md`** — secrets inventory, rotation procedure,
+  leak-response playbook. (closes #54)
+- **`docs/ci-runner-titan.md`** — host runbook. (closes #55)
+- **From `v0.2.0-alpha.2`** (rolled in): `--viewport=WxH` /
+  `CARBONYL_VIEWPORT` for explicit CSS-viewport override. (closes the
+  open part of #37)
+
+### Changed
+
+- **Rust toolchain pinned** at 1.91.0 via `rust-toolchain.toml` plus a
+  `RUST_VERSION` build-arg in `Dockerfile.builder`.
+- **`check.yml` runs in the pinned builder container** with
+  `--user $(id -u):$(id -g)` mapping. (closes #50)
+- **`cargo clippy -- -D warnings` is green**: 54 pre-existing lints
+  cleared, including `write` → `write_all` in `output/painter.rs` and
+  `# Safety` docs on `unsafe fn` in `gfx/vector.rs`.
+- **CI builder-container migration** completed across all workflows.
+  (closes #56 umbrella)
+
+### Removed
+
+- **`carbonyl/automation/`** Python tree deleted (2,283 LOC). The
+  automation layer lives in `roctinam/carbonyl-agent`. Doc references
+  across `MAINTENANCE.md`, `docs/development-guide.md`, and
+  `scripts/build-local.sh` updated to point at the package.
+  (closes #36, #25)
+
+### Fixed
+
+- `runtime-push.sh` no longer clobbers headless and x11 tarballs at
+  the same release tag.
+- `Dockerfile.builder` rustup `--component` syntax (was rejecting
+  multi-component install).
+- env.sh safe under `set -u`.
+- Several smaller M147 patch + build fixes — see commit log between
+  `v0.2.0-alpha.1` and this tag.
+
+---
+
 ## [Unreleased] — jmagly/carbonyl fork
 
 This section covers work done in the `jmagly/carbonyl` fork since the upstream
