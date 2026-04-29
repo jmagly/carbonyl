@@ -103,6 +103,25 @@ The token is the same one referenced by `secrets.BUILD_REPO_TOKEN` in workflows.
 
 ## Ongoing maintenance
 
+### Bumping the pinned builder image
+
+The consumer workflows (`check.yml`, `build-runtime.yml`, `release.yml`) all read the carbonyl-builder image tag from `.gitea/builder-image-pin` at the repo root. The pin is a single line containing a tag like `sha-7458695` and is the canonical version every CI job uses.
+
+When `Dockerfile.builder` changes:
+
+1. Land the `Dockerfile.builder` change. `build-builder.yml` fires and publishes a new image tagged `sha-<new-7-char-sha>` (and refreshes `:latest`).
+2. Wait for the `build-builder.yml` run to go green.
+3. Update `.gitea/builder-image-pin` to the new tag in a follow-up commit (or in the same PR, after the green CI).
+4. Subsequent `check.yml` / `build-runtime.yml` / `release.yml` runs pick up the new image. The fallback is `:latest` if the pin file goes missing.
+
+To run a one-off workflow against a different image without touching the pin file:
+
+```
+workflow_dispatch → builder_image_tag = sha-<other> (or "latest")
+```
+
+Each consumer workflow exposes that input.
+
 ### Chromium source stays current automatically
 
 Workflows rsync the workspace checkout onto `/srv/carbonyl/` for every build, so Carbonyl's own sources update per-run. The `chromium/src/` tree stays at whatever version matches the patches' target upstream commit. When Carbonyl bumps Chromium versions (see `docs/chromium-upgrade-plan.md`), the first post-bump build will `gclient sync` internally. Titan itself doesn't need manual intervention.

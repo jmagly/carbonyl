@@ -44,11 +44,26 @@ jobs:
     steps:
       - name: Resolve builder image
         run: |
-          TAG="${{ github.event.inputs.builder_image_tag }}"
-          if [ -z "$TAG" ]; then TAG="latest"; fi
+          # Resolution order:
+          #   1. workflow_dispatch input (manual override)
+          #   2. .gitea/builder-image-pin in the repo at this commit
+          #   3. :latest (fallback if pin file missing — see #66)
+          TAG_INPUT="${{ github.event.inputs.builder_image_tag }}"
+          if [ -n "$TAG_INPUT" ]; then
+            TAG="$TAG_INPUT"; src="dispatch input"
+          else
+            PIN_URL="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/raw/.gitea/builder-image-pin?ref=${GITHUB_SHA:-main}"
+            TAG="$(curl -sf -H "Authorization: token ${{ github.token }}" "$PIN_URL" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+            if [ -n "$TAG" ]; then
+              src=".gitea/builder-image-pin"
+            else
+              TAG="latest"; src="fallback (pin file missing)"
+              echo "[resolve] WARNING: no .gitea/builder-image-pin at ${GITHUB_SHA:-main}; using :latest" >&2
+            fi
+          fi
           IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:${TAG}"
           echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
-          echo "[resolve] using builder image: ${IMAGE}"
+          echo "[resolve] using builder image: ${IMAGE} (from: $src)"
 
       - name: Log in to registry
         run: |

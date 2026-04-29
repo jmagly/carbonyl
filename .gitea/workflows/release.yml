@@ -38,6 +38,10 @@ on:
           - both
           - headless
           - x11
+      builder_image_tag:
+        description: 'carbonyl-builder image tag (sha-<7>, latest, or empty for the repo pin)'
+        required: false
+        default: ''
 
 env:
   CARGO_TERM_COLOR: always
@@ -68,7 +72,24 @@ jobs:
             *) echo "ERROR: unknown ozone_platform '${OZONE_INPUT}'" >&2; exit 1 ;;
           esac
 
-          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:latest"
+          # Builder image resolution — same order as check.yml /
+          # build-runtime.yml: dispatch input → .gitea/builder-image-pin
+          # → :latest fallback. See #66.
+          BUILDER_TAG_INPUT="${{ github.event.inputs.builder_image_tag }}"
+          if [ -n "$BUILDER_TAG_INPUT" ]; then
+            BUILDER_TAG="$BUILDER_TAG_INPUT"; bsrc="dispatch input"
+          else
+            PIN_URL="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/raw/.gitea/builder-image-pin?ref=${GITHUB_SHA:-main}"
+            BUILDER_TAG="$(curl -sf -H "Authorization: token ${{ github.token }}" "$PIN_URL" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+            if [ -n "$BUILDER_TAG" ]; then
+              bsrc=".gitea/builder-image-pin"
+            else
+              BUILDER_TAG="latest"; bsrc="fallback (pin file missing)"
+              echo "[release] WARNING: no .gitea/builder-image-pin; using :latest" >&2
+            fi
+          fi
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:${BUILDER_TAG}"
+          echo "[release] builder image: ${IMAGE} (from: $bsrc)"
 
           echo "TAG=${TAG}"                       >> "$GITHUB_ENV"
           echo "VERSION=${VERSION}"               >> "$GITHUB_ENV"
