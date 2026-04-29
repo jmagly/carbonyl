@@ -242,6 +242,27 @@ symmetry. Tags published: `runtime-<hash>` (headless) and
 `runtime-x11-<hash>` (x11), keyed on hashes of the patch + bridge
 source set.
 
+## Cutting a release
+
+Pushing a `v*` tag fires `.gitea/workflows/release.yml`, which
+publishes both ozone variants by default. Each variant ships as its
+own asset on the same Gitea + GitHub release:
+
+| Variant | Asset filename |
+|---|---|
+| Headless | `carbonyl-<version>-<triple>.tgz` (+ `.sha256`) |
+| x11 | `carbonyl-<version>-x11-<triple>.tgz` (+ `.sha256`) |
+
+The workflow is idempotent — re-running on an existing tag refreshes
+assets without duplicating release entries. To publish only one
+variant, dispatch `release.yml` manually with
+`ozone_platform=headless` or `ozone_platform=x11`.
+
+Hard guard: `release.yml` never rebuilds Chromium. It requires that
+both `runtime-<hash>` and `runtime-x11-<hash>` Gitea releases already
+exist for the tagged commit (built by `build-runtime.yml`); missing
+either fails the release with an actionable error.
+
 ## Container-level deployment
 
 The `roctinam/carbonyl-agent` repo's `docker/qa-runner/` is the

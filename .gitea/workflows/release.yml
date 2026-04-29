@@ -1,21 +1,21 @@
 # release.yml — Publish a Carbonyl release on v* tag push.
 #
 # Pulls the matching `runtime-<hash>` (or `runtime-x11-<hash>`)
-# tarball already built by build-runtime.yml, repackages it under the
-# semantic version filename, creates a Gitea release at the v* tag,
-# uploads the assets, and mirrors the release to GitHub.
+# tarballs already built by build-runtime.yml, repackages each under
+# the semantic version filename, creates a Gitea release at the v*
+# tag, uploads the assets, and mirrors the release to GitHub.
 #
-# Hard constraint: this workflow NEVER rebuilds Chromium. If the
-# matching runtime release isn't found, fail early with an actionable
-# error pointing at build-runtime.yml. Rebuilding here would produce
-# artefacts whose hash doesn't match what build-runtime published —
-# silent drift bug waiting to happen.
+# Hard constraint: this workflow NEVER rebuilds Chromium. If a
+# matching runtime release isn't found, fail early with an
+# actionable error pointing at build-runtime.yml. Rebuilding here
+# would produce artefacts whose hash doesn't match what
+# build-runtime published — silent drift bug waiting to happen.
 #
 # Triggers:
-#   - push of a `v*` tag → automatic
+#   - push of a `v*` tag → automatic, ozone variants = "both"
 #   - workflow_dispatch with `tag` input → manual re-run / fix-up
 #
-# Refs: roctinam/carbonyl#52
+# Refs: roctinam/carbonyl#52, #65
 # Secrets: BUILD_REPO_TOKEN (Gitea), GH_MIRROR_TOKEN (GitHub).
 # See docs/ci-secrets.md.
 
@@ -30,11 +30,12 @@ on:
         description: 'Existing v* tag to publish (no leading refs/tags/)'
         required: true
       ozone_platform:
-        description: 'Ozone variant of the runtime to package'
+        description: 'Which ozone variant(s) to package: both | headless | x11'
         required: false
-        default: 'headless'
+        default: 'both'
         type: choice
         options:
+          - both
           - headless
           - x11
 
@@ -49,21 +50,32 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Resolve tag, version, builder image
+      - name: Resolve tag, version, ozone variants, builder image
         run: |
           # ref_name is "v0.2.0-alpha.2" on tag push; input.tag for manual.
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           [ -n "$TAG" ] || { echo "ERROR: no tag resolved" >&2; exit 1; }
           # Strip leading "v" for the version string in filenames.
           VERSION="${TAG#v}"
-          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+
+          # Ozone variants list. Tag-push trigger and the default
+          # workflow_dispatch input both resolve to "both" so a single
+          # tag push ships every variant. (closes #65)
+          OZONE_INPUT="${{ github.event.inputs.ozone_platform || 'both' }}"
+          case "${OZONE_INPUT}" in
+            both)         OZONE_VARIANTS="headless x11" ;;
+            headless|x11) OZONE_VARIANTS="${OZONE_INPUT}" ;;
+            *) echo "ERROR: unknown ozone_platform '${OZONE_INPUT}'" >&2; exit 1 ;;
+          esac
+
           IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:latest"
 
-          echo "TAG=${TAG}"             >> "$GITHUB_ENV"
-          echo "VERSION=${VERSION}"     >> "$GITHUB_ENV"
-          echo "OZONE=${OZONE}"         >> "$GITHUB_ENV"
-          echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
-          echo "[release] tag=${TAG} version=${VERSION} ozone=${OZONE}"
+          echo "TAG=${TAG}"                       >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}"               >> "$GITHUB_ENV"
+          echo "OZONE_INPUT=${OZONE_INPUT}"       >> "$GITHUB_ENV"
+          echo "OZONE_VARIANTS=${OZONE_VARIANTS}" >> "$GITHUB_ENV"
+          echo "BUILDER_IMAGE=${IMAGE}"           >> "$GITHUB_ENV"
+          echo "[release] tag=${TAG} version=${VERSION} variants=[${OZONE_VARIANTS}]"
 
       - name: Validate token presence
         run: |
@@ -92,8 +104,9 @@ jobs:
 
       - name: Compute runtime hash for the tagged commit
         run: |
-          # The hash is computed over patches + bridge sources. Run
-          # inside the builder container so PATH / env match what
+          # The hash is variant-independent (computed over patches +
+          # bridge sources, identical for headless and x11). Run inside
+          # the builder container so PATH / env match what
           # build-runtime.yml used at the time of publication.
           HASH="$(docker run --rm \
             -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
@@ -101,70 +114,75 @@ jobs:
             "${BUILDER_IMAGE}" \
             bash scripts/runtime-hash.sh)"
           [ -n "$HASH" ] || { echo "ERROR: runtime-hash.sh returned empty" >&2; exit 1; }
-
-          # Tag-shape rule mirrors runtime-push.sh: headless keeps the
-          # historical tag, other variants prepend the variant.
-          if [ "$OZONE" = "headless" ]; then
-            RUNTIME_TAG="runtime-${HASH}"
-          else
-            RUNTIME_TAG="runtime-${OZONE}-${HASH}"
-          fi
-          echo "HASH=${HASH}"               >> "$GITHUB_ENV"
-          echo "RUNTIME_TAG=${RUNTIME_TAG}" >> "$GITHUB_ENV"
-          echo "[release] runtime tag: ${RUNTIME_TAG}"
+          echo "HASH=${HASH}" >> "$GITHUB_ENV"
+          echo "[release] runtime hash: ${HASH}"
 
       - name: Resolve target architecture (amd64 only for now)
         run: |
-          # Multi-arch release is a follow-up. Today we publish amd64
-          # only. The runtime release may have been built for amd64
-          # on this same host.
+          # Multi-arch is tracked under #67. Today we publish amd64 only.
           TRIPLE="x86_64-unknown-linux-gnu"
           echo "TRIPLE=${TRIPLE}" >> "$GITHUB_ENV"
 
-      - name: Verify runtime release exists (no Chromium rebuild here!)
+      - name: Verify all requested runtime releases exist (no Chromium rebuild here!)
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
-          API="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags/${RUNTIME_TAG}"
-          if ! curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API}" > /dev/null; then
-            echo "ERROR: runtime release '${RUNTIME_TAG}' not found." >&2
-            echo "       Build it first: trigger build-runtime.yml with" >&2
-            echo "       ozone_platform=${OZONE} on the tagged commit." >&2
-            echo "       Releasing without it would silently drift artefacts." >&2
+          API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
+          missing=0
+          for ozone in ${OZONE_VARIANTS}; do
+            if [ "$ozone" = "headless" ]; then
+              runtime_tag="runtime-${HASH}"
+            else
+              runtime_tag="runtime-${ozone}-${HASH}"
+            fi
+            if curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" > /dev/null; then
+              echo "[release] runtime release '${runtime_tag}' present"
+            else
+              echo "ERROR: runtime release '${runtime_tag}' not found." >&2
+              echo "       Build it first: trigger build-runtime.yml with" >&2
+              echo "       ozone_platform=${ozone} on the tagged commit." >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "" >&2
+            echo "       Releasing without all requested variants would silently" >&2
+            echo "       drift artefacts. Run build-runtime.yml for the missing" >&2
+            echo "       variant(s), then re-run this workflow." >&2
             exit 1
           fi
-          echo "[release] runtime release '${RUNTIME_TAG}' present"
 
-      - name: Download runtime tarball
+      - name: Download and repackage runtime tarballs (per variant)
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           STAGE="${GITHUB_WORKSPACE}/.release-stage"
           rm -rf "${STAGE}" && mkdir -p "${STAGE}"
 
-          URL="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${RUNTIME_TAG}/${TRIPLE}.tgz"
-          curl -sfL -H "Authorization: token ${GITEA_TOKEN}" \
-            -o "${STAGE}/${TRIPLE}.tgz" "${URL}"
+          for ozone in ${OZONE_VARIANTS}; do
+            if [ "$ozone" = "headless" ]; then
+              runtime_tag="runtime-${HASH}"
+              # Preserve the historical headless naming convention from
+              # v0.2.0-alpha.1 release notes (no ozone tag in filename).
+              asset_name="carbonyl-${VERSION}-${TRIPLE}.tgz"
+            else
+              runtime_tag="runtime-${ozone}-${HASH}"
+              asset_name="carbonyl-${VERSION}-${ozone}-${TRIPLE}.tgz"
+            fi
 
-          # Repackage as carbonyl-<version>-<triple>.tgz so the public
-          # release asset is named after the semantic version, not the
-          # internal hash.
-          ASSET_NAME="carbonyl-${VERSION}-${OZONE}-${TRIPLE}.tgz"
-          if [ "$OZONE" = "headless" ]; then
-            # Preserve the historical headless naming convention from
-            # v0.2.0-alpha.1 release notes.
-            ASSET_NAME="carbonyl-${VERSION}-${TRIPLE}.tgz"
-          fi
-          mv "${STAGE}/${TRIPLE}.tgz" "${STAGE}/${ASSET_NAME}"
+            url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/${TRIPLE}.tgz"
+            tmp="${STAGE}/.dl-${ozone}.tgz"
+            curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${tmp}" "${url}"
+            mv "${tmp}" "${STAGE}/${asset_name}"
 
-          # Generate sha256 alongside the tarball so consumers can
-          # verify; carbonyl-agent install already does this.
-          cd "${STAGE}"
-          sha256sum "${ASSET_NAME}" > "${ASSET_NAME}.sha256"
-          ls -lh
+            # sha256 alongside each tarball; carbonyl-agent install
+            # already uses these to verify downloads.
+            ( cd "${STAGE}" && sha256sum "${asset_name}" > "${asset_name}.sha256" )
+            echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
+          done
 
-          echo "STAGE=${STAGE}"           >> "$GITHUB_ENV"
-          echo "ASSET_NAME=${ASSET_NAME}" >> "$GITHUB_ENV"
+          ls -lh "${STAGE}"
+          echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
 
       - name: Resolve release notes
         run: |
@@ -178,9 +196,8 @@ jobs:
           else
             {
               printf '# Carbonyl %s\n\n' "${VERSION}"
-              printf 'Pre-built Chromium runtime for Carbonyl, ozone variant: %s.\n\n' "${OZONE}"
-              printf 'Runtime hash: `%s`\n' "${HASH}"
-              printf 'Build artefact source: `%s`\n\n' "${RUNTIME_TAG}"
+              printf 'Pre-built Chromium runtime for Carbonyl, ozone variants: %s.\n\n' "${OZONE_VARIANTS}"
+              printf 'Runtime hash: `%s`\n\n' "${HASH}"
               printf 'See https://git.integrolabs.net/%s/blob/%s/changelog.md\n' "${GITHUB_REPOSITORY}" "${TAG}"
               printf 'for the change log entry.\n'
             } > "${BODY_FILE}"
@@ -223,12 +240,12 @@ jobs:
           fi
           echo "RELEASE_ID=${RELEASE_ID}" >> "$GITHUB_ENV"
 
-      - name: Upload assets to Gitea release
+      - name: Upload all staged assets to Gitea release
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           API="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets"
-          for asset in "${STAGE}/${ASSET_NAME}" "${STAGE}/${ASSET_NAME}.sha256"; do
+          for asset in "${STAGE}"/*; do
             name="$(basename "${asset}")"
             existing_id="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API}" \
               | jq -r ".[] | select(.name == \"${name}\") | .id" 2>/dev/null || true)"
@@ -242,7 +259,7 @@ jobs:
             echo "[release] uploaded ${name}"
           done
 
-      - name: Mirror release to GitHub
+      - name: Mirror release to GitHub (create or update + upload all assets)
         env:
           GH_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
         run: |
@@ -286,7 +303,7 @@ jobs:
           fi
 
           # Upload assets via the GitHub release upload URL.
-          for asset in "${STAGE}/${ASSET_NAME}" "${STAGE}/${ASSET_NAME}.sha256"; do
+          for asset in "${STAGE}"/*; do
             name="$(basename "${asset}")"
             mime="$(file -b --mime-type "${asset}")"
             # Delete existing same-name asset for idempotent re-runs.
@@ -316,6 +333,6 @@ jobs:
         run: |
           echo ""
           echo "==> Release published"
-          echo "    Gitea: https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          echo "    Gitea:  https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
           echo "    GitHub: https://github.com/jmagly/carbonyl/releases/tag/${TAG}"
-          echo "    Asset: ${ASSET_NAME}"
+          echo "    Variants: ${OZONE_VARIANTS}"
