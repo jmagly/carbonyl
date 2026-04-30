@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Carbonyl text-render parity — CSS-rich</title>
+  <style>
+    /* Targets the text-effects code path (patch 0007 territory).
+       Uses CSS that exercises font-size variation, weight, italic,
+       and coloured backgrounds. Avoids webfonts (would be a fallback
+       lottery) and animations (would race the capture window). */
+    html, body { margin: 0; padding: 24px; background: #003366; color: #fff;
+                 font-family: monospace; }
+    h1 { font-size: 56px; margin: 0 0 24px; color: #ffcc00; }
+    .small { font-size: 16px; line-height: 22px; }
+    .big   { font-size: 32px; line-height: 40px; font-weight: bold; }
+    .italic { font-style: italic; color: #00ff99; }
+    .banner { background: #aa0000; padding: 16px 24px; font-size: 24px;
+              margin: 16px 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+            margin-top: 24px; }
+    .cell { background: #222244; padding: 16px; }
+  </style>
+</head>
+<body>
+  <h1>CSS_RICH_PARITY_MARKER</h1>
+  <div class="banner">RED_BANNER_BLOCK — fixed colour, fixed padding</div>
+  <p class="big">Big bold line</p>
+  <p class="small">small line — tighter leading, smaller cells</p>
+  <p class="italic">italic green text — alternate colour channel</p>
+  <div class="grid">
+    <div class="cell">grid cell A — left column</div>
+    <div class="cell">grid cell B — right column</div>
+  </div>
+</body>
+</html>

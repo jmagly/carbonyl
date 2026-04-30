@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Carbonyl text-render parity — dynamic</title>
+  <style>
+    html, body { margin: 0; padding: 24px; background: #003366; color: #fff;
+                 font-family: monospace; font-size: 24px; }
+    h1 { font-size: 40px; margin: 0 0 24px; color: #ffcc00; }
+    #target { background: #222244; padding: 16px; min-height: 200px; }
+    /* No transitions / animations — all DOM mutation runs synchronously
+       inside DOMContentLoaded so by the time the parity capture starts
+       the page is steady-state. The render must be deterministic across
+       both ozone variants regardless of the JS path that produced it. */
+  </style>
+</head>
+<body>
+  <h1>DYNAMIC_PARITY_MARKER</h1>
+  <div id="target">placeholder — replaced by JS</div>
+
+  <script>
+    // Single synchronous mutation on DOMContentLoaded. The parity
+    // capture runs after a fixed sleep, so the steady state below is
+    // what gets compared between ozone variants.
+    document.addEventListener('DOMContentLoaded', function () {
+      var el = document.getElementById('target');
+      el.textContent = '';
+      var lines = [
+        'JS_INJECTED_LINE_1 — predictable content',
+        'JS_INJECTED_LINE_2 — same on every run',
+        'JS_INJECTED_LINE_3 — no timestamps, no random'
+      ];
+      for (var i = 0; i < lines.length; i++) {
+        var p = document.createElement('p');
+        p.textContent = lines[i];
+        el.appendChild(p);
+      }
+    });
+  </script>
+</body>
+</html>

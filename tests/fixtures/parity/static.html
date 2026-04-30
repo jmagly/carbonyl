@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Carbonyl text-render parity — static</title>
+  <style>
+    /* Pure text, no JS, no animations, no fonts beyond defaults.
+       Anything that produces non-deterministic pixels (font fallback,
+       webfonts, system theme) is forbidden — this fixture's whole job
+       is to produce byte-identical compositor output between
+       ozone_platform=headless and ozone_platform=x11. */
+    html, body { margin: 0; padding: 24px; }
+    body {
+      background: #003366;
+      color: #ffffff;
+      font-family: monospace;
+      font-size: 24px;
+      line-height: 32px;
+    }
+    h1 { font-size: 40px; margin: 0 0 24px; }
+    pre { margin: 0; }
+  </style>
+</head>
+<body>
+  <h1>STATIC_PARITY_MARKER</h1>
+  <pre>The quick brown fox jumps over the lazy dog.
+0123456789 0123456789 0123456789
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+abcdefghijklmnopqrstuvwxyz
+~!@#$%^&amp;*()_+-=[]{}|;':",./&lt;&gt;?</pre>
+</body>
+</html>
