@@ -1,0 +1,223 @@
+# test-text-parity.yml — Phase 0 W0.6 text-render parity in CI.
+#
+# Runs `scripts/test-text-parity.sh` against both ozone variants of
+# Carbonyl for the tagged commit, asserting content-structural
+# equivalence between the headless and x11 runtimes. Hard guard:
+# never rebuilds Chromium — pulls the matching `runtime-<hash>` and
+# `runtime-x11-<hash>` releases. Same precondition as `release.yml`'s
+# `ozone_platform=both` mode.
+#
+# Triggers:
+#   - workflow_dispatch (with optional `tag` input — defaults to main HEAD)
+#   - push to main when the harness or fixtures change
+#
+# Refs: roctinam/carbonyl#68, #62, #60.
+# Secrets: BUILD_REPO_TOKEN (Gitea, for pulling private runtime tarballs).
+
+name: Text-render parity (W0.6)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/test-text-parity.sh'
+      - 'tests/fixtures/parity/**'
+      - '.gitea/workflows/test-text-parity.yml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Git ref to test (commit, branch, or v* tag — defaults to main HEAD)'
+        required: false
+        default: 'main'
+      builder_image_tag:
+        description: 'carbonyl-builder image tag (sha-<7>, latest, or empty for the repo pin)'
+        required: false
+        default: ''
+
+env:
+  HOST_CARBONYL_DIR: /srv/carbonyl
+
+jobs:
+  parity:
+    name: Parity ${{ github.event.inputs.tag || github.ref_name }}
+    runs-on: titan
+    timeout-minutes: 30
+
+    steps:
+      - name: Resolve ref, builder image
+        run: |
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          [ -n "$REF" ] || { echo "ERROR: no ref resolved" >&2; exit 1; }
+
+          # Builder image resolution — same order as the other workflows
+          # (input → .gitea/builder-image-pin → :latest).
+          TAG_INPUT="${{ github.event.inputs.builder_image_tag }}"
+          if [ -n "$TAG_INPUT" ]; then
+            BUILDER_TAG="$TAG_INPUT"; bsrc="dispatch input"
+          else
+            PIN_URL="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/raw/.gitea/builder-image-pin?ref=${GITHUB_SHA:-main}"
+            BUILDER_TAG="$(curl -sf -H "Authorization: token ${{ github.token }}" "$PIN_URL" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+            if [ -n "$BUILDER_TAG" ]; then
+              bsrc=".gitea/builder-image-pin"
+            else
+              BUILDER_TAG="latest"; bsrc="fallback (pin file missing)"
+            fi
+          fi
+
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:${BUILDER_TAG}"
+          TRIPLE="x86_64-unknown-linux-gnu"
+
+          echo "REF=${REF}"             >> "$GITHUB_ENV"
+          echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "TRIPLE=${TRIPLE}"       >> "$GITHUB_ENV"
+          echo "[parity] ref=${REF}  builder=${IMAGE} (from: $bsrc)  triple=${TRIPLE}"
+
+      - name: Validate token presence
+        run: |
+          if [ -z "${{ secrets.BUILD_REPO_TOKEN }}" ]; then
+            echo "ERROR: BUILD_REPO_TOKEN not set; see docs/ci-secrets.md" >&2; exit 1
+          fi
+
+      - name: Log in to Gitea container registry
+        run: |
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net \
+              -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull builder image
+        run: docker pull "${BUILDER_IMAGE}"
+
+      - name: Checkout repo at ref
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${REF}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone" \
+            || git clone \
+              "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+              "${GITHUB_WORKSPACE}/.repo-clone"
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          # If REF was a commit SHA the --branch above fails; fall back
+          # to a full clone + checkout.
+          git checkout "${REF}" 2>/dev/null || true
+
+      - name: Compute runtime hash for the ref
+        run: |
+          HASH="$(docker run --rm \
+            -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash scripts/runtime-hash.sh)"
+          [ -n "$HASH" ] || { echo "ERROR: runtime-hash.sh returned empty" >&2; exit 1; }
+          echo "HASH=${HASH}" >> "$GITHUB_ENV"
+          echo "[parity] runtime hash: ${HASH}"
+
+      - name: Verify both runtime releases exist (fail-loud, no rebuild)
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
+          missing=0
+          for tag in "runtime-${HASH}" "runtime-x11-${HASH}"; do
+            if curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${tag}" > /dev/null; then
+              echo "[parity] ✅ ${tag} present"
+            else
+              echo "ERROR: ${tag} not found" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "" >&2
+            echo "       Run build-runtime.yml with ozone_platform=both first," >&2
+            echo "       then re-run this workflow." >&2
+            exit 1
+          fi
+
+      - name: Download both runtime tarballs
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          STAGE="${GITHUB_WORKSPACE}/.parity-stage"
+          rm -rf "${STAGE}"
+          mkdir -p "${STAGE}/headless" "${STAGE}/x11"
+
+          for variant in headless x11; do
+            if [ "$variant" = "headless" ]; then
+              tag="runtime-${HASH}"
+            else
+              tag="runtime-${variant}-${HASH}"
+            fi
+            url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${tag}/${TRIPLE}.tgz"
+            echo "[parity] fetching ${variant} runtime"
+            curl -sfL -H "Authorization: token ${GITEA_TOKEN}" "${url}" \
+              | tar xz -C "${STAGE}/${variant}/"
+            ls -la "${STAGE}/${variant}/${TRIPLE}/carbonyl"
+          done
+
+          echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
+
+      - name: Build qa-runner image for the parity run
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          # Reuse the same Dockerfile + URL pattern as the dual-output
+          # validation in build-runtime.yml; image carries Xorg, capture
+          # tools, and the x11 runtime baked in. The headless runtime is
+          # bind-mounted at run time.
+          RUNTIME_URL="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/runtime-x11-${HASH}/${TRIPLE}.tgz"
+
+          QA_DIR="${GITHUB_WORKSPACE}/.qa-runner-clone"
+          rm -rf "${QA_DIR}"
+          git clone --depth 1 \
+            "https://token:${{ github.token }}@git.integrolabs.net/roctinam/carbonyl-agent.git" \
+            "${QA_DIR}"
+
+          IMG="carbonyl-agent-qa-runner:parity-${GITHUB_SHA::7}"
+          docker build \
+            --build-arg "CARBONYL_RUNTIME_URL=${RUNTIME_URL}" \
+            -t "${IMG}" \
+            "${QA_DIR}/docker/qa-runner/"
+          echo "QA_RUNNER_IMAGE=${IMG}" >> "$GITHUB_ENV"
+
+      - name: Run text-render parity harness
+        run: |
+          # Mount:
+          #   - workspace as /repo (so the container sees the harness
+          #     and fixtures at the resolved ref)
+          #   - both runtime extract dirs as /runtimes/{headless,x11}
+          # The image's baked-in /opt/carbonyl/carbonyl is NOT used —
+          # both binaries come from the bind-mounts so we test exactly
+          # the runtimes that match the resolved hash.
+          docker run --rm \
+            --user 0 \
+            -v "${GITHUB_WORKSPACE}/.repo-clone:/repo" \
+            -v "${STAGE}/headless/${TRIPLE}:/runtimes/headless:ro" \
+            -v "${STAGE}/x11/${TRIPLE}:/runtimes/x11:ro" \
+            -e CARBONYL_GPU_MODE=cpu \
+            "${QA_RUNNER_IMAGE}" \
+            bash -c '
+              bash /repo/scripts/test-text-parity.sh \
+                --headless-bin /runtimes/headless/carbonyl \
+                --x11-bin /runtimes/x11/carbonyl
+            '
+          rc=$?
+          # Treat the script's exit code as the job result. INCONCLUSIVE
+          # fixtures inside the script don't count as failures (the
+          # script exits 0 unless a fixture genuinely FAILed).
+          exit $rc
+
+      - name: Upload parity report as artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: parity-report-${{ env.HASH }}
+          path: ${{ env.GITHUB_WORKSPACE }}/.repo-clone/.aiwg/reports/phase0-w06-parity-report.md
+          retention-days: 90
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rmi "${QA_RUNNER_IMAGE:-}" 2>/dev/null || true
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" \
+                 "${GITHUB_WORKSPACE}/.qa-runner-clone" \
+                 "${GITHUB_WORKSPACE}/.parity-stage" 2>/dev/null || true
