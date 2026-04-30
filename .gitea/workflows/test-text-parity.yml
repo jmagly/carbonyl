@@ -37,6 +37,15 @@ on:
 env:
   HOST_CARBONYL_DIR: /srv/carbonyl
 
+# Prevent self-racing: a push to main + a manual dispatch within the
+# same window were both rebuilding the qa-runner image at the same time
+# and contending for the docker daemon (one of the two ran a fixture
+# without enough CPU and FAILed). Only one parity run per ref at a time;
+# new dispatches cancel the in-flight one.
+concurrency:
+  group: parity-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   parity:
     name: Parity ${{ github.event.inputs.tag || github.ref_name }}
