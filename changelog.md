@@ -2,345 +2,156 @@
 
 All notable changes to this project will be documented in this file.
 
----
+## [0.2.0-alpha.4] - 2026-05-06
 
-## [v0.2.0-alpha.3] — 2026-04-29
+### 🚀 Features
 
-Trusted automation Phase 0 deliverables and CI hardening. Full
-release notes: `RELEASE-v0.2.0-alpha.3.md`.
+- Opt-in eager cookie SQLite flush via CLI
 
-### Added
+### 🐛 Bug Fixes
 
-- **X-mirror surface** (`CARBONYL_X_MIRROR=1`) — the x11 ozone variant
-  now blits each compositor frame into a real X window via
-  `XPutImage` alongside the terminal render. Single Chromium process,
-  fingerprint coherence preserved. Implementation: `src/browser/x_mirror.{h,cc}`.
-  (closes #63)
-- **Three-mode runtime**: terminal-only, x11+uinput trusted input,
-  x11+uinput+X-mirror. Operator reference: `docs/runtime-modes.md`.
-- **Per-ozone runtime release tags** — headless keeps `runtime-<hash>`,
-  x11 publishes to `runtime-x11-<hash>`. (closes #64)
-- **`--ozone=…` CLI flag** on `runtime-pull.sh` and `runtime-push.sh`.
-- **Dual-output validation harness** — `scripts/test-x-mirror.sh` with
-  `tests/fixtures/x-mirror.html`. Asserts on both terminal SGR stream
-  and X framebuffer pixels. Wired into `build-runtime.yml`.
-- **`mirror.yml` workflow** — automatic `origin → github` mirror on
-  push to main and on `v*` tag. `--force-with-lease` only. (closes #53)
-- **`release.yml` workflow** — `v*` tag → packaged Gitea + GitHub
-  release. Never rebuilds Chromium; pulls the matching `runtime-<hash>`
-  release. (closes #52)
-- **`docs/ci-secrets.md`** — secrets inventory, rotation procedure,
-  leak-response playbook. (closes #54)
-- **`docs/ci-runner-titan.md`** — host runbook. (closes #55)
-- **From `v0.2.0-alpha.2`** (rolled in): `--viewport=WxH` /
-  `CARBONYL_VIEWPORT` for explicit CSS-viewport override. (closes the
-  open part of #37)
+- Forward --carbonyl-cookie-flush-interval-ms to child processes
 
-### Changed
+### Ci
 
-- **Rust toolchain pinned** at 1.91.0 via `rust-toolchain.toml` plus a
-  `RUST_VERSION` build-arg in `Dockerfile.builder`.
-- **`check.yml` runs in the pinned builder container** with
-  `--user $(id -u):$(id -g)` mapping. (closes #50)
-- **`cargo clippy -- -D warnings` is green**: 54 pre-existing lints
-  cleared, including `write` → `write_all` in `output/painter.rs` and
-  `# Safety` docs on `unsafe fn` in `gfx/vector.rs`.
-- **CI builder-container migration** completed across all workflows.
-  (closes #56 umbrella)
+- Ozone_platform=both — single tag push ships all variants
+- Pin builder image via .gitea/builder-image-pin
+- Test-text-parity.yml — wire W0.6 parity harness into a workflow
+- Add concurrency group to prevent self-racing
 
-### Removed
+### Test
 
-- **`carbonyl/automation/`** Python tree deleted (2,283 LOC). The
-  automation layer lives in `roctinam/carbonyl-agent`. Doc references
-  across `MAINTENANCE.md`, `docs/development-guide.md`, and
-  `scripts/build-local.sh` updated to point at the package.
-  (closes #36, #25)
+- W0.6 text-render parity harness + 3 fixtures + report
 
-### Fixed
+## [0.2.0-alpha.3] - 2026-04-29
 
-- `runtime-push.sh` no longer clobbers headless and x11 tarballs at
-  the same release tag.
-- `Dockerfile.builder` rustup `--component` syntax (was rejecting
-  multi-component install).
-- env.sh safe under `set -u`.
-- Several smaller M147 patch + build fixes — see commit log between
-  `v0.2.0-alpha.1` and this tag.
+### 🚀 Features
 
----
+- X mirror surface for compositor frames (CARBONYL_X_MIRROR)
+- --ozone flag on runtime-pull.sh and runtime-push.sh
 
-## [Unreleased] — jmagly/carbonyl fork
+### 🐛 Bug Fixes
 
-This section covers work done in the `jmagly/carbonyl` fork since the upstream
-(`fathyb/carbonyl`) became inactive in February 2023. The fork maintains
-Carbonyl for use in automated agent testing pipelines and upgrades the
-Chromium base through M147.
+- Use github.actor (Gitea-aliased) not gitea.actor for docker login
+- Configure git safe.directory for bind-mounted repos
+- Set CI git user.email/user.name in builder image + workflow
+- Reset chromium/src to clean state before patches apply
+- Abort stale git am/rebase state before reset
+- Force-reset repos instead of stash-then-checkout
+- Skip patches.sh apply when patches dir empty
+- Mount workspace at host-matching path to satisfy symlinks
+- Remove phantom //carbonyl/src/browser:carbonyl dep
+- Restore trailing newline on 0001-Add-Carbonyl-library.patch
+- Redirect phantom :carbonyl fix to patch 0013
+- Fix double out/ path bug in build steps
+- Drop stray CARBONYL_SKIP_CARGO_BUILD= positional arg
+- Pass -j NINJA_JOBS through build.sh to ninja
+- Add Chromium build deps — gperf, bison, flex, pkg-config
+- Regenerate patch 0013 from grissom working tree
+- Add 0025-fix-m147-finalize for M147 API drift
+- Add libgbm1, libegl1, libgl1, libxkbcommon0 runtime libs
+- Include ANGLE + SwiftShader runtime libs in ninja targets
+- Env.sh safe under set -u
+- Print HTTP response body on release-create failure
+- Satisfy Chromium clang plugins in x_mirror.cc
+- Resolve clippy 1.91 backlog and unblock check.yml
+- Separate runtime tags per ozone_platform variant
 
-### Chromium Upgrade: M140 → M147 — SHIPPED (Apr 2026)
+### 📖 Documentation
 
-Phase 2 of the M135 → M147 catch-up epic. All 24 patches rebased from
-M140 to M147 (147.0.7727.94) — current upstream stable.
+- Land design docs drafted 2026-04-02
+- Land SDLC corpus for bot-detection initiative
+- Reframe Phase 3 as owned fingerprint registry
+- Add roadmap + CI plan; adopt jmagly/wreq fork
+- Land Gitea Actions + builder-container CI/CD plan
+- Flip wreq to Gitea-primary; corpus repo; containers
+- ADR-002 trusted input approach (draft, pending Phase 0)
+- Pivot to x11 Ozone + Xorg-in-container
+- Phase 0 W0.1 patch paper-audit for x11 Ozone compatibility
+- Cascade W0.1 audit findings
+- Update post-pivot labeling for trusted-input path
+- Runtime modes — terminal, x11+uinput, x11+x-mirror
+- Secrets inventory + rotation + leak-response playbook
 
-| Phase | Milestone | Commit |
-|-------|-----------|--------|
-| Phase 2 | M147 (147.0.7727.94) | `58e50bd` |
+### Ci
 
-**Patch count**: 24 (unchanged).
+- Migrate build-runtime to container; split build-builder; add titan runbook
+- Pin Rust to 1.91.0 and containerize check.yml
+- Run dual-output validation for x11 builds
+- Mirror.yml — one-way sync origin → github
+- Release.yml — publish v* tag to Gitea + GitHub releases
 
-**Runtime tarball**: published to Gitea releases as
-[`runtime-c6fd85745eeaaf1b`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-c6fd85745eeaaf1b)
-(x86_64-unknown-linux-gnu).
+### Test
 
-#### Patch conflicts resolved (11)
+- Dual-output validation harness
 
-- **Patch 01** (`headless/BUILD.gn`): merged M147 deps with carbonyl dep
-- **Patch 02**: kept carbonyl Mojo members alongside M147's `BrokerHolder`
-  struct refactor in `render_frame_host_impl.h`; dropped
-  `CONTENT_ENABLE_LEGACY_IPC` blocks (removed in M147)
-- **Patch 03** (`host_display_client.h`): kept `LayeredWindowUpdater`
-  Mojo interface alongside M147's M147 IS_MAC refactor
-- **Patch 05** (`paint_artifact_compositor.cc`): removed debug dump calls
-  (carbonyl side)
-- **Patch 06** (`headless_screen.cc`): kept carbonyl bridge include and
-  DPI scaling
-- **Patch 07** (`text_decoration_painter.cc`): kept disabled underline/overline
-- **Patch 09**: merged headless_web_contents / browser_impl includes
-- **Patch 10** (`render_frame_impl.cc`): merged M147 perfetto includes
-  with carbonyl Skia include
-- **Patch 13** (6 files): merged includes and deps across the rendering
-  bridge refactor
-- **Patch 23**: merged `headless_browser_impl.cc` includes
-- **Patch 24** (`blink/renderer/platform/BUILD.gn`): added carbonyl
-  text_capture visibility
+## [0.2.0-alpha.2] - 2026-04-17
 
-#### Build fixes for M147 API drift
+### 🐛 Bug Fixes
 
-- **GN args**: `use_dbus = true` required — M147's wayland ozone now
-  unconditionally depends on `clipboard_util_linux` which needs dbus
-- **`renderer.cc`**: replaced `static std::unique_ptr<Renderer>` with a
-  leaked raw pointer — M147 clang enforces `-Wexit-time-destructors`
-- **`text_capture.cc`** (Skia API drift):
-  - `drawPath(path, paint, bool=false)` → `drawPath(path, paint)` (2-arg)
-  - `getRelativeTransform` returns `SkM44`, use `.asM33()` for `SkMatrix`
-  - Static `RendererService` → leaked pointer
-- **`host_display_client.h`**: `ui/gfx/native_widget_types.h` renamed to
-  `ui/gfx/native_ui_types.h`; added `SkBitmap.h` include; viz target
-  now depends on `//ui/gfx`
-- **`host_display_client.cc`**: removed obsolete `resource_sizes.h` include
-- **`software_output_device_proxy.cc`**: `ResourceSizes::MaybeSizeInBytes`
-  removed; replaced with `SinglePlaneFormat::kRGBA_8888.MaybeEstimatedSizeInBytes()`
-- **`browser_interface_binders.cc`**: `BinderMap::Add` signature changed;
-  switched carbonyl from manual `BindRepeating` to `BindRenderFrameHostImpl<>`
-- **`headless_browser_impl.cc`**: added `navigation_controller.h` include;
-  `PlatformSetWebContentsBounds` → `SetWebContentsBounds` (renamed)
-- **`headless_screen.cc`**: removed duplicate `~HeadlessScreen() = default`
-- **`headless_web_contents_impl.h`**: added
-  `using content::WebContentsObserver::OnVisibilityChanged;`
-- **`text_decoration_painter.cc`**: `(void)skip_ink` to suppress unused-var
-- **`paint_artifact_compositor.cc`**: removed orphan
-  `DumpWithDifferingPaintPropertiesIncluded` definition
-- **`font.{h,cc}`**: removed dead `Font::DrawText(TextRun)` overloads —
-  `CachingWordShaper` and `ShapeResultBuffer` removed upstream; the
-  `TextFragmentPaintInfo` path with the b64 text-capture bypass remains
+- SDK-driven CSS viewport via --viewport, closes [#37](https://github.com/fathyb/carbonyl/issues/37)
 
-**Phantom dep fix**: removed `//carbonyl/src/browser:carbonyl` from
-`headless/BUILD.gn` — target never existed (only `bridge`, `viz`,
-`renderer`). Previously worked by accident in older gn evaluations.
+### 📖 Documentation
 
-### Chromium Upgrade: M135 → M140 — SHIPPED (Apr 2026)
+- Scrub internal repo/host references from v0.2.0-alpha.1 notes
+- Scrub internal repo/host refs and nudge logo alignment
 
-Phase 1 of the M135 → M147 catch-up epic. Single-hop rebase of all 24
-patches from M135 to M140 (140.0.7339.264).
+## [0.2.0-alpha.1] - 2026-04-15
 
-| Phase | Milestone | Commit |
-|-------|-----------|--------|
-| Phase 1 | M140 (140.0.7339.264) | `5f165fe` |
+### 🚀 Features
 
-**Patch count**: 24 (unchanged from M135).
+- Path A — extract carbonyl text capture into a blink TU
 
-**Runtime tarball**: published to Gitea releases as
-[`runtime-35de92813b596ca2`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-35de92813b596ca2)
-(238 MB, x86_64-unknown-linux-gnu).
+### 🐛 Bug Fixes
 
-#### Patch conflicts resolved (7)
+- Apply M120 compile fixes to carbonyl src and update patches
+- Gn gen fixes, CI workflows, and builder Dockerfile
+- Replace VLA with std::vector in renderer.cc
+- Path B — disable b64 text capture, M135 build is green
+- Replace EndMarkerZulu assertion with Foxtrot (viewport fit)
 
-- **Patch 02** (`render_frame_impl.cc`): M140 removed `CONTENT_ENABLE_LEGACY_IPC`
-  blocks — dropped legacy IPC guards, kept carbonyl callback cleanup
-- **Patch 02** (`font.cc`): Carbonyl b64 text additions — clean take of carbonyl
-  side (M140 had no changes to this region)
-- **Patch 06** (`headless_browser_impl_aura.cc`): M140 simplified `SetBoundsInPixels`
-  — kept carbonyl DPI scaling via `ScaleToEnclosedRect`
-- **Patch 07** (`text_decoration_painter.cc`): M140 added `TextDecorationSkipInk`
-  checks — kept carbonyl's disabled underline/overline
-- **Patch 08** (`style_resolver.cc`): M140 refactored sibling function tracking
-  — kept carbonyl monospace font forcing
-- **Patch 09** (`headless_web_contents_impl.h`): M140 added `HeadlessWindowDelegate`
-  base class — kept both it and carbonyl's `WebContentsObserver`
-- **Patch 13** (`printing_context_mac.mm`): M140 removed `USE_CUPS` feature check
-  — took M140 upstream side (macOS printing, not carbonyl-critical)
+### 📖 Documentation
 
-#### Build fixes for M140 API drift
+- Add M111→M135 upgrade plan
+- Update MAINTENANCE.md and changelog for M135 upgrade
+- Update changelog, readme, and MAINTENANCE for M135 ship
+- Update cross-layer audit for post-Path-A state
+- Update changelog, readme, and MAINTENANCE for Path A landing
+- Update changelog, readme, and MAINTENANCE for M140 rebase
+- Update changelog, readme, and MAINTENANCE for M147 rebase
+- Surface carbonyl-agent + carbonyl-fleet links prominently
+- Normalize structure to AIWG gold-standard template
 
-- **Skia `drawPoints`**: signature changed from `(PointMode, size_t, const SkPoint[], const SkPaint&)`
-  to `(PointMode, SkSpan<const SkPoint>, const SkPaint&)` — updated in `text_capture.cc`
-- **Skia `getRelativeTransform`**: now returns `SkM44` instead of `SkMatrix` — added
-  `.asM33()` conversion in `text_capture.cc`
-- **`HeadlessWebContentsImpl`**: `OnVisibilityChanged()` hides `WebContentsObserver`
-  overload — added `using` declaration in header
-- **`Font::DrawText(TextRun)`**: overloads removed from `font.h` in M140 — re-added
-  carbonyl-specific declarations
-- **`cc::PaintCanvas`**: incomplete type in `font.cc` — added missing include
+### Release
 
-### Chromium Upgrade: M111 → M135 — SHIPPED (Apr 2026)
+- First alpha of the roctinam/carbonyl fork
 
-A four-phase rebase of all Chromium patches across four milestones, plus two
-M135-specific patches added during the final integration cycle.
+### Test
 
-| Phase | Milestone | Commit |
-|-------|-----------|--------|
-| Pre-flight audit | — | `2a01eef` |
-| Phase 1 | M120 (120.0.6099.109) | `88d2d4d` |
-| Phase 2 | M132 (132.0.6834.109) | `2293579` |
-| Phase 3 | M135 (135.0.7049.84) | `c40955f` |
-| M135 GN gen + CI workflows | — | `43bb745` |
-| M135 Path B build fixes | — | `c22ea4f` |
-| M135 Path A — blink TU restoration | — | `61b9095` |
+- Add b64 text-capture smoke test
 
-**Final patch count**: 24 (was 21 in M132). M135 added three patches:
+## [0.1.0] - 2026-04-03
 
-| Patch | Purpose |
-|-------|---------|
-| 0022 | Remove stale `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch 0012/0013 mismatch) |
-| 0023 | Path B build fixes — restore `Dispose()` definition and multiple M135 API drift fixes (b64 text capture re-enabled by patch 0024) |
-| 0024 | Path A — allow `//carbonyl/src/blink:text_capture` to depend on blink internals; restores `--carbonyl-b64-text` mode via a dedicated blink TU |
+### 🚀 Features
 
-**Runtime tarball**: published to Gitea releases as
-[`runtime-34c55fd42862fd1c`](https://git.integrolabs.net/roctinam/carbonyl/releases/tag/runtime-34c55fd42862fd1c)
-(x86_64-unknown-linux-gnu).
+- Add Python browser automation layer
+- Add local build pipeline and maintenance docs
+- Add session management and headless flags
+- Persistent headless browser daemon with socket reconnect
+- Add ScreenInspector coordinate visualization toolkit
+- Add mouse_move() and mouse_path() for bot-sensor entropy
+- Improve click targeting and coordinate consistency
 
-#### Key technical changes across the rebase
+### 🐛 Bug Fixes
 
-- **`headless_screen.{h,cc}`**: migrated to M135's `HeadlessScreenInfo`
-  multi-display constructor while preserving Carbonyl DPI injection via
-  `carbonyl::Bridge::GetDPI()`. `IsNaturalPortrait` moved from protected to
-  public so the headless orientation delegate can call it externally.
-- **`SoftwareOutputDeviceProxy`**: removed from upstream in M135; patch 13
-  restores it into `components/viz/service/display_embedder/`. A Carbonyl-owned
-  replacement (`carbonyl/src/viz/CarbonylSoftwareOutputDevice`) is also added
-  for forward compatibility. Updated for the M135 `CreatePlatformCanvasWithPixels`
-  signature (added `bytes_per_row` parameter).
-- **Skia patches dropped** (M120): both former Skia patches superseded by
-  in-tree changes; WebRTC GIO patch replaced by `rtc_use_pipewire=false`
-- **`//build:chromeos_buildflags`** removed across M120+: dropped from all
-  patch diffs
-- **`compositor.h`**: M135 added `ExternalBeginFrameControllerClientFactory`;
-  kept alongside Carbonyl's `CompositorDelegate`
-- **GN args**: `enable_ppapi`, `enable_rust_json`, `enable_component_updater`
-  removed (no longer exist in M135). Several feature flags
-  (`enable_screen_ai_service`, `enable_speech_service`, `enable_pdf`,
-  `enable_printing`, `enable_plugins`, `enable_browser_speech_service`,
-  `enable_webui_certificate_viewer`) left at their platform defaults
-  because setting them `false` triggers file-level GN asserts in
-  `chrome/test/BUILD.gn` during gn gen.
-- **`content::NativeWebKeyboardEvent`** moved to `input::` namespace under
-  `components/input/native_web_keyboard_event.h`
-- **`FontFamily::SetFamily()`** removed; use the constructor directly
-- **`ScriptPromiseResolverBase::Dispose()`**: header still declares it
-  unconditionally under `DCHECK_IS_ON()`, so the carbonyl patch's `#if 0`
-  removal of the definition broke linking. Restored as an empty body.
-- **C++20 `[=]` capture deprecation**: implicit `this` captures replaced
-  with explicit `[=, this]` in `render_frame_impl.cc` and `headless_browser_impl.cc`
+- Link to Chromium sysroot libs on Linux ([#134](https://github.com/fathyb/carbonyl/issues/134))
+- Suppress navigator.webdriver via AutomationControlled flag
+- Spoof Firefox UA and disable HTTP/2 for bot-detection evasion
 
-### Restored: Experimental b64 text-capture mode (M135+) — Path A per #28
+### 📖 Documentation
 
-The optional `--carbonyl-b64-text` mode is **restored** in M135 builds via a
-structural refactor. It was temporarily disabled in the initial M135 ship
-(Path B, [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27)) and
-re-enabled by Path A ([#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28),
-landed in `61b9095` and documented in `25bb749`).
-
-**Why Path B was needed first**: In M135, including
-`third_party/blink/renderer/core/*` headers from a non-blink TU
-(`content/renderer/render_frame_impl.cc`) triggers an Oilpan/cppgc template
-cascade via Blink's `kCustomizeSupportsUnretained<T>` partial specialization,
-which flows through `base::SequenceBound<T>::Storage::Destruct`'s type-erased
-`void*` allocator and hard-errors on `sizeof(void)`.
-
-**Path A fix**: Text capture now lives in a dedicated blink translation unit
-under `src/blink/text_capture.{h,cc}` (in this repo, symlinked into
-`chromium/src/carbonyl/src/blink/`) compiled as
-`//carbonyl/src/blink:text_capture`. The new TU is built with `INSIDE_BLINK`
-naturally, so the cppgc cascade vanishes — it never instantiates
-`SequenceBound<T>` with a void allocator. The content-side call site is now a
-thin entry point into the blink TU. Patch 0024 grants the new target
-visibility into the relevant blink GN targets.
-
-**Impact**: Both bitmap rendering (default) and `--carbonyl-b64-text` are
-functional on M135. Path A is also the gating dependency that unblocks any
-Chromium rebase past M135.
-
-### CI Infrastructure (Apr 2026) — `43bb745`
-
-- **`.gitea/workflows/check.yml`** — fast `cargo check`, `clippy`, and library
-  tests on every push to main. Pinned to `runs-on: titan` (the build host).
-- **`.gitea/workflows/build-runtime.yml`** — full Chromium build and runtime
-  upload via `workflow_dispatch` or on patch file changes. Builds
-  `headless_shell`, packages via `copy-binaries.sh`, uploads to Gitea releases
-  via `runtime-push.sh`. Pinned to `titan`.
-- **`build/Dockerfile.builder`** — builder image (Ubuntu 22.04 + Rust + ninja
-  + cross-compile toolchains + Chromium runtime deps). Comment header
-  documents that all CI runs on `titan` exclusively.
-
-### Runtime Distribution Migration (Apr 2026) — `eb285c6`
-
-- Migrated runtime distribution from dead CDN (`carbonyl.fathy.fr`) to
-  Gitea releases API on `roctinam/carbonyl`
-- `scripts/runtime-push.sh`: rewritten to create/update Gitea releases via
-  `curl`, tagged `runtime-<hash>`, idempotent re-upload
-- `scripts/runtime-pull.sh`: rewritten to download from Gitea releases with
-  redirect support
-
-### Automation Layer (Apr 2026)
-
-A Python browser automation layer for agent testing pipelines, built on PTY +
-`pyte` terminal emulation:
-
-#### 🚀 Features
-
-- **`automation/browser.py`** — `CarbonylBrowser` class: spawns carbonyl via
-  PTY, feeds bytes to `pyte` screen buffer, returns clean text (`f1ae590`)
-- **Session management** (`automation/session.py`): persistent Chromium
-  user-data-dir sessions with fork, snapshot/restore, and live-instance
-  detection (`565b81d`)
-- **Persistent daemon** (`automation/daemon.py`): background browser process
-  with Unix domain socket; callers reconnect without restarting Chromium,
-  preserving auth cookies and page state (`72590a2`)
-- **`ScreenInspector`** (`automation/screen_inspector.py`): coordinate
-  visualization toolkit with rulers, annotation, crosshair, dot-map, and
-  LLM-friendly region summaries (`6331195`)
-- **Mouse path simulation** — `mouse_move()` + `mouse_path()` for bot-sensor
-  entropy (Akamai Bot Manager mousemove requirement) (`15f0aa8`)
-- **USPS PO Box smoke test** (`automation/usps_pobox.py`): end-to-end login
-  and account data retrieval (`eb285c6`)
-
-#### 🐛 Bug Fixes
-
-- Suppress `navigator.webdriver` via `AutomationControlled` flag (`c3e08f8`)
-- Spoof Firefox User-Agent and disable HTTP/2 to defeat Akamai server-side
-  bot classifier (`cba5bd4`)
-- Fix `click_on()` — was broken in daemon mode; now uses `find_text()` and
-  clicks center of matched text (`8e4fb3e`)
-
-### Build (Apr 2026)
-
-- **`scripts/build-local.sh`**: pull pre-built Chromium runtime (~75 MB) and
-  compile `libcarbonyl.so` from Rust (~10 s); no full Chromium build needed
-  (`567f40e`)
-- GN args: remove `enable_ppapi` and `enable_rust_json` (obsolete in M135)
-  (`2a01eef`)
-- Add `third_party/google_benchmark/buildconfig.gni` (missing from `gclient
-  sync`, required by WebRTC `rtc_base`) (`2583377`)
-
----
+- Update download links
+- Add full SDLC elaboration artifacts for automation layer
 
 ## [0.0.3] - 2023-02-18
 
@@ -410,4 +221,5 @@ A Python browser automation layer for agent testing pipelines, built on PTY +
 ### Build
 
 - Various build system fixes ([#20](https://github.com/fathyb/carbonyl/issues/20))
+
 
