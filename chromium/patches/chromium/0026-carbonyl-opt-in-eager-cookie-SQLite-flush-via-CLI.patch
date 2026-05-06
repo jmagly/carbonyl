@@ -1,4 +1,4 @@
-From 9a16ad8eb939c0c06de5b19a9651255b27b28f52 Mon Sep 17 00:00:00 2001
+From 9305762f9eaf08fe945edfcff39ceaa3499a76c6 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <anth.jaunt916@passmail.net>
 Date: Wed, 6 May 2026 00:10:08 -0400
 Subject: [PATCH 26/26] carbonyl: opt-in eager cookie SQLite flush via CLI
@@ -14,9 +14,32 @@ is missing or non-positive.
 
 Refs roctinam/carbonyl#69
 ---
+ .../headless_content_browser_client.cc        | 11 ++++++++++
  .../sqlite/sqlite_persistent_cookie_store.cc  | 21 +++++++++++++++++--
- 1 file changed, 19 insertions(+), 2 deletions(-)
+ 2 files changed, 30 insertions(+), 2 deletions(-)
 
+diff --git a/headless/lib/browser/headless_content_browser_client.cc b/headless/lib/browser/headless_content_browser_client.cc
+index f37eac9a6eb8c..5bfd8b36f574c 100644
+--- a/headless/lib/browser/headless_content_browser_client.cc
++++ b/headless/lib/browser/headless_content_browser_client.cc
+@@ -283,6 +283,17 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+   }
+ #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+ 
++  // Carbonyl: forward switches that need to be visible in child processes.
++  // --carbonyl-cookie-flush-interval-ms is read by the SQLite cookie store
++  // which lives in the network service utility process. See
++  // roctinam/carbonyl#69.
++  static const char* const kCarbonylForwardSwitches[] = {
++      "carbonyl-cookie-flush-interval-ms",
++  };
++  command_line->CopySwitchesFrom(
++      CHECK_DEREF(base::CommandLine::ForCurrentProcess()),
++      kCarbonylForwardSwitches);
++
+   // If we're spawning a renderer, then override the language switch.
+   std::string process_type =
+       command_line->GetSwitchValueASCII(::switches::kProcessType);
 diff --git a/net/extras/sqlite/sqlite_persistent_cookie_store.cc b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
 index ec61478a45903..f4d715359ac0c 100644
 --- a/net/extras/sqlite/sqlite_persistent_cookie_store.cc
