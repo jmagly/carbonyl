@@ -37,11 +37,12 @@ Closes [#69](https://github.com/jmagly/carbonyl/issues/69).
 
 ## What's in the runtime
 
-- amd64 / `headless` ozone variant only — `carbonyl-0.2.0-alpha.4-x86_64-unknown-linux-gnu.tgz`
-- Runtime hash: `9b3ba53adcd8d330`
+amd64, both Ozone variants (runtime hash `9b3ba53adcd8d330`):
 
-The `x11` ozone variant is not shipped in this release. Build it via
-`build-runtime.yml` with `ozone_platform=x11` for that commit if needed.
+- `carbonyl-0.2.0-alpha.4-x86_64-unknown-linux-gnu.tgz` — `headless` ozone (default; pure-terminal)
+- `carbonyl-0.2.0-alpha.4-x11-x86_64-unknown-linux-gnu.tgz` — `x11` ozone (terminal + X-mirror; for trusted-input mode)
+
+Each tarball ships with a `.sha256` companion.
 
 ## Changelog
 

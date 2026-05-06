@@ -7,8 +7,13 @@
 #
 # Issue #57 adds the `ozone_platform` workflow_dispatch input so we can
 # build either the legacy headless Ozone variant, the new x11 Ozone
-# variant, or both. args.gn is edited in-place for the duration of the
-# build; no commit required to change ozone_platform.
+# variant, or both as separate runtime tarballs (matrix). args.gn is
+# edited in-place for the duration of each matrix job; the .bak in the
+# "Restore args.gn" step keeps the canonical headless state on disk.
+#
+# Push-to-main fans out into a {headless, x11} matrix so release.yml's
+# tag-push trigger always has both variants available without manual
+# dispatch (#69 follow-up).
 #
 # Reference: Fortemi/fortemi .gitea/workflows/ci-builder.yaml
 #            docs/ci-cd-plan.md §"Target architecture"
@@ -62,9 +67,25 @@ env:
 
 jobs:
   build-runtime:
-    name: Build runtime (${{ github.event.inputs.ozone_platform || 'headless' }} / ${{ github.event.inputs.arch || 'amd64' }})
+    name: Build runtime (${{ matrix.ozone }} / ${{ github.event.inputs.arch || 'amd64' }})
     runs-on: titan
     timeout-minutes: 240
+    strategy:
+      # One titan runner serializes these anyway; explicit for clarity.
+      # fail-fast=false so an x11 break doesn't kill an in-progress headless
+      # build (or vice versa).
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        # Resolution:
+        #   workflow_dispatch ozone_platform=headless → ["headless"]
+        #   workflow_dispatch ozone_platform=x11      → ["x11"]
+        #   workflow_dispatch ozone_platform=both     → ["headless","x11"]
+        #   push (no inputs)                          → ["headless","x11"]
+        # Closes #69 follow-up: x11 ships as part of every push-to-main
+        # build so release.yml's tag-push trigger has both variants
+        # available without a manual dispatch.
+        ozone: ${{ fromJSON(github.event.inputs.ozone_platform == 'headless' && '["headless"]' || github.event.inputs.ozone_platform == 'x11' && '["x11"]' || '["headless","x11"]') }}
 
     steps:
       - name: Resolve builder image
@@ -149,7 +170,7 @@ jobs:
         # Non-destructive: we keep a backup of args.gn so the host checkout
         # retains its canonical headless state across runs.
         run: |
-          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          OZONE="${{ matrix.ozone }}"
           ARGS_FILE="${HOST_CARBONYL_DIR}/src/browser/args.gn"
 
           cp "${ARGS_FILE}" "${ARGS_FILE}.bak"
@@ -237,7 +258,7 @@ jobs:
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
           # scripts/build.sh and scripts/copy-binaries.sh prepend "out/"
           # themselves; pass OUT_DIR as just the subdir name.
-          OUT_DIR="Default-${{ github.event.inputs.ozone_platform || 'headless' }}"
+          OUT_DIR="Default-${{ matrix.ozone }}"
           docker run --rm \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
             -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
@@ -284,7 +305,7 @@ jobs:
       - name: Copy runtime binaries
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          OZONE="${{ matrix.ozone }}"
           docker run --rm \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
             -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
@@ -299,7 +320,7 @@ jobs:
       - name: Smoke test binary
         run: |
           TRIPLE="${{ env.TRIPLE }}"
-          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          OZONE="${{ matrix.ozone }}"
           BINARY="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}/carbonyl"
           LD_LIBRARY_PATH="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}" \
             "${BINARY}" --version
@@ -321,7 +342,7 @@ jobs:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          OZONE="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          OZONE="${{ matrix.ozone }}"
           cd "${HOST_CARBONYL_DIR}"
           # runtime-push.sh hashes the tarball and uploads as runtime-<hash>.
           # For x11/both variants, prepend the ozone tag so different variants
@@ -331,7 +352,7 @@ jobs:
       - name: Upload tarball as workflow artifact
         uses: actions/upload-artifact@v3
         with:
-          name: runtime-${{ github.event.inputs.ozone_platform || 'headless' }}-${{ env.TRIPLE }}
+          name: runtime-${{ matrix.ozone }}-${{ env.TRIPLE }}
           path: ${{ env.HOST_CARBONYL_DIR }}/build/pre-built/${{ env.TRIPLE }}.tgz
           retention-days: 30
 
@@ -350,7 +371,7 @@ jobs:
       # the next pipeline that depends on it will see the failed run and
       # operators can re-dispatch with a fix).
       - name: Build qa-runner image (x11 variant only)
-        if: github.event.inputs.ozone_platform == 'x11'
+        if: matrix.ozone == 'x11'
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
@@ -372,7 +393,7 @@ jobs:
           echo "QA_RUNNER_IMAGE=carbonyl-agent-qa-runner:test-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Run dual-output validation (x11 variant only)
-        if: github.event.inputs.ozone_platform == 'x11'
+        if: matrix.ozone == 'x11'
         run: |
           docker run --rm \
             --device=/dev/uinput \
@@ -392,7 +413,7 @@ jobs:
             '
 
       - name: Cleanup qa-runner image
-        if: always() && github.event.inputs.ozone_platform == 'x11'
+        if: always() && matrix.ozone == 'x11'
         run: |
           docker rmi "${QA_RUNNER_IMAGE:-}" 2>/dev/null || true
           rm -rf "${GITHUB_WORKSPACE}/.qa-runner-clone" || true
