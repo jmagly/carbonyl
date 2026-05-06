@@ -66,26 +66,42 @@ env:
   HOST_CHROMIUM_SRC_DIR: /srv/carbonyl/chromium/src
 
 jobs:
+  # Compute the matrix as a separate job — Gitea Actions' expression
+  # evaluator doesn't reliably handle chained `&& ||` patterns inside
+  # `fromJSON()` at the strategy.matrix level (an inline expression
+  # collapsed to an empty single-element matrix in run #6522). A tiny
+  # prep job emitting the matrix JSON via $GITHUB_OUTPUT is the
+  # canonical workaround.
+  resolve-matrix:
+    runs-on: titan
+    outputs:
+      ozones: ${{ steps.compute.outputs.ozones }}
+    steps:
+      - id: compute
+        run: |
+          INPUT="${{ github.event.inputs.ozone_platform }}"
+          case "$INPUT" in
+            headless) M='["headless"]' ;;
+            x11)      M='["x11"]' ;;
+            both|"")  M='["headless","x11"]' ;;
+            *)        echo "ERROR: unknown ozone_platform '$INPUT'" >&2; exit 1 ;;
+          esac
+          echo "ozones=$M" >> "$GITHUB_OUTPUT"
+          echo "[matrix] ozones=$M (input='$INPUT')"
+
   build-runtime:
+    needs: resolve-matrix
     name: Build runtime (${{ matrix.ozone }} / ${{ github.event.inputs.arch || 'amd64' }})
     runs-on: titan
     timeout-minutes: 240
     strategy:
       # One titan runner serializes these anyway; explicit for clarity.
-      # fail-fast=false so an x11 break doesn't kill an in-progress headless
-      # build (or vice versa).
+      # fail-fast=false so an x11 break doesn't kill an in-progress
+      # headless build (or vice versa).
       fail-fast: false
       max-parallel: 1
       matrix:
-        # Resolution:
-        #   workflow_dispatch ozone_platform=headless → ["headless"]
-        #   workflow_dispatch ozone_platform=x11      → ["x11"]
-        #   workflow_dispatch ozone_platform=both     → ["headless","x11"]
-        #   push (no inputs)                          → ["headless","x11"]
-        # Closes #69 follow-up: x11 ships as part of every push-to-main
-        # build so release.yml's tag-push trigger has both variants
-        # available without a manual dispatch.
-        ozone: ${{ fromJSON(github.event.inputs.ozone_platform == 'headless' && '["headless"]' || github.event.inputs.ozone_platform == 'x11' && '["x11"]' || '["headless","x11"]') }}
+        ozone: ${{ fromJSON(needs.resolve-matrix.outputs.ozones) }}
 
     steps:
       - name: Resolve builder image
