@@ -88,7 +88,7 @@ Before committing to Option A, validate:
 - **Text render regresses under x11**: same — revise patches or fall back.
 - **isTrusted check fails inside container**: investigate (unusual given host sanity pass); likely points to container-specific X setup issue, not architecture.
 
-Spike procedure updated in `roctinam/carbonyl-agent-qa/tests/spike/README.md`.
+Spike procedure updated in `jmagly/carbonyl-agent-qa/tests/spike/README.md`.
 
 ---
 

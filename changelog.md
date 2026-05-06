@@ -124,7 +124,7 @@ All notable changes to this project will be documented in this file.
 
 ### Release
 
-- First alpha of the roctinam/carbonyl fork
+- First alpha of the jmagly/carbonyl fork
 
 ### Test
 

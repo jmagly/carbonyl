@@ -275,7 +275,7 @@ declare_args block" warnings.
 
 ## Automation Layer
 
-The Python automation layer was extracted into `roctinam/carbonyl-agent`
+The Python automation layer was extracted into `jmagly/carbonyl-agent`
 as the `carbonyl-agent` PyPI package. Binary discovery order (in the
 package's `browser.py`):
 

@@ -1,8 +1,8 @@
 # Cross-Layer Audit — 2026-04-09
 
-**Issue**: [roctinam/carbonyl#29](https://git.integrolabs.net/roctinam/carbonyl/issues/29)
-**Triggered by**: [#27](https://git.integrolabs.net/roctinam/carbonyl/issues/27) (M135 cppgc cascade)
-**Related**: [#28](https://git.integrolabs.net/roctinam/carbonyl/issues/28) (Path A — extract text capture into blink TU)
+**Issue**: [jmagly/carbonyl#29](https://github.com/jmagly/carbonyl/issues/29)
+**Triggered by**: [#27](https://github.com/jmagly/carbonyl/issues/27) (M135 cppgc cascade)
+**Related**: [#28](https://github.com/jmagly/carbonyl/issues/28) (Path A — extract text capture into blink TU)
 **Tool**: `scripts/audit-cross-layer.sh`
 **Patch series state**: 24 patches (post-Path-A)
 **Updated**: 2026-04-09 after Path A landed

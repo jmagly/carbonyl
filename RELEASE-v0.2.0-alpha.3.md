@@ -34,7 +34,7 @@ fingerprint coherence is preserved.
   x11 + uinput trusted input, x11 + uinput + X-mirror. Operator
   reference: `docs/runtime-modes.md`.
 
-Refs: `roctinam/carbonyl#63`.
+Refs: `jmagly/carbonyl#63`.
 
 ### Per-ozone runtime release lanes
 
@@ -50,7 +50,7 @@ release tags so they can coexist:
 CI. Closes a silent-clobber bug where the second variant to upload
 would overwrite the first at the same release tag.
 
-Refs: `roctinam/carbonyl#64`.
+Refs: `jmagly/carbonyl#64`.
 
 ### Dual-output validation harness
 
@@ -108,7 +108,7 @@ the release.
 
 - `automation/` Python tree (2,283 LOC, 6 files) deleted. The
   automation layer lives in
-  [`roctinam/carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent)
+  [`jmagly/carbonyl-agent`](https://github.com/jmagly/carbonyl-agent)
   via `pip install carbonyl-agent`. Doc references across
   `MAINTENANCE.md`, `docs/development-guide.md`, and
   `scripts/build-local.sh` updated to point at the package. Closes

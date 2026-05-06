@@ -62,7 +62,7 @@ real X input events. JavaScript sees `isTrusted: true`.
 DISPLAY=:99 carbonyl --ozone-platform=x11 https://example.com
 ```
 
-In a container — see `docker/` patterns in `roctinam/carbonyl-agent`:
+In a container — see `docker/` patterns in `jmagly/carbonyl-agent`:
 
 ```bash
 docker run --rm \
@@ -265,7 +265,7 @@ either fails the release with an actionable error.
 
 ## Container-level deployment
 
-The `roctinam/carbonyl-agent` repo's `docker/qa-runner/` is the
+The `jmagly/carbonyl-agent` repo's `docker/qa-runner/` is the
 reference container for modes 2 and 3. It bundles:
 
 - Xorg with `dummy` (CPU-only framebuffer) and `modesetting` (KMS/GPU)
@@ -299,7 +299,7 @@ out to dependent stages.
 ## References
 
 - Implementation: `src/browser/x_mirror.{h,cc}`, `src/browser/host_display_client.cc`
-- Decision: `roctinam/carbonyl#63` (Option A patch-depth analysis)
+- Decision: `jmagly/carbonyl#63` (Option A patch-depth analysis)
 - ADR: `docs/adr-002-trusted-input-approach.md` rev 2
 - Test: `scripts/test-x-mirror.sh`, `tests/fixtures/x-mirror.html`
 - CI step: `.gitea/workflows/build-runtime.yml` (`Run dual-output validation`)

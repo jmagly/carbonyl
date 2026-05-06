@@ -22,7 +22,7 @@ Install Rust via [rustup.rs](https://rustup.rs). All other tools via system pack
 
 ```bash
 # Clone
-git clone https://git.integrolabs.net/roctinam/carbonyl.git
+git clone https://github.com/jmagly/carbonyl.git
 cd carbonyl
 
 # Python setup — automation lives in the carbonyl-agent package
@@ -70,7 +70,7 @@ The core library compiled to `libcarbonyl.so`. Organized by concern:
 
 ### Python automation layer
 
-Lives in a sibling repo, [`roctinam/carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent), distributed via `pip install carbonyl-agent`. Wraps the Rust binary for scripting and test automation. Key modules: `browser.py` (CLI entrypoint), `daemon.py` (process lifecycle), `session.py` (session state), `inspector.py` (screen analysis).
+Lives in a sibling repo, [`jmagly/carbonyl-agent`](https://github.com/jmagly/carbonyl-agent), distributed via `pip install carbonyl-agent`. Wraps the Rust binary for scripting and test automation. Key modules: `browser.py` (CLI entrypoint), `daemon.py` (process lifecycle), `session.py` (session state), `inspector.py` (screen analysis).
 
 ### chromium/ — Chromium integration
 
@@ -112,7 +112,7 @@ The compiled library lands in `build/`. `build-local.sh` places the Chromium run
 
 ### Python changes
 
-Python automation lives in [`roctinam/carbonyl-agent`](https://git.integrolabs.net/roctinam/carbonyl-agent) — make changes there. To smoke-test against a freshly-built local binary in this repo:
+Python automation lives in [`jmagly/carbonyl-agent`](https://github.com/jmagly/carbonyl-agent) — make changes there. To smoke-test against a freshly-built local binary in this repo:
 
 ```bash
 source .venv/bin/activate
