@@ -1,7 +1,7 @@
 From 38c55f8d3968cf44e05f67f874828c3a3c3b0f77 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Tue, 21 Apr 2026 03:55:33 -0400
-Subject: [PATCH 25/25] fix(m147): finalize post-rebase API drift fixes
+Subject: [PATCH 25/26] fix(m147): finalize post-rebase API drift fixes
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

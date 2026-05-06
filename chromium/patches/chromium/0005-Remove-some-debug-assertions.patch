@@ -1,7 +1,7 @@
 From 6fe66f2b1c348f5b97024eb2d0210d7c3bb5ff04 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:28:35 +0100
-Subject: [PATCH 05/25] Remove some debug assertions
+Subject: [PATCH 05/26] Remove some debug assertions
 
 ---
  .../core/v8/script_promise_resolver.cc         | 18 +++---------------

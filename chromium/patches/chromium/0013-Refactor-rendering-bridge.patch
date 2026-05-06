@@ -1,7 +1,7 @@
 From ee29333d9cfb32baca2d1f8f7c59a1f92f57cf3d Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Mon, 13 Feb 2023 16:28:50 +0100
-Subject: [PATCH 13/25] Refactor rendering bridge
+Subject: [PATCH 13/26] Refactor rendering bridge
 
 ---
  components/viz/service/BUILD.gn               |   3 +

@@ -1,7 +1,7 @@
 From 390becc800745867517d5d6aa6dd6e8db569e6ee Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:24:29 +0100
-Subject: [PATCH 03/25] Setup shared software rendering surface
+Subject: [PATCH 03/26] Setup shared software rendering surface
 
 ---
  components/viz/host/host_display_client.cc      |  4 +++-

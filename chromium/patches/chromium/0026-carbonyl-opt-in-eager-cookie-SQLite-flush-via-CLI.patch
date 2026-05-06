@@ -1,0 +1,65 @@
+From 9a16ad8eb939c0c06de5b19a9651255b27b28f52 Mon Sep 17 00:00:00 2001
+From: Joseph Magly <anth.jaunt916@passmail.net>
+Date: Wed, 6 May 2026 00:10:08 -0400
+Subject: [PATCH 26/26] carbonyl: opt-in eager cookie SQLite flush via CLI
+
+Adds --carbonyl-cookie-flush-interval-ms=N to override the default 30s
+kCommitInterval in SQLitePersistentCookieStore::Backend::BatchOperation.
+This lets test/automation harnesses drop the pre-close drain from 35s to
+a few seconds without changing default-browser flush behavior.
+
+Reads CommandLine once via a static init lambda, so the override is paid
+exactly once per process. Falls back to base::Seconds(30) when the switch
+is missing or non-positive.
+
+Refs roctinam/carbonyl#69
+---
+ .../sqlite/sqlite_persistent_cookie_store.cc  | 21 +++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/net/extras/sqlite/sqlite_persistent_cookie_store.cc b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
+index ec61478a45903..f4d715359ac0c 100644
+--- a/net/extras/sqlite/sqlite_persistent_cookie_store.cc
++++ b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
+@@ -11,6 +11,7 @@
+ #include <set>
+ #include <tuple>
+ 
++#include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/files/file_path.h"
+ #include "base/functional/bind.h"
+@@ -22,6 +23,7 @@
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/strings/strcat.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_util.h"
+ #include "base/strings/stringprintf.h"
+ #include "base/synchronization/lock.h"
+@@ -1198,8 +1200,23 @@ void SQLitePersistentCookieStore::Backend::DeleteCookie(
+ void SQLitePersistentCookieStore::Backend::BatchOperation(
+     PendingOperation::OperationType op,
+     const CanonicalCookie& cc) {
+-  // Commit every 30 seconds.
+-  constexpr base::TimeDelta kCommitInterval = base::Seconds(30);
++  // Commit every 30 seconds by default. Carbonyl:
++  // --carbonyl-cookie-flush-interval-ms=N overrides for eager flush in
++  // test/automation contexts where graceful-shutdown drain matters.
++  // See roctinam/carbonyl#69.
++  static const base::TimeDelta kCommitInterval = []() {
++    auto* cl = base::CommandLine::ForCurrentProcess();
++    if (cl && cl->HasSwitch("carbonyl-cookie-flush-interval-ms")) {
++      int ms = 0;
++      if (base::StringToInt(
++              cl->GetSwitchValueASCII("carbonyl-cookie-flush-interval-ms"),
++              &ms) &&
++          ms > 0) {
++        return base::Milliseconds(ms);
++      }
++    }
++    return base::Seconds(30);
++  }();
+   // Commit right away if we have more than 512 outstanding operations.
+   constexpr size_t kCommitAfterBatchSize = 512;
+   DCHECK(!background_task_runner()->RunsTasksInCurrentSequence());

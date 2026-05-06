@@ -1,7 +1,7 @@
 From ccb6c56a54621e156c43e02607cbbadc1cff5225 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 04:00:35 -0400
-Subject: [PATCH 17/25] fix(ui): use raw_ptr for CompositorDelegate member
+Subject: [PATCH 17/26] fix(ui): use raw_ptr for CompositorDelegate member
  (M120 raw pointer check)
 
 ---
