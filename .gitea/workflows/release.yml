@@ -32,7 +32,7 @@ on:
       ozone_platform:
         description: 'Which ozone variant(s) to package: both | headless | x11'
         required: false
-        default: 'both'
+        default: 'headless'
         type: choice
         options:
           - both
@@ -62,10 +62,14 @@ jobs:
           # Strip leading "v" for the version string in filenames.
           VERSION="${TAG#v}"
 
-          # Ozone variants list. Tag-push trigger and the default
-          # workflow_dispatch input both resolve to "both" so a single
-          # tag push ships every variant. (closes #65)
-          OZONE_INPUT="${{ github.event.inputs.ozone_platform || 'both' }}"
+          # Ozone variants list. Tag-push trigger defaults to "headless"
+          # to match build-runtime.yml's auto-trigger behavior — pushing
+          # a v* tag should never hard-fail just because the optional
+          # x11 runtime hasn't been built. To ship both variants in one
+          # go, build x11 via build-runtime.yml first, then dispatch
+          # this workflow manually with ozone_platform=both.
+          # (closes #65, refs #69)
+          OZONE_INPUT="${{ github.event.inputs.ozone_platform || 'headless' }}"
           case "${OZONE_INPUT}" in
             both)         OZONE_VARIANTS="headless x11" ;;
             headless|x11) OZONE_VARIANTS="${OZONE_INPUT}" ;;
