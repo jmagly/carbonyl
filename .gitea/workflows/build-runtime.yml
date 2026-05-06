@@ -66,42 +66,25 @@ env:
   HOST_CHROMIUM_SRC_DIR: /srv/carbonyl/chromium/src
 
 jobs:
-  # Compute the matrix as a separate job — Gitea Actions' expression
-  # evaluator doesn't reliably handle chained `&& ||` patterns inside
-  # `fromJSON()` at the strategy.matrix level (an inline expression
-  # collapsed to an empty single-element matrix in run #6522). A tiny
-  # prep job emitting the matrix JSON via $GITHUB_OUTPUT is the
-  # canonical workaround.
-  resolve-matrix:
-    runs-on: titan
-    outputs:
-      ozones: ${{ steps.compute.outputs.ozones }}
-    steps:
-      - id: compute
-        run: |
-          INPUT="${{ github.event.inputs.ozone_platform }}"
-          case "$INPUT" in
-            headless) M='["headless"]' ;;
-            x11)      M='["x11"]' ;;
-            both|"")  M='["headless","x11"]' ;;
-            *)        echo "ERROR: unknown ozone_platform '$INPUT'" >&2; exit 1 ;;
-          esac
-          echo "ozones=$M" >> "$GITHUB_OUTPUT"
-          echo "[matrix] ozones=$M (input='$INPUT')"
-
   build-runtime:
-    needs: resolve-matrix
     name: Build runtime (${{ matrix.ozone }} / ${{ github.event.inputs.arch || 'amd64' }})
+    # Skip matrix combos that don't match a single-variant workflow_dispatch.
+    # `inputs.ozone_platform` is null/empty on push and dispatch with no override;
+    # `'both'` runs all combos. Anything else filters down to one ozone.
+    if: ${{ github.event.inputs.ozone_platform == '' || github.event.inputs.ozone_platform == null || github.event.inputs.ozone_platform == 'both' || github.event.inputs.ozone_platform == matrix.ozone }}
     runs-on: titan
     timeout-minutes: 240
     strategy:
-      # One titan runner serializes these anyway; explicit for clarity.
-      # fail-fast=false so an x11 break doesn't kill an in-progress
-      # headless build (or vice versa).
+      # Static matrix — Gitea Actions' act_runner doesn't reliably evaluate
+      # dynamic `fromJSON(...)` expressions at the strategy.matrix level
+      # (runs #6522 and #6524 both collapsed to a single empty-ozone job).
+      # Filtering is done via the job-level `if:` above instead.
+      # One titan runner; max-parallel=1 makes the queueing explicit.
+      # fail-fast=false so an x11 break doesn't kill a clean headless run.
       fail-fast: false
       max-parallel: 1
       matrix:
-        ozone: ${{ fromJSON(needs.resolve-matrix.outputs.ozones) }}
+        ozone: [headless, x11]
 
     steps:
       - name: Resolve builder image
