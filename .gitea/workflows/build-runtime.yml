@@ -74,15 +74,22 @@ jobs:
     if: ${{ github.event.inputs.ozone_platform == '' || github.event.inputs.ozone_platform == null || github.event.inputs.ozone_platform == 'both' || github.event.inputs.ozone_platform == matrix.ozone }}
     runs-on: titan
     timeout-minutes: 240
+    # Serialize matrix combos that share /srv/carbonyl/chromium/src on titan.
+    # Without this, both jobs start in parallel (act_runner ignores
+    # strategy.max-parallel) and the second one fails with
+    # "Unable to create chromium/src/.git/index.lock". `cancel-in-progress`
+    # MUST stay false — we want each variant to complete, not for the
+    # newer to nuke the older.
+    concurrency:
+      group: build-runtime-chromium-src-${{ github.event.inputs.arch || 'amd64' }}
+      cancel-in-progress: false
     strategy:
       # Static matrix — Gitea Actions' act_runner doesn't reliably evaluate
       # dynamic `fromJSON(...)` expressions at the strategy.matrix level
       # (runs #6522 and #6524 both collapsed to a single empty-ozone job).
       # Filtering is done via the job-level `if:` above instead.
-      # One titan runner; max-parallel=1 makes the queueing explicit.
       # fail-fast=false so an x11 break doesn't kill a clean headless run.
       fail-fast: false
-      max-parallel: 1
       matrix:
         ozone: [headless, x11]
 
