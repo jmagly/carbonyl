@@ -12,8 +12,8 @@ This project uses the **AIWG SDLC framework** for software development lifecycle
 
 AIWG is a comprehensive SDLC framework providing:
 
-- **180 specialized agents** covering all lifecycle phases (Inception → Elaboration → Construction → Transition → Production)
-- **364 skills** for project management, security, testing, deployment, and traceability
+- **192 specialized agents** covering all lifecycle phases (Inception → Elaboration → Construction → Transition → Production)
+- **397 skills** for project management, security, testing, deployment, and traceability
 - **100+ templates** for requirements, architecture, testing, security, deployment artifacts
 - **Phase-based workflows** with gate criteria and milestone tracking
 - **Multi-agent orchestration** patterns for collaborative artifact generation
@@ -31,8 +31,8 @@ AIWG is a comprehensive SDLC framework providing:
 ls {AIWG_ROOT}/agentic/code/frameworks/sdlc-complete/
 
 # Available resources:
-# - agents/     → 180 agents
-# - skills/     → 364 skills
+# - agents/     → 192 agents
+# - skills/     → 397 skills
 # - templates/  → 100+ artifact templates
 # - flows/      → Phase workflow documentation
 ```
@@ -56,6 +56,7 @@ All SDLC artifacts (requirements, architecture, testing, etc.) are stored in **`
 ├── working/             # Temporary scratch (safe to delete)
 └── reports/             # Generated reports and indices
 ```
+
 
 ## Core Platform Orchestrator Role
 
@@ -326,9 +327,9 @@ AIWG maintains itself using its own CLI. Agents should use CLI commands — not 
 
 | Trigger | Action |
 |---------|--------|
-| Start of long orchestration session | `aiwg sync --dry-run` → sync if needed |
-| User asks "is AIWG up to date?" | `aiwg sync --dry-run` → report + offer sync |
-| `aiwg doctor` shows errors | `aiwg sync` or invoke AIWG Steward |
+| Start of long orchestration session | `aiwg refresh --dry-run` → refresh if needed |
+| User asks "is AIWG up to date?" | `aiwg refresh --dry-run` → report + offer refresh |
+| `aiwg doctor` shows errors | `aiwg refresh` or invoke AIWG Steward |
 | Deploying to a new provider | `aiwg use <framework> --provider <p>` |
 | User adds/removes a framework | `aiwg use` / `aiwg remove` |
 | Long parallel orchestration needed | `aiwg mc start` + `aiwg mc dispatch` |
@@ -351,10 +352,60 @@ For multi-task orchestrations exceeding a single session:
 ### Orchestrator Pre-Flight (Long Sessions)
 
 Before starting any orchestration session > 30 minutes:
-1. `aiwg sync --dry-run` — check currency
+1. `aiwg refresh --dry-run` — check currency
 2. `aiwg doctor` — baseline health
-3. If issues found: invoke AIWG Steward or run `aiwg sync`
+3. If issues found: invoke AIWG Steward or run `aiwg refresh`
 4. Confirm provider: `aiwg runtime-info`
+
+> `aiwg sync` is the deprecated alias for `aiwg refresh`. It still works but emits a warning; scheduled for removal after the 2026.5.x stable line.
+
+## Project-Local Customization
+
+Per-project rules, skills, agents, addons, or frameworks live under `.aiwg/{extensions,addons,frameworks,plugins}/<name>/`. They're discovered automatically by `aiwg use` and deploy alongside upstream artifacts. The bundle layout is **byte-identical** in shape to its upstream form, so `aiwg promote` is a hash-verified copy with zero rewrite ([identical-form ADR](.aiwg/architecture/adr-identical-form-portability.md)).
+
+### CLI commands
+
+```bash
+# Scaffold
+aiwg new-bundle <name> --type extension --starter rule
+aiwg new-extension <name>      # alias: --type extension
+aiwg new-addon <name>          # alias: --type addon
+aiwg new-framework <name>      # alias: --type framework
+aiwg new-plugin <name>         # alias: --type plugin
+
+# Deploy / inspect
+aiwg use <name>                # deploy a single project-local bundle
+aiwg list --project-local      # inventory + validation status
+aiwg doctor --project-local    # counts, validation, shadows, drift, matrix
+
+# Remove (source under .aiwg/<type>/<name>/ is NEVER deleted)
+aiwg remove <name>             # revert deployed files
+aiwg remove <name> --force     # also revert operator-edited files
+aiwg remove <name> --dry-run   # preview
+
+# Graduate
+aiwg promote <name>                          # default: --to upstream
+aiwg promote <name> --to corpus <path>       # to private corpus
+aiwg promote <name> --dry-run                # preview
+aiwg promote <name> --cleanup                # remove .aiwg source after copy
+
+# Audit
+aiwg activity-log show         # 12 lifecycle events: discover, deploy, conflict, shadow, remove, promote, ...
+```
+
+### Three customization paths
+
+| Path | When | Effort |
+|------|------|--------|
+| **A — Project-local** | Per-project rules, agents, skills | 5 minutes — no fork |
+| **B — Fork** | Cross-project customization, contributing back, modifying AIWG core | 30 minutes — fork + dev mode |
+| **C — Corpus** | Cross-project sharing without going public | One-time setup per corpus |
+
+Start with Path A; graduate to B or C when ready. See [`docs/customization/README.md`](docs/customization/README.md) for the decision tree, and [`project-local-quickstart.md`](docs/customization/project-local-quickstart.md) for a 5-minute first bundle.
+
+### Safety-critical override policy
+
+Project-local artifacts can shadow upstream cleanly. AIWG enforces a denylist: shadowing a safety-critical upstream artifact requires an explicit `overrides:` declaration in the project-local manifest. `--force` does **not** bypass this (or the source-preservation invariant). See [`adr-override-shadow-policy.md`](.aiwg/architecture/adr-override-shadow-policy.md).
 
 ## Phase Overview
 

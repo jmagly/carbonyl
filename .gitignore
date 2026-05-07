@@ -18,3 +18,8 @@ __pycache__/
 !/chromium/depot_tools
 !/chromium/patches
 /packages/*/build
+
+# AIWG runtime artifacts (working files, agent-loop state)
+.aiwg/working/
+.aiwg/ralph/
+.aiwg/ralph-external/
