@@ -94,6 +94,31 @@ jobs:
         ozone: [headless, x11]
 
     steps:
+      # Filesystem mutex around the shared chromium/src checkout on titan.
+      # Matrix combos in act_runner DO run concurrently within one run
+      # (job-level `concurrency` only serializes across runs, and
+      # `strategy.max-parallel` is silently ignored — see runs #6522,
+      # #6524, #6526, #6529). Using `mkdir` as an atomic dir-create lock:
+      # the second combo spin-waits while the first holds it. Released
+      # in an `always()` step at the end so a build failure still frees
+      # the lock for the queued combo.
+      - name: Acquire chromium/src host lock
+        run: |
+          LOCK="/tmp/carbonyl-chromium-src.lock-${{ github.event.inputs.arch || 'amd64' }}"
+          start=$(date +%s)
+          while ! mkdir "$LOCK" 2>/dev/null; do
+            held_by=$(cat "$LOCK/holder" 2>/dev/null || echo '?')
+            elapsed=$(( $(date +%s) - start ))
+            if [ "$elapsed" -gt 14400 ]; then
+              echo "[lock] timed out after 4h waiting on $LOCK (holder=$held_by)" >&2
+              exit 1
+            fi
+            echo "[lock] waiting on $LOCK (held by '$held_by'); waited ${elapsed}s..."
+            sleep 30
+          done
+          echo "${{ matrix.ozone }} run-${{ github.run_id }}" > "$LOCK/holder"
+          echo "[lock] acquired $LOCK for ${{ matrix.ozone }}"
+
       - name: Resolve builder image
         run: |
           # Resolution order:
@@ -423,3 +448,10 @@ jobs:
         run: |
           docker rmi "${QA_RUNNER_IMAGE:-}" 2>/dev/null || true
           rm -rf "${GITHUB_WORKSPACE}/.qa-runner-clone" || true
+
+      - name: Release chromium/src host lock
+        if: always()
+        run: |
+          LOCK="/tmp/carbonyl-chromium-src.lock-${{ github.event.inputs.arch || 'amd64' }}"
+          rm -rf "$LOCK" 2>/dev/null || true
+          echo "[lock] released $LOCK"
