@@ -53,6 +53,7 @@ on:
     paths:
       - 'chromium/.gclient'
       - 'chromium/patches/**'
+      - 'scripts/**'
       - 'src/**'
       - 'src/browser/args.gn'
       - 'build/Dockerfile.builder'

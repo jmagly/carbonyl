@@ -40,7 +40,7 @@ fi
 
 : "${DISPLAY:?DISPLAY must be set (run inside the qa-runner container, or start Xorg/Xvfb first)}"
 
-for cmd in scrot python3; do
+for cmd in scrot python3 script; do
     command -v "$cmd" >/dev/null 2>&1 || {
         echo "FAIL: $cmd not on PATH (qa-runner image provides it)"; exit 1; }
 done
@@ -103,16 +103,21 @@ echo "    work_dir=$WORK_DIR"
 # --viewport pins CSS layout to a fixed size so the fixture's banner is
 # always within the rendered area regardless of how Carbonyl probes the
 # (possibly absent) controlling terminal in a container.
-# COLORTERM=truecolor forces 24-bit ANSI SGR in the painter so the colour
-# escape assertions don't depend on host palette detection.
+# The terminal renderer needs a PTY. Running with stdout redirected to a
+# regular file can leave Carbonyl with no usable terminal surface, which makes
+# the X mirror pass while the terminal stream stays empty. `script` allocates a
+# PTY and captures the byte stream for assertions.
+CARBONYL_CMD=(
+    "$CARBONYL_BIN"
+    --no-sandbox
+    --ozone-platform=x11
+    --viewport=1280x720
+    "file://$FIXTURE"
+)
+printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
 CARBONYL_X_MIRROR=1 \
 COLORTERM=truecolor \
-    "$CARBONYL_BIN" \
-        --no-sandbox \
-        --ozone-platform=x11 \
-        --viewport=1280x720 \
-        "file://$FIXTURE" \
-    > "$TERM_LOG" 2>&1 &
+    script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" &
 CARBONYL_PID=$!
 
 echo "    pid=$CARBONYL_PID, capturing for ${CAPTURE_SECONDS}s.."
