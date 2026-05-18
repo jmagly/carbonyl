@@ -177,6 +177,33 @@ jobs:
           git checkout "${GITHUB_SHA:-HEAD}"
           echo "[checkout] workspace: ${GITHUB_WORKSPACE}/.repo-clone"
 
+      - name: Normalize host workspace ownership
+        # Prior containerized maintenance steps can leave regenerated patch files
+        # owned by the container user. The host runner performs the rsync below,
+        # so normalize only Carbonyl-owned paths and leave the large Chromium
+        # checkout/depot_tools trees alone.
+        run: |
+          HOST_UID="$(id -u)"
+          HOST_GID="$(id -g)"
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e HOST_CARBONYL_DIR="${HOST_CARBONYL_DIR}" \
+            -e HOST_UID="${HOST_UID}" \
+            -e HOST_GID="${HOST_GID}" \
+            "${BUILDER_IMAGE}" \
+            bash -c '
+              set -euo pipefail
+              if [ -d "${HOST_CARBONYL_DIR}" ]; then
+                find "${HOST_CARBONYL_DIR}" -mindepth 1 -maxdepth 1 ! -name chromium \
+                  -exec chown -R "${HOST_UID}:${HOST_GID}" {} +
+              fi
+              if [ -d "${HOST_CARBONYL_DIR}/chromium" ]; then
+                find "${HOST_CARBONYL_DIR}/chromium" -mindepth 1 -maxdepth 1 \
+                  ! -name src ! -name depot_tools \
+                  -exec chown -R "${HOST_UID}:${HOST_GID}" {} +
+              fi
+            '
+
       - name: Sync workspace → host Chromium checkout
         # The Chromium source checkout lives at HOST_CHROMIUM_SRC_DIR on titan,
         # NOT in the workspace. We sync the patch set, scripts, and args.gn
@@ -191,6 +218,8 @@ jobs:
           # Sync changed files from workspace to host repo dir.
           # Excludes preserve the pre-existing 150 GB Chromium checkout.
           rsync -a \
+            --no-owner \
+            --no-group \
             --exclude='.git/' \
             --exclude='chromium/src/' \
             --exclude='chromium/depot_tools/' \

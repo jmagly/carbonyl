@@ -78,10 +78,22 @@ jobs:
           echo "[mirror] pushing ref: ${REF}"
 
           # --force-with-lease guards against silent overwrites; on a
-          # divergent GitHub history the push fails loudly. Never use
-          # --force here.
-          git -c "http.extraheader=${AUTH_HEADER}" \
-              push --force-with-lease "${GH_REMOTE}" "${REF}:${REF}"
+          # divergent GitHub history the push fails loudly. Because this is a
+          # fresh mirror clone of Gitea, compute the GitHub-side lease
+          # explicitly instead of relying on stale or absent remote-tracking
+          # refs. Never use --force here.
+          REMOTE_SHA="$(git -c "http.extraheader=${AUTH_HEADER}" \
+            ls-remote "${GH_REMOTE}" "${REF}" | awk '{print $1}')"
+          if [ -n "${REMOTE_SHA}" ]; then
+            echo "[mirror] GitHub ${REF} currently at ${REMOTE_SHA}"
+            git -c "http.extraheader=${AUTH_HEADER}" \
+                push --force-with-lease="${REF}:${REMOTE_SHA}" \
+                "${GH_REMOTE}" "${REF}:${REF}"
+          else
+            echo "[mirror] GitHub ${REF} does not exist yet; creating it"
+            git -c "http.extraheader=${AUTH_HEADER}" \
+                push "${GH_REMOTE}" "${REF}:${REF}"
+          fi
 
           # Tag pushes are additive: don't propagate Gitea-side tag
           # deletions to GitHub. Tag deletion stays a manual action.
