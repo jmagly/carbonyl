@@ -1,4 +1,4 @@
-From 5884c7e817ae07beec7d1adcf956f783052eeb49 Mon Sep 17 00:00:00 2001
+From 1cb65ee58f0cbdd1c57895eccaaf3bffc4610ee4 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:27:27 +0100
 Subject: [PATCH 04/26] Setup browser default settings

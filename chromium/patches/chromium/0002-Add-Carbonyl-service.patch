@@ -1,4 +1,4 @@
-From 81de9fd7758de77a85ee1e13c5c0e99e8215df01 Mon Sep 17 00:00:00 2001
+From 92658daf645f2e3ea1ae2abc740871cb185dc14e Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:21:59 +0100
 Subject: [PATCH 02/26] Add Carbonyl service
@@ -11,10 +11,10 @@ Subject: [PATCH 02/26] Add Carbonyl service
  4 files changed, 160 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 5664e618dc31b..0ae6d6c5ad5c5 100644
+index 6450b5e6a03cf..4b47563aca368 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -5524,6 +5524,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -5541,6 +5541,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // to change across MPArch activations like prerendering.
    const base::UnguessableToken devtools_frame_token_;
  
@@ -24,10 +24,10 @@ index 5664e618dc31b..0ae6d6c5ad5c5 100644
    // this is constructed along with the RFHI. When kLazyBrowserInterfaceBroker
    // is enabled the struct is lazily instantiated when the RFHI becomes
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 6ee766c522028..e74978a3550be 100644
+index 5936c5eaa081a..678489f4b1f18 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -1999,6 +1999,10 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2000,6 +2000,10 @@ RenderFrameImpl::~RenderFrameImpl() {
    tracing::TrackNameRecorder::GetInstance()->RemoveProcessLabel(
        process_label_id_);
    agent_scheduling_group_->RemoveFrameRoute(frame_token_);
@@ -39,10 +39,10 @@ index 6ee766c522028..e74978a3550be 100644
  
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index c803bf1d93bb9..f24837c78b32e 100644
+index 1733f28e69b33..abc5652bee5a0 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -1523,6 +1523,8 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1514,6 +1514,8 @@ class CONTENT_EXPORT RenderFrameImpl
    scoped_refptr<network::SharedURLLoaderFactory>
        url_loader_factory_override_for_test_;
  
@@ -51,7 +51,7 @@ index c803bf1d93bb9..f24837c78b32e 100644
    // When the browser asks the renderer to commit a navigation, it should always
    // result in a committed navigation reported via DidCommitProvisionalLoad().
    // This is important because DidCommitProvisionalLoad() is responsible for
-@@ -1599,6 +1601,10 @@ class CONTENT_EXPORT RenderFrameImpl
+@@ -1590,6 +1592,10 @@ class CONTENT_EXPORT RenderFrameImpl
    // false, but set to true by some tests.
    bool send_content_state_immediately_ = false;
  
@@ -63,7 +63,7 @@ index c803bf1d93bb9..f24837c78b32e 100644
    // handling a CDP command.
    ClientNavigationThrottler client_navigation_throttler_;
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index f634b8f3d2a33..25941467d1568 100644
+index 8bd0b172f5be7..e7e8319a1da34 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
 @@ -89,6 +89,128 @@ bool Font::operator==(const Font& other) const {

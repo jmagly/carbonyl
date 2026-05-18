@@ -1,4 +1,4 @@
-From 8831ec54bbb2c848857706ca169e4621566ce737 Mon Sep 17 00:00:00 2001
+From f5666e89d0399300ffee642affab629a21ce36fd Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 21:51:24 -0400
 Subject: [PATCH 18/26] fix(m120): fix compile errors in render_frame_impl and
@@ -19,7 +19,7 @@ Content-Transfer-Encoding: 8bit
  4 files changed, 8 insertions(+), 15 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 4efd81b5b90d5..b4cd56c28e5e5 100644
+index 4fbb9a4801478..f19727bafa2ba 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -281,14 +281,14 @@
@@ -39,7 +39,7 @@ index 4efd81b5b90d5..b4cd56c28e5e5 100644
  #include "third_party/skia/src/text/GlyphRun.h"
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
-@@ -2181,25 +2181,15 @@ protected:
+@@ -2182,25 +2182,15 @@ protected:
  
        base64[runSize] = '\0';
  
@@ -69,7 +69,7 @@ index 4efd81b5b90d5..b4cd56c28e5e5 100644
            paint.getColor()
          )
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index f24837c78b32e..20b4fdfbab065 100644
+index abc5652bee5a0..d60e5c21ae59c 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
 @@ -127,6 +127,7 @@

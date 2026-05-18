@@ -46,8 +46,8 @@ To bump a specific crate to a new major version, edit `Cargo.toml` then run
 
 ### Chromium version (involved — do when security patches are needed)
 
-Chromium is currently at `147.0.7727.94` (M147, upgraded Apr 2026 from M140).
-The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147. Updating it requires:
+Chromium is currently at `148.0.7778.167` (M148, upgraded May 2026 from M147).
+The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148. Updating it requires:
 
 1. **Choose a new Chromium version**: check https://chromiumdash.appspot.com/releases
    for a stable branch release.
@@ -127,13 +127,13 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147. Updatin
 
 ### Patch reference commits
 
-The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M147):
+The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M148):
 
 | Repo | Base commit | Chromium version |
 |------|-------------|-----------------|
-| Chromium | `be35d570111fa75402da99a722251d8af5ee5990` | M147 (147.0.7727.94) |
-| Skia | `d203629ce869dbb142ca186c7da60a97cfb1550d` | DEPS @ 147.0.7727.94 |
-| WebRTC | `9179833d210d105aede5d4ec516734a6bd1ef2e8` | DEPS @ 147.0.7727.94 |
+| Chromium | `65db666ac2cf205fcc36db8bb5b9cd87f94808ac` | M148 (148.0.7778.167) |
+| Skia | `a2888b27a98e4ff30085d4d2dba8a1a99baf6dfb` | DEPS @ 148.0.7778.167 |
+| WebRTC | `9a7f650bcd14f241d20f88f4e1ea3b7300de72ac` | DEPS @ 148.0.7778.167 |
 
 When updating Chromium, update all three to the new version's base commits
 before running `patches.sh apply`.

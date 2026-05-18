@@ -1,4 +1,4 @@
-From ee29333d9cfb32baca2d1f8f7c59a1f92f57cf3d Mon Sep 17 00:00:00 2001
+From bc8281c10f5e465b7ba680c1f5d79d58391b5cf8 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Mon, 13 Feb 2023 16:28:50 +0100
 Subject: [PATCH 13/26] Refactor rendering bridge
@@ -37,7 +37,7 @@ Subject: [PATCH 13/26] Refactor rendering bridge
  create mode 100644 headless/lib/browser/headless_browser_main_parts_mac.mm
 
 diff --git a/components/viz/service/BUILD.gn b/components/viz/service/BUILD.gn
-index 7aab80076a041..5a63e2d7c1804 100644
+index 42a96534b0d6e..ba8d6aac38b3a 100644
 --- a/components/viz/service/BUILD.gn
 +++ b/components/viz/service/BUILD.gn
 @@ -178,6 +178,8 @@ viz_component("service") {
@@ -346,7 +346,7 @@ index 0000000000000..4f0a64830b18b
 +
 +#endif  // CARBONYL_SRC_BROWSER_SOFTWARE_OUTPUT_DEVICE_PROXY_H_
 diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
-index 3913f68ccd324..44a62dc807ed9 100644
+index 718b28f411f7c..a82afa993b054 100644
 --- a/content/browser/BUILD.gn
 +++ b/content/browser/BUILD.gn
 @@ -112,6 +112,8 @@ source_set("browser") {
@@ -359,10 +359,10 @@ index 3913f68ccd324..44a62dc807ed9 100644
      "//cc",
      "//cc/animation",
 diff --git a/content/browser/web_contents/web_contents_impl.cc b/content/browser/web_contents/web_contents_impl.cc
-index bab97c121551a..049b6748e40d4 100644
+index a65a4f8daebf8..e72c3aeb5a08b 100644
 --- a/content/browser/web_contents/web_contents_impl.cc
 +++ b/content/browser/web_contents/web_contents_impl.cc
-@@ -2088,7 +2088,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
+@@ -2097,7 +2097,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
    // Mac display info may originate from a remote process hosting the NSWindow;
    // this local process display::Screen signal should not trigger updates.
    // TODO(crbug.com/40165350): Unify screen info plumbing, caching, etc.
@@ -371,7 +371,7 @@ index bab97c121551a..049b6748e40d4 100644
    // This updates Screen attributes and fires Screen.change events as needed,
    // propagating to all widgets through the VisualProperties update waterfall.
    // This is triggered by system changes, not renderer IPC, so explicitly check
-@@ -2101,7 +2101,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
+@@ -2110,7 +2110,7 @@ void WebContentsImpl::OnScreensChange(bool is_multi_screen_changed) {
        view->UpdateScreenInfo();
      }
    }
@@ -381,10 +381,10 @@ index bab97c121551a..049b6748e40d4 100644
  
  void WebContentsImpl::OnScreenOrientationChange() {
 diff --git a/content/browser/web_contents/web_contents_impl.h b/content/browser/web_contents/web_contents_impl.h
-index e94fdbc3a434e..9fc5dc96ff70b 100644
+index 882e90f435780..4da8a95257321 100644
 --- a/content/browser/web_contents/web_contents_impl.h
 +++ b/content/browser/web_contents/web_contents_impl.h
-@@ -294,7 +294,7 @@ class CONTENT_EXPORT WebContentsImpl
+@@ -298,7 +298,7 @@ class CONTENT_EXPORT WebContentsImpl
  
    // Called on screen information changes; |is_multi_screen_changed| is true iff
    // the plurality of connected screens changed (e.g. 1 screen <-> 2 screens).
@@ -394,10 +394,10 @@ index e94fdbc3a434e..9fc5dc96ff70b 100644
    void OnScreenOrientationChange();
  
 diff --git a/content/public/browser/web_contents.h b/content/public/browser/web_contents.h
-index f071103d3b15d..7ae5d1834a9b5 100644
+index f2f2ca4ec75b7..f1dce92645d0f 100644
 --- a/content/public/browser/web_contents.h
 +++ b/content/public/browser/web_contents.h
-@@ -431,6 +431,9 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
+@@ -436,6 +436,9 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
  
    ~WebContents() override = default;
  
@@ -408,7 +408,7 @@ index f071103d3b15d..7ae5d1834a9b5 100644
  
    // Gets/Sets the delegate.
 diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
-index bbb6f87c5b824..c592c99b3cafd 100644
+index f41d1a0ca0f0b..250ae08f19be7 100644
 --- a/content/renderer/BUILD.gn
 +++ b/content/renderer/BUILD.gn
 @@ -233,6 +233,9 @@ target(link_target_type, "renderer") {
@@ -422,7 +422,7 @@ index bbb6f87c5b824..c592c99b3cafd 100644
      "//cc/animation",
      "//cc/mojo_embedder",
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 4efd81b5b90d5..2765f88606abd 100644
+index 4fbb9a4801478..a448d4d1e0fc1 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -290,6 +290,7 @@
@@ -433,7 +433,7 @@ index 4efd81b5b90d5..2765f88606abd 100644
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
  #include "third_party/skia/src/core/SkFontPriv.h"
-@@ -2323,6 +2324,10 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2324,6 +2325,10 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    );
  
    host->ObserveTerminalRender(render_callback_);
@@ -445,7 +445,7 @@ index 4efd81b5b90d5..2765f88606abd 100644
  
  void RenderFrameImpl::GetInterface(
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index c81027ddbcb67..5f18761c89f03 100644
+index fc0137798a835..4620f764431a1 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
 @@ -382,7 +382,8 @@ source_set("headless_browser") {
@@ -466,7 +466,7 @@ index c81027ddbcb67..5f18761c89f03 100644
      "//components/version_info",
      "//content/public/app",
      "//content/public/browser",
-@@ -943,6 +945,7 @@ executable("headless_shell") {
+@@ -944,6 +946,7 @@ executable("headless_shell") {
  
    deps = [
      ":headless_shell_lib",
@@ -797,10 +797,10 @@ index 4f15b217fcf81..fafb60088e0de 100644
    // Even when interfacing with printer settings using CUPS IPP, the print job
    // may still expect PPD color values if the printer was added to the system
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 66ed65def5c45..1b898d14e7635 100644
+index e90757c2962fc..4adca63942d6c 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
-@@ -401,6 +401,7 @@ component("core") {
+@@ -406,6 +406,7 @@ component("core") {
      ":make_deprecation_info",
      ":xml_ffi",
      "//base",
@@ -809,7 +809,7 @@ index 66ed65def5c45..1b898d14e7635 100644
      "//components/attribution_reporting:mojom_blink",
      "//components/paint_preview/common",
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 7fe14e8f58afb..f1a7b43abee9c 100644
+index caa28c07a249b..ac93838e7fb48 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 @@ -141,7 +141,7 @@
@@ -821,7 +821,7 @@ index 7fe14e8f58afb..f1a7b43abee9c 100644
  
  namespace blink {
  
-@@ -1484,7 +1484,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1490,7 +1490,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -831,10 +831,10 @@ index 7fe14e8f58afb..f1a7b43abee9c 100644
      FontFamily family;
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index edd6254f4c911..213456454c7d5 100644
+index 0b3bc1bb53c63..2186942c6c6ed 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1804,6 +1804,7 @@ component("platform") {
+@@ -1808,6 +1808,7 @@ component("platform") {
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
      "//carbonyl/src/browser:blink",
@@ -843,7 +843,7 @@ index edd6254f4c911..213456454c7d5 100644
      "//cc/ipc",
      "//cc/mojo_embedder",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 4e1a7f1839f2a..bf10907b23071 100644
+index e525b5da051d1..c9f23ca4d68c0 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
 @@ -43,7 +43,7 @@

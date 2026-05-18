@@ -1,4 +1,4 @@
-From 9305762f9eaf08fe945edfcff39ceaa3499a76c6 Mon Sep 17 00:00:00 2001
+From 8a99f73c2f06ed9497f2ccea9ac4b4129306d3fe Mon Sep 17 00:00:00 2001
 From: Joseph Magly <anth.jaunt916@passmail.net>
 Date: Wed, 6 May 2026 00:10:08 -0400
 Subject: [PATCH 26/26] carbonyl: opt-in eager cookie SQLite flush via CLI
@@ -19,10 +19,10 @@ Refs roctinam/carbonyl#69
  2 files changed, 30 insertions(+), 2 deletions(-)
 
 diff --git a/headless/lib/browser/headless_content_browser_client.cc b/headless/lib/browser/headless_content_browser_client.cc
-index f37eac9a6eb8c..5bfd8b36f574c 100644
+index 752ccbb30281d..399cd26fc5043 100644
 --- a/headless/lib/browser/headless_content_browser_client.cc
 +++ b/headless/lib/browser/headless_content_browser_client.cc
-@@ -283,6 +283,17 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -284,6 +284,17 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
    }
  #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
  
@@ -41,7 +41,7 @@ index f37eac9a6eb8c..5bfd8b36f574c 100644
    std::string process_type =
        command_line->GetSwitchValueASCII(::switches::kProcessType);
 diff --git a/net/extras/sqlite/sqlite_persistent_cookie_store.cc b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
-index ec61478a45903..f4d715359ac0c 100644
+index 648a1d34c57ea..0251e15eee409 100644
 --- a/net/extras/sqlite/sqlite_persistent_cookie_store.cc
 +++ b/net/extras/sqlite/sqlite_persistent_cookie_store.cc
 @@ -11,6 +11,7 @@
@@ -51,8 +51,8 @@ index ec61478a45903..f4d715359ac0c 100644
 +#include "base/command_line.h"
  #include "base/feature_list.h"
  #include "base/files/file_path.h"
- #include "base/functional/bind.h"
-@@ -22,6 +23,7 @@
+ #include "base/files/file_util.h"
+@@ -23,6 +24,7 @@
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
  #include "base/strings/strcat.h"
@@ -60,7 +60,7 @@ index ec61478a45903..f4d715359ac0c 100644
  #include "base/strings/string_util.h"
  #include "base/strings/stringprintf.h"
  #include "base/synchronization/lock.h"
-@@ -1198,8 +1200,23 @@ void SQLitePersistentCookieStore::Backend::DeleteCookie(
+@@ -1163,8 +1165,23 @@ void SQLitePersistentCookieStore::Backend::DeleteCookie(
  void SQLitePersistentCookieStore::Backend::BatchOperation(
      PendingOperation::OperationType op,
      const CanonicalCookie& cc) {

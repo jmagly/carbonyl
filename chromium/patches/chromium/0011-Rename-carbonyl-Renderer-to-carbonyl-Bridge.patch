@@ -1,4 +1,4 @@
-From e790cd0475f77989840a6f0181a1105706cf4375 Mon Sep 17 00:00:00 2001
+From ac3d6ee3f30dc3dd82ae2d7e75641149666c7f3a Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:29:05 +0100
 Subject: [PATCH 11/26] Rename carbonyl::Renderer to carbonyl::Bridge

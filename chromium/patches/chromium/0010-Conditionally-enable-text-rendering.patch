@@ -1,4 +1,4 @@
-From aec5ac9c70182f363890601ff2de7b42bc164918 Mon Sep 17 00:00:00 2001
+From 21eed478a3f688c7388434b44af6f1c47347a344 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 00:55:33 +0100
 Subject: [PATCH 10/26] Conditionally enable text rendering
@@ -17,10 +17,10 @@ Subject: [PATCH 10/26] Conditionally enable text rendering
  10 files changed, 356 insertions(+), 16 deletions(-)
 
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index 5a2d613cec812..9bdc7c3aeac63 100644
+index c5427bb8c60dd..c1724aba94417 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -503,6 +503,24 @@ bool LayerTreeHost::IsUsingLayerLists() const {
+@@ -547,6 +547,24 @@ bool LayerTreeHost::IsUsingLayerLists() const {
    return settings_.use_layer_lists;
  }
  
@@ -45,21 +45,21 @@ index 5a2d613cec812..9bdc7c3aeac63 100644
  void LayerTreeHost::CommitComplete(int source_frame_number,
                                     const CommitTimestamps& commit_timestamps) {
    DCHECK(IsMainThread());
-@@ -1773,6 +1791,9 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
+@@ -1820,6 +1838,9 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
    for (const auto& layer : update_layer_list) {
-     did_paint_content |= layer->Update();
+     result |= layer->Update();
    }
 +
 +  StartTerminalRender();
 +
-   return did_paint_content;
+   return result;
  }
  
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 6055bc8f78889..4ab7fb088e264 100644
+index 925a5b0e8ff7a..064467c90f975 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
-@@ -191,6 +191,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
+@@ -187,6 +187,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
    // Returns the process global unique identifier for this LayerTreeHost.
    int GetId() const;
  
@@ -72,7 +72,7 @@ index 6055bc8f78889..4ab7fb088e264 100644
    // The commit state for the frame being assembled by the compositor host.
    const CommitState* pending_commit_state() const {
      DCHECK(IsMainThread());
-@@ -1193,6 +1199,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
+@@ -1183,6 +1189,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
    std::unique_ptr<PropertyTreeDelegate> owned_property_tree_delegate_;
    raw_ptr<PropertyTreeDelegate> property_tree_delegate_;
  
@@ -82,10 +82,10 @@ index 6055bc8f78889..4ab7fb088e264 100644
  };
  
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index f5f7a55ddaabf..d2102f1f5674f 100644
+index baa5bd1ca2699..ba33e31b94ceb 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
-@@ -943,6 +943,10 @@ void PopulateBinderMapWithContext(
+@@ -961,6 +961,10 @@ void PopulateBinderMapWithContext(
        &BindRenderFrameHostImpl<
            &RenderFrameHostImpl::CreateWebTransportConnector>);
  
@@ -97,10 +97,10 @@ index f5f7a55ddaabf..d2102f1f5674f 100644
    if (BrowserMainLoop::GetInstance()) {
      // BrowserMainLoop, which owns MediaStreamManager, is alive for the lifetime
 diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
-index c5ee522e5ffb3..b0f897e6d8171 100644
+index 735febe0f136d..4309df84585bd 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl.cc
-@@ -14947,6 +14947,12 @@ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
+@@ -15158,6 +15158,12 @@ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
        std::move(receiver), ComputeTopFrameOrigin(GetLastCommittedOrigin()));
  }
  
@@ -114,10 +114,10 @@ index c5ee522e5ffb3..b0f897e6d8171 100644
      mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver) {
    AudioContextManagerImpl::Create(this, std::move(receiver));
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 0ae6d6c5ad5c5..026d6ebbb7826 100644
+index 4b47563aca368..289508e0fea5c 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -216,6 +216,8 @@
+@@ -221,6 +221,8 @@
  #include "media/mojo/mojom/remoting.mojom-forward.h"
  #endif
  
@@ -126,7 +126,7 @@ index 0ae6d6c5ad5c5..026d6ebbb7826 100644
  namespace blink {
  class AssociatedInterfaceRegistry;
  class DocumentPolicy;
-@@ -2081,6 +2083,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -2088,6 +2090,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // Set the `frame_` for sending messages to the renderer process.
    void SetMojomFrameRemote(mojo::PendingAssociatedRemote<mojom::Frame>);
  
@@ -137,7 +137,7 @@ index 0ae6d6c5ad5c5..026d6ebbb7826 100644
        mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver);
  
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index e74978a3550be..4efd81b5b90d5 100644
+index 678489f4b1f18..4fbb9a4801478 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -245,6 +245,7 @@
@@ -188,7 +188,7 @@ index e74978a3550be..4efd81b5b90d5 100644
  using base::Time;
  using blink::ContextMenuData;
  using blink::WebContentDecryptionModule;
-@@ -2005,6 +2039,223 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2006,6 +2040,223 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -412,7 +412,7 @@ index e74978a3550be..4efd81b5b90d5 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -2030,6 +2281,8 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2031,6 +2282,8 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
                                    GetBrowserInterfaceBroker());
    }
  
@@ -421,7 +421,7 @@ index e74978a3550be..4efd81b5b90d5 100644
    // Bind this class to mojom::Frame and to the message router for legacy IPC.
    // These must be called after |frame_| is set since binding requires a
    // per-frame task runner.
-@@ -2039,6 +2292,37 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2040,6 +2293,37 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    agent_scheduling_group_->AddFrameRoute(
        frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
@@ -485,7 +485,7 @@ index 11e9b422ee4ed..d55d67e56752c 100644
    // WebFrameWidgetImpl is the only concrete subclass that implements
    // WebFrameWidget, so that it is safe to downcast to WebFrameWidgetImpl.
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 420273dfb1a3f..f1a7b43abee9c 100644
+index 4447153eac9bf..ac93838e7fb48 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 @@ -141,6 +141,8 @@
@@ -497,7 +497,7 @@ index 420273dfb1a3f..f1a7b43abee9c 100644
  namespace blink {
  
  namespace {
-@@ -1482,18 +1484,20 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1488,18 +1490,20 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -530,10 +530,10 @@ index 420273dfb1a3f..f1a7b43abee9c 100644
    state.LoadPendingResources();
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index eb2472737bd6e..f5292ee5fff98 100644
+index 87f64f5c2cfd4..7fc654b99c76c 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1803,6 +1803,7 @@ component("platform") {
+@@ -1807,6 +1807,7 @@ component("platform") {
      "//base:base_static",
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
@@ -542,7 +542,7 @@ index eb2472737bd6e..f5292ee5fff98 100644
      "//cc/ipc",
      "//cc/mojo_embedder",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 25941467d1568..bf10907b23071 100644
+index e7e8319a1da34..c9f23ca4d68c0 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
 @@ -43,6 +43,8 @@

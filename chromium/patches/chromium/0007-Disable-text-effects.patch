@@ -1,4 +1,4 @@
-From 1a085c02929d670110764e4f9af9a3c2ec1928e3 Mon Sep 17 00:00:00 2001
+From 4ffdaa56164414a58e748716e3207b8a2405138a Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:31:17 +0100
 Subject: [PATCH 07/26] Disable text effects
@@ -61,10 +61,10 @@ index d01cb32832deb..58ec2d2f02218 100644
        },
        paint_info_.context, text_style);
 diff --git a/ui/gfx/render_text.cc b/ui/gfx/render_text.cc
-index bf767df858234..555ff417517bf 100644
+index 7354fcc97fe31..b005a7c21b630 100644
 --- a/ui/gfx/render_text.cc
 +++ b/ui/gfx/render_text.cc
-@@ -55,9 +55,9 @@ constexpr char16_t kEllipsisCodepoint = 0x2026;
+@@ -56,9 +56,9 @@ constexpr char16_t kEllipsisCodepoint = 0x2026;
  
  // Fraction of the text size to raise the center of a strike-through line above
  // the baseline.
@@ -76,7 +76,7 @@ index bf767df858234..555ff417517bf 100644
  
  // Float comparison needs epsilon to consider rounding errors in float
  // arithmetic. Epsilon should be dependent on the context and here, we are
-@@ -380,28 +380,28 @@ void SkiaTextRenderer::DrawUnderline(int x,
+@@ -387,28 +387,28 @@ void SkiaTextRenderer::DrawUnderline(int x,
                                       int y,
                                       int width,
                                       SkScalar thickness_factor) {

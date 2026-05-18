@@ -1,4 +1,4 @@
-From b660929a105bd4ebc227f30db05c06e9551ea789 Mon Sep 17 00:00:00 2001
+From 3050fb3853f64f6d0301eaad03c3bf3fbf7114bd Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 02:20:32 +0100
 Subject: [PATCH 12/26] Create separate bridge for Blink
@@ -10,7 +10,7 @@ Subject: [PATCH 12/26] Create separate bridge for Blink
  3 files changed, 7 insertions(+), 7 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index f1a7b43abee9c..7fe14e8f58afb 100644
+index ac93838e7fb48..caa28c07a249b 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 @@ -141,7 +141,7 @@
@@ -22,7 +22,7 @@ index f1a7b43abee9c..7fe14e8f58afb 100644
  
  namespace blink {
  
-@@ -1484,7 +1484,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1490,7 +1490,7 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -32,10 +32,10 @@ index f1a7b43abee9c..7fe14e8f58afb 100644
      FontFamily family;
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index f5292ee5fff98..edd6254f4c911 100644
+index 7fc654b99c76c..0b3bc1bb53c63 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1803,7 +1803,7 @@ component("platform") {
+@@ -1807,7 +1807,7 @@ component("platform") {
      "//base:base_static",
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
@@ -45,7 +45,7 @@ index f5292ee5fff98..edd6254f4c911 100644
      "//cc/ipc",
      "//cc/mojo_embedder",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index bf10907b23071..4e1a7f1839f2a 100644
+index c9f23ca4d68c0..e525b5da051d1 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
 @@ -43,7 +43,7 @@

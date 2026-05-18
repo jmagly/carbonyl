@@ -1,4 +1,4 @@
-From 6fe66f2b1c348f5b97024eb2d0210d7c3bb5ff04 Mon Sep 17 00:00:00 2001
+From 49cf5429affa900931f2d7bcefc73cd7d0c46fa8 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:28:35 +0100
 Subject: [PATCH 05/26] Remove some debug assertions
@@ -10,7 +10,7 @@ Subject: [PATCH 05/26] Remove some debug assertions
  3 files changed, 11 insertions(+), 25 deletions(-)
 
 diff --git a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
-index afb10fe2da6a7..1ebc545b24517 100644
+index a85c845e623fc..e29910c19877a 100644
 --- a/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
 +++ b/third_party/blink/renderer/bindings/core/v8/script_promise_resolver.cc
 @@ -47,27 +47,15 @@ ScriptPromiseResolverBase::ScriptPromiseResolverBase(
@@ -45,10 +45,10 @@ index afb10fe2da6a7..1ebc545b24517 100644
  }
  #endif
 diff --git a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-index c066b46007c91..485d344066cc7 100644
+index e311f29732447..917b250b7c469 100644
 --- a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
 +++ b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-@@ -452,7 +452,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
+@@ -503,7 +503,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
      // properties are changed, which would indicate a missing call to
      // SetNeedsUpdate.
      if (previous.properties != repainted.properties) {
@@ -56,7 +56,7 @@ index c066b46007c91..485d344066cc7 100644
        return true;
      }
  
-@@ -521,7 +520,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
+@@ -572,7 +571,6 @@ bool NeedsFullUpdateAfterPaintingChunk(
    // properties are changed, which would indicate a missing call to
    // SetNeedsUpdate.
    if (previous.properties != repainted.properties) {

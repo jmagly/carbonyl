@@ -73,7 +73,7 @@ jobs:
     # `'both'` runs all combos. Anything else filters down to one ozone.
     if: ${{ github.event.inputs.ozone_platform == '' || github.event.inputs.ozone_platform == null || github.event.inputs.ozone_platform == 'both' || github.event.inputs.ozone_platform == matrix.ozone }}
     runs-on: titan
-    timeout-minutes: 240
+    timeout-minutes: 300
     # Serialize matrix combos that share /srv/carbonyl/chromium/src on titan.
     # Without this, both jobs start in parallel (act_runner ignores
     # strategy.max-parallel) and the second one fails with
@@ -262,6 +262,51 @@ jobs:
                   git clean -fd || true
                 fi
               done
+            '
+
+      - name: Sync Chromium source to .gclient pin (in container)
+        run: |
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_ROOT=${HOST_CARBONYL_DIR}/chromium \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -e DEPOT_TOOLS_ROOT=${HOST_CARBONYL_DIR}/chromium/depot_tools \
+            -w ${HOST_CARBONYL_DIR} \
+            "${BUILDER_IMAGE}" \
+            bash -c '
+              set -euo pipefail
+              git config --global --add safe.directory "*"
+
+              TARGET_VERSION="$(sed -n "s/.*src\.git@\([^\"]*\)\".*/\1/p" chromium/.gclient | head -1)"
+              TARGET_SHA="$(sed -n "s/^chromium_upstream=\"\([^\"]*\)\".*/\1/p" scripts/patches.sh | head -1)"
+
+              if [ -z "${TARGET_VERSION}" ] || [ -z "${TARGET_SHA}" ]; then
+                echo "[sync-chromium] ERROR: could not resolve .gclient version or chromium_upstream" >&2
+                exit 1
+              fi
+
+              CURRENT_HEAD="$(git -C "${CHROMIUM_SRC}" rev-parse HEAD)"
+              echo "[sync-chromium] current HEAD before: ${CURRENT_HEAD}"
+              echo "[sync-chromium] target version: ${TARGET_VERSION}"
+              echo "[sync-chromium] target SHA: ${TARGET_SHA}"
+
+              if [ "${CURRENT_HEAD}" = "${TARGET_SHA}" ] && git -C "${CHROMIUM_SRC}" cat-file -e "${TARGET_SHA}^{commit}"; then
+                echo "[sync-chromium] already at .gclient pin; no fetch or sync needed"
+              else
+                echo "[sync-chromium] fetching Chromium tag ${TARGET_VERSION}"
+                git -C "${CHROMIUM_SRC}" fetch --progress origin "refs/tags/${TARGET_VERSION}:refs/tags/${TARGET_VERSION}"
+                echo "[sync-chromium] checking out Chromium tag ${TARGET_VERSION}"
+                git -C "${CHROMIUM_SRC}" checkout "${TARGET_VERSION}"
+
+                echo "[sync-chromium] running gclient sync"
+                source scripts/env.sh
+                bash scripts/gclient.sh sync -j"$(nproc)" --no-history
+              fi
+
+              git -C "${CHROMIUM_SRC}" cat-file -e "${TARGET_SHA}^{commit}"
+              FINAL_HEAD="$(git -C "${CHROMIUM_SRC}" rev-parse HEAD)"
+              echo "[sync-chromium] final HEAD after: ${FINAL_HEAD}"
             '
 
       - name: Apply patches to Chromium source (in container)

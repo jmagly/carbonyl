@@ -1,4 +1,4 @@
-From 2c51dece24b832c5d0270c955639b62f148ec31c Mon Sep 17 00:00:00 2001
+From 733fcc9ba3d8e990593e4ad7b296ea7c325b040b Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Thu, 9 Apr 2026 18:18:30 -0400
 Subject: [PATCH 24/26] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
@@ -42,7 +42,7 @@ See: roctinam/carbonyl#28 (this work), #27 (diagnosis), #29 (audit)
  5 files changed, 40 insertions(+), 241 deletions(-)
 
 diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
-index c592c99b3cafd..08c2ada3dfad6 100644
+index 250ae08f19be7..1ac3d0c21fa98 100644
 --- a/content/renderer/BUILD.gn
 +++ b/content/renderer/BUILD.gn
 @@ -233,6 +233,7 @@ target(link_target_type, "renderer") {
@@ -54,7 +54,7 @@ index c592c99b3cafd..08c2ada3dfad6 100644
      "//carbonyl/src/browser:mojom",
      "//carbonyl/src/browser:renderer",
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 82101bd3c69aa..50b7658ef0c3d 100644
+index 22024489be11f..dbd598890868c 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -273,14 +273,15 @@
@@ -81,7 +81,7 @@ index 82101bd3c69aa..50b7658ef0c3d 100644
  #include "third_party/skia/include/codec/SkEncodedImageFormat.h"
  #include "third_party/skia/include/core/SkMesh.h"
  #include "third_party/skia/include/core/SkStream.h"
-@@ -2033,8 +2034,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2034,8 +2035,6 @@ RenderFrameImpl::~RenderFrameImpl() {
        process_label_id_);
    agent_scheduling_group_->RemoveFrameRoute(frame_token_);
  
@@ -90,7 +90,7 @@ index 82101bd3c69aa..50b7658ef0c3d 100644
    if (render_callback_) {
      if (auto& callback = *render_callback_.get()) {
        callback = nullptr;
-@@ -2042,217 +2041,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2043,217 +2042,6 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -308,7 +308,7 @@ index 82101bd3c69aa..50b7658ef0c3d 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -2290,42 +2078,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2291,42 +2079,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
        frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
  
@@ -379,10 +379,10 @@ index 0f2a6baa28cfa..d0ac3b61516cd 100644
  # arguments --------------------------------------------------------------------
  
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 1b898d14e7635..690ada40b4cac 100644
+index 4adca63942d6c..118a5dcdb5341 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
-@@ -97,6 +97,9 @@ if (is_ios) {
+@@ -99,6 +99,9 @@ if (is_ios) {
  visibility = [
    "//third_party/blink/public/*",
    "//third_party/blink/renderer/*",
@@ -392,7 +392,7 @@ index 1b898d14e7635..690ada40b4cac 100644
  ]
  
  rel_blink_core_gen_dir = rebase_path(blink_core_output_dir, root_build_dir)
-@@ -254,7 +257,11 @@ component("core") {
+@@ -256,7 +259,11 @@ component("core") {
    output_name = "blink_core"
  
    visibility = []  # Allow re-assignment of list.
@@ -406,7 +406,7 @@ index 1b898d14e7635..690ada40b4cac 100644
    sources = [
      "core_initializer.cc",
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 79c581e819e8f..1d54d26d58878 100644
+index 0ea9d1bc9a0c3..bdeb16766c44d 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
 @@ -31,6 +31,8 @@ visibility = [
@@ -418,7 +418,7 @@ index 79c581e819e8f..1d54d26d58878 100644
  ]
  
  blink_platform_avx_files = [
-@@ -348,7 +350,11 @@ source_set("image_headers") {
+@@ -349,7 +351,11 @@ source_set("image_headers") {
  
  component("platform") {
    visibility = []  # Allow re-assignment of list.

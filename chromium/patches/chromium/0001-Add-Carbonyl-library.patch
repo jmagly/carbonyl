@@ -1,4 +1,4 @@
-From c8cc1c207d3f366e62f486147f007b447d6eddf5 Mon Sep 17 00:00:00 2001
+From a80de708987d5b4a9ef0dab62517b491d9786c92 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:20:50 +0100
 Subject: [PATCH 01/26] Add Carbonyl library
@@ -28,7 +28,7 @@ index 0000000000000..dabb0e15a991e
 +../../../src
 \ No newline at end of file
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index c5ba46a82b4f4..c81027ddbcb67 100644
+index c17b97a6ea38e..fc0137798a835 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
 @@ -382,6 +382,7 @@ source_set("headless_browser") {
@@ -39,7 +39,7 @@ index c5ba46a82b4f4..c81027ddbcb67 100644
      "//components/cookie_config",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -921,6 +922,15 @@ if (should_strip_binary) {
+@@ -922,6 +923,15 @@ if (should_strip_binary) {
  }
  
  executable("headless_shell") {
@@ -55,7 +55,7 @@ index c5ba46a82b4f4..c81027ddbcb67 100644
    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
  
-@@ -934,6 +944,7 @@ executable("headless_shell") {
+@@ -935,6 +945,7 @@ executable("headless_shell") {
    deps = [
      ":headless_shell_lib",
      "//build:branding_buildflags",

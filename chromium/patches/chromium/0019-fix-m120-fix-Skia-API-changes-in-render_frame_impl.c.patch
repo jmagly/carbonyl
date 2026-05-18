@@ -1,4 +1,4 @@
-From 6da5c717a6aa3d13c52276540d96d9d24c75b661 Mon Sep 17 00:00:00 2001
+From 4f5d85705b552f9e4dbecaeeb6e8c8b1919749bf Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sun, 5 Apr 2026 01:10:56 -0400
 Subject: [PATCH 19/26] fix(m120): fix Skia API changes in render_frame_impl.cc
@@ -12,7 +12,7 @@ Subject: [PATCH 19/26] fix(m120): fix Skia API changes in render_frame_impl.cc
  1 file changed, 5 insertions(+), 6 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index b4cd56c28e5e5..76dd51d000b88 100644
+index f19727bafa2ba..2c2105b17d73c 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -293,7 +293,6 @@
@@ -23,7 +23,7 @@ index b4cd56c28e5e5..76dd51d000b88 100644
  
  using base::Time;
  using blink::ContextMenuData;
-@@ -2072,11 +2071,11 @@ public:
+@@ -2073,11 +2072,11 @@ public:
    }
  
  protected:
@@ -38,7 +38,7 @@ index b4cd56c28e5e5..76dd51d000b88 100644
      if(isUnsupportedPaint(paint)) {
        return;
      }
-@@ -2168,9 +2167,9 @@ protected:
+@@ -2169,9 +2168,9 @@ protected:
  
      for (auto& glyphRun : glyphRunList) {
        auto runSize = glyphRun.runSize();

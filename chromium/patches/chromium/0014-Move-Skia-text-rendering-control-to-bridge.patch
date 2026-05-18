@@ -1,4 +1,4 @@
-From a7a1381b0de8a2a8646c790fb4ed4befa0e91a34 Mon Sep 17 00:00:00 2001
+From 04354068d644e8eb17629781b07d55e69d758c61 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Mon, 13 Feb 2023 17:13:38 +0100
 Subject: [PATCH 14/26] Move Skia text rendering control to bridge
@@ -9,7 +9,7 @@ Subject: [PATCH 14/26] Move Skia text rendering control to bridge
  2 files changed, 1 insertion(+), 6 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 2765f88606abd..4efd81b5b90d5 100644
+index a448d4d1e0fc1..4fbb9a4801478 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
 @@ -290,7 +290,6 @@
@@ -20,7 +20,7 @@ index 2765f88606abd..4efd81b5b90d5 100644
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
  #include "third_party/skia/src/core/SkFontPriv.h"
-@@ -2324,10 +2323,6 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2325,10 +2324,6 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    );
  
    host->ObserveTerminalRender(render_callback_);
@@ -32,10 +32,10 @@ index 2765f88606abd..4efd81b5b90d5 100644
  
  void RenderFrameImpl::GetInterface(
 diff --git a/skia/BUILD.gn b/skia/BUILD.gn
-index 31fad5923ad2d..04399742f79d7 100644
+index f06742ed747e3..d599a0f3cbdf4 100644
 --- a/skia/BUILD.gn
 +++ b/skia/BUILD.gn
-@@ -227,7 +227,7 @@ source_set("skia_core_public_headers") {
+@@ -229,7 +229,7 @@ source_set("skia_core_public_headers") {
  }
  
  component("skia") {
