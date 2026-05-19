@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.5] - 2026-05-19
+
+### Bug Fixes
+
+- Rebase Carbonyl onto Chromium M148 (`148.0.7778.167`)
+- Sync the persistent runner checkout to the `.gclient` pin before patch apply
+- Normalize runner-host ownership before rsync and avoid owner/group metadata drift
+- Run the x11 terminal smoke capture under a PTY
+- Use explicit remote SHA force-with-lease for the GitHub mirror
+
+### Documentation
+
+- Refresh M148 patch maintenance notes and Chromium integration references
+- Mark the builder-container CI/CD plan as implemented and green
+- Add titan troubleshooting for stale host-file ownership
+- Prepare `v0.2.0-alpha.5` release notes
+
 ## [0.2.0-alpha.4] - 2026-05-06
 
 ### 🚀 Features
@@ -221,5 +238,3 @@ All notable changes to this project will be documented in this file.
 ### Build
 
 - Various build system fixes ([#20](https://github.com/fathyb/carbonyl/issues/20))
-
-
