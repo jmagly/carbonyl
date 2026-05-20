@@ -1,0 +1,211 @@
+{
+  "version": 1,
+  "generated": "2026-05-18T05:09:18.726Z",
+  "entries": {
+    ".aiwg/architecture/adr-001.md": {
+      "checksum": "97c65e90c8f731b7",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 2980
+    },
+    ".aiwg/architecture/adr-002.md": {
+      "checksum": "0bc0312444d3135c",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 3168
+    },
+    ".aiwg/architecture/adr-003.md": {
+      "checksum": "b381b4bc4e85d96a",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 3260
+    },
+    ".aiwg/architecture/adr-004.md": {
+      "checksum": "31eb4bc33a74ed9c",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 3441
+    },
+    ".aiwg/architecture/software-architecture-doc.md": {
+      "checksum": "8ed52639711695d6",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 25194
+    },
+    ".aiwg/deployment/ci-cd-scaffold.md": {
+      "checksum": "f15358089f8a01f7",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 5729
+    },
+    ".aiwg/frameworks/registry.json": {
+      "checksum": "b660a9a8decf901a",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 785
+    },
+    ".aiwg/intake/intake-form.md": {
+      "checksum": "e9639634940bbc29",
+      "mtime": "2026-05-18T04:47:21.239Z",
+      "size": 23450
+    },
+    ".aiwg/intake/option-matrix.md": {
+      "checksum": "f25bd3476cbb9247",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 10837
+    },
+    ".aiwg/intake/project-intake.md": {
+      "checksum": "aa02ebd0b944ff18",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 12253
+    },
+    ".aiwg/intake/risk-screening.md": {
+      "checksum": "a70918b53b6ac6da",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 9506
+    },
+    ".aiwg/intake/solution-profile.md": {
+      "checksum": "046506a8b2bae1da",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 5428
+    },
+    ".aiwg/planning/iteration-001-plan.md": {
+      "checksum": "48c0f2d745bf826c",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 7308
+    },
+    ".aiwg/reports/abm-gate-report.md": {
+      "checksum": "b60098ff1c1b43a7",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 2399
+    },
+    ".aiwg/reports/construction-ready-brief.md": {
+      "checksum": "1c790e8aba69d0dc",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 6101
+    },
+    ".aiwg/reports/lom-gate-report.md": {
+      "checksum": "34d324c2b5ad040d",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 1748
+    },
+    ".aiwg/reports/phase0-w01-patch-audit.md": {
+      "checksum": "23fa1960bce6262b",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 11519
+    },
+    ".aiwg/reports/phase0-w06-parity-report.md": {
+      "checksum": "88aaee299f3c91d9",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 5985
+    },
+    ".aiwg/requirements/nfr-register.md": {
+      "checksum": "7588611eeef67089",
+      "mtime": "2026-05-18T04:47:21.240Z",
+      "size": 25379
+    },
+    ".aiwg/requirements/use-cases.md": {
+      "checksum": "02860dcf8d9a43c4",
+      "mtime": "2026-05-18T04:47:21.241Z",
+      "size": 18977
+    },
+    ".aiwg/requirements/user-stories.md": {
+      "checksum": "9f9f52140b1806a6",
+      "mtime": "2026-05-18T04:47:21.241Z",
+      "size": 22224
+    },
+    ".aiwg/smiths/toolsmith/runtime-info.md": {
+      "checksum": "1d9e37e601b9ff15",
+      "mtime": "2026-05-18T05:03:19.800Z",
+      "size": 2982
+    },
+    ".aiwg/smiths/toolsmith/runtime.json": {
+      "checksum": "5deae80b305c6ce8",
+      "mtime": "2026-05-18T05:03:19.799Z",
+      "size": 19755
+    },
+    ".aiwg/team/team-profile.md": {
+      "checksum": "9538873483a31ec7",
+      "mtime": "2026-05-18T04:47:21.241Z",
+      "size": 2915
+    },
+    ".aiwg/testing/test-strategy.md": {
+      "checksum": "454528fe0ea7cdae",
+      "mtime": "2026-05-18T04:47:21.241Z",
+      "size": 13826
+    },
+    ".aiwg/working/architecture/sad-review-security.md": {
+      "checksum": "91484bf4f953969a",
+      "mtime": "2026-05-18T04:47:21.241Z",
+      "size": 5336
+    },
+    ".aiwg/working/architecture/sad-review-testability.md": {
+      "checksum": "2cd7cdbb54b17fb6",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 10146
+    },
+    ".aiwg/working/architecture/sad-review-traceability.md": {
+      "checksum": "1faf919e250eaf72",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 6892
+    },
+    ".aiwg/working/sdlc-accelerate/state.json": {
+      "checksum": "e78f205cf12d31e4",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 1211
+    },
+    ".aiwg/working/synthesis-reports/sad-synthesis-2026-04-03.md": {
+      "checksum": "4de49193f6e5cb41",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 5032
+    },
+    ".aiwg/working/trusted-automation/00-vision.md": {
+      "checksum": "66c9f04c27d51bb0",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 5349
+    },
+    ".aiwg/working/trusted-automation/01-requirements.md": {
+      "checksum": "7cf0796d5677cf0c",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 7028
+    },
+    ".aiwg/working/trusted-automation/02-architecture.md": {
+      "checksum": "70ddd4cd34d92ca9",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 13203
+    },
+    ".aiwg/working/trusted-automation/03-threat-model.md": {
+      "checksum": "0a10efab18df7e92",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 12508
+    },
+    ".aiwg/working/trusted-automation/04-test-strategy.md": {
+      "checksum": "fd75c012fcb03e40",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 8133
+    },
+    ".aiwg/working/trusted-automation/05-phase-plan.md": {
+      "checksum": "54687d424f429083",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 15334
+    },
+    ".aiwg/working/trusted-automation/06-research-index.md": {
+      "checksum": "20a6ca35e0f57a30",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 16088
+    },
+    ".aiwg/working/trusted-automation/07-fingerprint-registry-design.md": {
+      "checksum": "fc0baf21faa51725",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 17732
+    },
+    ".aiwg/working/trusted-automation/08-roadmap.md": {
+      "checksum": "3fd8369d1d89fdb7",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 10830
+    },
+    ".aiwg/working/trusted-automation/09-ci-plan.md": {
+      "checksum": "eba951c7c44e37d9",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 23833
+    },
+    ".aiwg/working/trusted-automation/README.md": {
+      "checksum": "0a1459f042bb2388",
+      "mtime": "2026-05-18T04:47:21.242Z",
+      "size": 2820
+    }
+  }
+}

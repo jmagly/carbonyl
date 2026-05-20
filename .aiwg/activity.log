@@ -1,0 +1,19 @@
+## [2026-05-18 04:58] deploy | aiwg use all
+## [2026-05-18 04:58] deploy | aiwg use all --provider codex
+## [2026-05-18 04:59] deploy | aiwg refresh --dry-run --all --provider codex
+## [2026-05-18 05:08] deploy | aiwg use all --provider codex
+## [2026-05-18 05:08] deploy | aiwg refresh --all --provider codex --force
+## [2026-05-18 05:08] update | aiwg index build
+## [2026-05-18 05:08] update | aiwg index stats --json
+## [2026-05-18 05:08] update | aiwg index build --graph project
+## [2026-05-18 05:08] deploy | aiwg use aiwg-utils --provider codex --force
+## [2026-05-18 05:09] update | aiwg index build --all --force
+## [2026-05-18 05:09] update | aiwg index stats --json
+## [2026-05-18 05:09] update | aiwg index discover steward routing --graph framework --limit 5
+## [2026-05-18 05:09] update | aiwg index stats --graph framework --json
+## [2026-05-18 05:09] update | aiwg index discover aiwg doctor --graph framework --limit 5
+## [2026-05-18 05:09] update | aiwg index query doctor --graph framework --json
+## [2026-05-18 05:10] update | aiwg index build --graph framework --force --verbose
+## [2026-05-18 05:11] update | aiwg index stats --graph framework --json
+## [2026-05-18 05:11] update | aiwg index stats --json
+## [2026-05-18 05:15] update | aiwg index stats --json

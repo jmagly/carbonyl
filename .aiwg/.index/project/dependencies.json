@@ -1,0 +1,166 @@
+{
+  ".aiwg/architecture/adr-001.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/architecture/adr-002.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/architecture/adr-003.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/architecture/adr-004.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/architecture/software-architecture-doc.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/deployment/ci-cd-scaffold.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/frameworks/registry.json": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/intake/intake-form.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/intake/option-matrix.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/intake/project-intake.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/intake/risk-screening.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/intake/solution-profile.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/planning/iteration-001-plan.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/reports/abm-gate-report.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/reports/construction-ready-brief.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/reports/lom-gate-report.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/reports/phase0-w01-patch-audit.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/reports/phase0-w06-parity-report.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/requirements/nfr-register.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/requirements/use-cases.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/requirements/user-stories.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/smiths/toolsmith/runtime-info.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/smiths/toolsmith/runtime.json": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/team/team-profile.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/testing/test-strategy.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/architecture/sad-review-security.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/architecture/sad-review-testability.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/architecture/sad-review-traceability.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/sdlc-accelerate/state.json": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/synthesis-reports/sad-synthesis-2026-04-03.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/00-vision.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/01-requirements.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/02-architecture.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/03-threat-model.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/04-test-strategy.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/05-phase-plan.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/06-research-index.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/07-fingerprint-registry-design.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/08-roadmap.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/09-ci-plan.md": {
+    "upstream": [],
+    "downstream": []
+  },
+  ".aiwg/working/trusted-automation/README.md": {
+    "upstream": [],
+    "downstream": []
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "builtAt": "2026-05-18T05:09:18.727Z",
+  "buildTimeMs": 0,
+  "totalArtifacts": 0,
+  "byPhase": {},
+  "byType": {},
+  "tagDistribution": {},
+  "graphMetrics": {
+    "totalEdges": 0,
+    "orphanedArtifacts": 0,
+    "mostReferenced": null
+  }
+}

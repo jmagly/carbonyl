@@ -1,0 +1,111 @@
+1779080599.042230 client started (1536772): version 3.5a, socket /tmp/tmux-1000/default, protocol 8
+1779080599.042268 on Linux 6.17.0-23-generic #23-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:29:57 UTC 2026
+1779080599.042274 using libevent 2.1.12-stable poll
+1779080599.042278 using ncurses 6.5 20250216
+1779080599.042298 flags are 0x18010000
+1779080599.042312 socket is /tmp/tmux-1000/default
+1779080599.042322 trying connect
+1779080599.042340 connect failed: No such file or directory
+1779080599.042348 lock file is /tmp/tmux-1000/default.lock
+1779080599.042364 flock succeeded
+1779080599.042367 got lock (6)
+1779080599.042373 trying connect
+1779080599.042378 connect failed: No such file or directory
+1779080599.042678 add peer 0x733020e9cf80: 7 ((nil))
+1779080599.042822 sending message 111 to peer 0x733020e9cf80 (8 bytes)
+1779080599.042828 sending message 111 to peer 0x733020e9cf80 (8 bytes)
+1779080599.042830 sending message 101 to peer 0x733020e9cf80 (15 bytes)
+1779080599.042832 sending message 109 to peer 0x733020e9cf80 (4 bytes)
+1779080599.042834 sending message 102 to peer 0x733020e9cf80 (1 bytes)
+1779080599.042837 sending message 108 to peer 0x733020e9cf80 (37 bytes)
+1779080599.042840 sending message 104 to peer 0x733020e9cf80 (0 bytes)
+1779080599.042842 sending message 110 to peer 0x733020e9cf80 (0 bytes)
+1779080599.042844 sending message 107 to peer 0x733020e9cf80 (4 bytes)
+1779080599.042847 sending message 105 to peer 0x733020e9cf80 (42 bytes)
+1779080599.042849 sending message 105 to peer 0x733020e9cf80 (33 bytes)
+1779080599.042851 sending message 105 to peer 0x733020e9cf80 (32 bytes)
+1779080599.042853 sending message 105 to peer 0x733020e9cf80 (11 bytes)
+1779080599.042855 sending message 105 to peer 0x733020e9cf80 (14 bytes)
+1779080599.042857 sending message 105 to peer 0x733020e9cf80 (25 bytes)
+1779080599.042859 sending message 105 to peer 0x733020e9cf80 (8 bytes)
+1779080599.042860 sending message 105 to peer 0x733020e9cf80 (46 bytes)
+1779080599.042862 sending message 105 to peer 0x733020e9cf80 (35 bytes)
+1779080599.042864 sending message 105 to peer 0x733020e9cf80 (23 bytes)
+1779080599.042866 sending message 105 to peer 0x733020e9cf80 (55 bytes)
+1779080599.042871 sending message 105 to peer 0x733020e9cf80 (64 bytes)
+1779080599.042873 sending message 105 to peer 0x733020e9cf80 (82 bytes)
+1779080599.042877 sending message 105 to peer 0x733020e9cf80 (32 bytes)
+1779080599.042879 sending message 105 to peer 0x733020e9cf80 (28 bytes)
+1779080599.042881 sending message 105 to peer 0x733020e9cf80 (10 bytes)
+1779080599.042883 sending message 105 to peer 0x733020e9cf80 (16 bytes)
+1779080599.042885 sending message 105 to peer 0x733020e9cf80 (17 bytes)
+1779080599.042887 sending message 105 to peer 0x733020e9cf80 (22 bytes)
+1779080599.042888 sending message 105 to peer 0x733020e9cf80 (22 bytes)
+1779080599.042890 sending message 105 to peer 0x733020e9cf80 (11 bytes)
+1779080599.042892 sending message 105 to peer 0x733020e9cf80 (54 bytes)
+1779080599.042894 sending message 105 to peer 0x733020e9cf80 (56 bytes)
+1779080599.042896 sending message 105 to peer 0x733020e9cf80 (20 bytes)
+1779080599.042898 sending message 105 to peer 0x733020e9cf80 (38 bytes)
+1779080599.042900 sending message 105 to peer 0x733020e9cf80 (28 bytes)
+1779080599.042902 sending message 105 to peer 0x733020e9cf80 (47 bytes)
+1779080599.042904 sending message 105 to peer 0x733020e9cf80 (18 bytes)
+1779080599.042906 sending message 105 to peer 0x733020e9cf80 (26 bytes)
+1779080599.042908 sending message 105 to peer 0x733020e9cf80 (17 bytes)
+1779080599.042910 sending message 105 to peer 0x733020e9cf80 (23 bytes)
+1779080599.042912 sending message 105 to peer 0x733020e9cf80 (54 bytes)
+1779080599.042914 sending message 105 to peer 0x733020e9cf80 (144 bytes)
+1779080599.042916 sending message 105 to peer 0x733020e9cf80 (23 bytes)
+1779080599.042918 sending message 105 to peer 0x733020e9cf80 (18 bytes)
+1779080599.042920 sending message 105 to peer 0x733020e9cf80 (20 bytes)
+1779080599.042922 sending message 105 to peer 0x733020e9cf80 (44 bytes)
+1779080599.042924 sending message 105 to peer 0x733020e9cf80 (495 bytes)
+1779080599.042933 sending message 105 to peer 0x733020e9cf80 (47 bytes)
+1779080599.042935 sending message 105 to peer 0x733020e9cf80 (23 bytes)
+1779080599.042937 sending message 105 to peer 0x733020e9cf80 (23 bytes)
+1779080599.042939 sending message 105 to peer 0x733020e9cf80 (31 bytes)
+1779080599.042941 sending message 105 to peer 0x733020e9cf80 (11 bytes)
+1779080599.042943 sending message 105 to peer 0x733020e9cf80 (33 bytes)
+1779080599.042945 sending message 105 to peer 0x733020e9cf80 (17 bytes)
+1779080599.042946 sending message 105 to peer 0x733020e9cf80 (33 bytes)
+1779080599.042948 sending message 105 to peer 0x733020e9cf80 (46 bytes)
+1779080599.042950 sending message 105 to peer 0x733020e9cf80 (20 bytes)
+1779080599.042952 sending message 105 to peer 0x733020e9cf80 (13 bytes)
+1779080599.042954 sending message 105 to peer 0x733020e9cf80 (27 bytes)
+1779080599.042956 sending message 105 to peer 0x733020e9cf80 (17 bytes)
+1779080599.042958 sending message 105 to peer 0x733020e9cf80 (54 bytes)
+1779080599.042961 sending message 105 to peer 0x733020e9cf80 (1764 bytes)
+1779080599.042965 sending message 105 to peer 0x733020e9cf80 (37 bytes)
+1779080599.042967 sending message 105 to peer 0x733020e9cf80 (9 bytes)
+1779080599.042969 sending message 105 to peer 0x733020e9cf80 (16 bytes)
+1779080599.042971 sending message 105 to peer 0x733020e9cf80 (19 bytes)
+1779080599.042973 sending message 105 to peer 0x733020e9cf80 (18 bytes)
+1779080599.042975 sending message 105 to peer 0x733020e9cf80 (34 bytes)
+1779080599.042977 sending message 105 to peer 0x733020e9cf80 (53 bytes)
+1779080599.042979 sending message 105 to peer 0x733020e9cf80 (52 bytes)
+1779080599.042981 sending message 105 to peer 0x733020e9cf80 (24 bytes)
+1779080599.042983 sending message 105 to peer 0x733020e9cf80 (14 bytes)
+1779080599.042984 sending message 105 to peer 0x733020e9cf80 (18 bytes)
+1779080599.042987 sending message 105 to peer 0x733020e9cf80 (41 bytes)
+1779080599.042988 sending message 105 to peer 0x733020e9cf80 (15 bytes)
+1779080599.042990 sending message 105 to peer 0x733020e9cf80 (45 bytes)
+1779080599.042992 sending message 105 to peer 0x733020e9cf80 (14 bytes)
+1779080599.042994 sending message 105 to peer 0x733020e9cf80 (259 bytes)
+1779080599.042999 sending message 105 to peer 0x733020e9cf80 (27 bytes)
+1779080599.043001 sending message 105 to peer 0x733020e9cf80 (51 bytes)
+1779080599.043003 sending message 105 to peer 0x733020e9cf80 (43 bytes)
+1779080599.043005 sending message 105 to peer 0x733020e9cf80 (23 bytes)
+1779080599.043007 sending message 105 to peer 0x733020e9cf80 (17 bytes)
+1779080599.043009 sending message 106 to peer 0x733020e9cf80 (0 bytes)
+1779080599.043037 sending message 200 to peer 0x733020e9cf80 (4 bytes)
+1779080599.043039 client loop enter
+1779080599.043122 client_signal: Child exited
+1779080599.070535 peer 0x733020e9cf80 message 303
+1779080599.070540 open write file 2 -
+1779080599.070544 sending message 305 to peer 0x733020e9cf80 (8 bytes)
+1779080599.070549 write check file 2
+1779080599.070569 peer 0x733020e9cf80 message 304
+1779080599.070570 write 37 to file 2
+1779080599.070572 peer 0x733020e9cf80 message 203
+1779080599.070573 file 2 37 bytes left
+1779080599.070576 write check file 2
+1779080599.070577 client loop exit

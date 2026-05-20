@@ -1,0 +1,34 @@
+{
+  "version": "1.0.0",
+  "builtAt": "2026-05-18T05:09:18.727Z",
+  "buildTimeMs": 5,
+  "totalArtifacts": 41,
+  "byPhase": {
+    "architecture": 4,
+    "Elaboration": 2,
+    "deployment": 1,
+    "other": 20,
+    "intake": 5,
+    "planning": 1,
+    "reports": 5,
+    "requirements": 3
+  },
+  "byType": {
+    "adr": 4,
+    "architecture": 6,
+    "document": 27,
+    "risk": 1,
+    "nfr": 1,
+    "use-case": 1,
+    "threat-model": 1
+  },
+  "tagDistribution": {},
+  "graphMetrics": {
+    "totalEdges": 0,
+    "orphanedArtifacts": 41,
+    "mostReferenced": {
+      "path": ".aiwg/architecture/adr-001.md",
+      "count": 0
+    }
+  }
+}
