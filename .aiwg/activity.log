@@ -17,3 +17,4 @@
 ## [2026-05-18 05:11] update | aiwg index stats --graph framework --json
 ## [2026-05-18 05:11] update | aiwg index stats --json
 ## [2026-05-18 05:15] update | aiwg index stats --json
+## [2026-05-21 00:23] create | .aiwg/architecture/adr-005-terminal-rendering-approach.md (post-hoc renderer ADR)
