@@ -25,6 +25,14 @@ on:
       - '.gitea/workflows/check.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'rust-toolchain.toml'
+      - 'build/Dockerfile.builder'
+      - '.gitea/workflows/check.yml'
   workflow_dispatch:
     inputs:
       builder_image_tag:
@@ -78,10 +86,19 @@ jobs:
       - name: Checkout
         run: |
           rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
-          git clone --depth 1 --branch "${GITHUB_REF_NAME:-main}" \
+          # For pull_request events, GITHUB_REF_NAME is the synthetic Gitea
+          # label "#<N>" which is not a clonable branch. Fall back to
+          # GITHUB_HEAD_REF (the PR source branch) in that case.
+          CLONE_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"
+          echo "[checkout] cloning branch: ${CLONE_BRANCH} (sha: ${GITHUB_SHA:-HEAD})"
+          git clone --depth 1 --branch "${CLONE_BRANCH}" \
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
           cd "${GITHUB_WORKSPACE}/.repo-clone"
+          # Fetch the exact commit if shallow clone of branch tip is ahead/behind
+          if ! git cat-file -e "${GITHUB_SHA:-HEAD}" 2>/dev/null; then
+            git fetch --depth 1 origin "${GITHUB_SHA}"
+          fi
           git checkout "${GITHUB_SHA:-HEAD}"
 
       - name: Verify pinned toolchain (in container)
