@@ -2,9 +2,9 @@
 # runtime-push.sh — Upload a pre-built Chromium runtime to Gitea releases.
 #
 # Creates a Gitea release tagged "runtime-<hash>" and uploads the platform
-# tarball as a release asset. The hash is computed from the same inputs as
-# runtime-pull.sh (chromium/.gclient, patches, bridge files), so push and
-# pull are automatically keyed to the same build.
+# tarball as a release asset. The hash is computed by scripts/runtime-hash.sh
+# from chromium pin + patches + bridge C++ + Rust sources (the last per #92),
+# so push and pull are automatically keyed to the same build.
 #
 # Requirements:
 #   - GITEA_TOKEN: personal access token for git.integrolabs.net

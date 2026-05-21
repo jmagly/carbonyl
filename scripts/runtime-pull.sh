@@ -5,6 +5,9 @@
 #   - chromium/.gclient        (Chromium version)
 #   - all patch files          (Chromium/Skia/WebRTC patches)
 #   - bridge C++ files         (FFI surface)
+#   - Rust sources under src/  (libcarbonyl source; added per #92)
+#   - Cargo.{toml,lock}        (Rust dep state)
+#   - rust-toolchain.toml      (Rust toolchain pin)
 #
 # The release tag is "runtime-<hash>" for the headless ozone variant
 # and "runtime-<ozone>-<hash>" for any other variant (e.g. x11).
