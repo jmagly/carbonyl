@@ -2,22 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.6] - 2026-05-21
+
+### 🐛 Bug Fixes
+
+- Repair check.yml workflow ([#78](https://github.com/jmagly/carbonyl/issues/78))
+
+### 📖 Documentation
+
+- ADR-005 — in-process quadrant renderer (post-hoc) ([#77](https://github.com/jmagly/carbonyl/issues/77))
+
 ## [0.2.0-alpha.5] - 2026-05-19
 
-### Bug Fixes
+### 🐛 Bug Fixes
 
-- Rebase Carbonyl onto Chromium M148 (`148.0.7778.167`)
-- Sync the persistent runner checkout to the `.gclient` pin before patch apply
-- Normalize runner-host ownership before rsync and avoid owner/group metadata drift
-- Run the x11 terminal smoke capture under a PTY
-- Use explicit remote SHA force-with-lease for the GitHub mirror
+- Complete M148 runner build prep
 
-### Documentation
+### 📖 Documentation
 
-- Refresh M148 patch maintenance notes and Chromium integration references
-- Mark the builder-container CI/CD plan as implemented and green
-- Add titan troubleshooting for stale host-file ownership
-- Prepare `v0.2.0-alpha.5` release notes
+- Route external-facing repo links to GitHub mirror
+- Add RELEASE-v0.2.0-alpha.4.md
+- Prepare M148 release notes
+
+### Ci
+
+- Default tag-push to headless-only ozone variant
+- Build {headless,x11} matrix on push so release.yml has both variants
+- Compute ozone matrix in a prep job (Gitea expr fix)
+- Static [headless,x11] matrix, filter via job-level if:
+- Serialize matrix via concurrency group on chromium/src
+- Mkdir mutex around shared chromium/src checkout
+- Repair runner sync and mirror leases
+- Run x-mirror smoke test in a PTY
 
 ## [0.2.0-alpha.4] - 2026-05-06
 
@@ -106,7 +122,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Bug Fixes
 
-- SDK-driven CSS viewport via --viewport, closes [#37](https://github.com/fathyb/carbonyl/issues/37)
+- SDK-driven CSS viewport via --viewport, closes [#37](https://github.com/jmagly/carbonyl/issues/37)
 
 ### 📖 Documentation
 
@@ -141,7 +157,7 @@ All notable changes to this project will be documented in this file.
 
 ### Release
 
-- First alpha of the jmagly/carbonyl fork
+- First alpha of the roctinam/carbonyl fork
 
 ### Test
 
@@ -161,7 +177,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Bug Fixes
 
-- Link to Chromium sysroot libs on Linux ([#134](https://github.com/fathyb/carbonyl/issues/134))
+- Link to Chromium sysroot libs on Linux ([#134](https://github.com/jmagly/carbonyl/issues/134))
 - Suppress navigator.webdriver via AutomationControlled flag
 - Spoof Firefox UA and disable HTTP/2 for bot-detection evasion
 
@@ -174,25 +190,25 @@ All notable changes to this project will be documented in this file.
 
 ### 🚀 Features
 
-- Add `--help` and `--version` ([#105](https://github.com/fathyb/carbonyl/issues/105))
-- Add logo and description to `--help` ([#106](https://github.com/fathyb/carbonyl/issues/106))
-- Use Cmd instead of Alt for navigation shortcuts ([#109](https://github.com/fathyb/carbonyl/issues/109))
-- Enable h.264 support ([#103](https://github.com/fathyb/carbonyl/issues/103))
-- Introduce quadrant rendering ([#120](https://github.com/fathyb/carbonyl/issues/120))
+- Add `--help` and `--version` ([#105](https://github.com/jmagly/carbonyl/issues/105))
+- Add logo and description to `--help` ([#106](https://github.com/jmagly/carbonyl/issues/106))
+- Use Cmd instead of Alt for navigation shortcuts ([#109](https://github.com/jmagly/carbonyl/issues/109))
+- Enable h.264 support ([#103](https://github.com/jmagly/carbonyl/issues/103))
+- Introduce quadrant rendering ([#120](https://github.com/jmagly/carbonyl/issues/120))
 
 ### 🐛 Bug Fixes
 
-- Fix arguments parsing ([#108](https://github.com/fathyb/carbonyl/issues/108))
-- Fix missing module error on npm package ([#113](https://github.com/fathyb/carbonyl/issues/113))
+- Fix arguments parsing ([#108](https://github.com/jmagly/carbonyl/issues/108))
+- Fix missing module error on npm package ([#113](https://github.com/jmagly/carbonyl/issues/113))
 - Enable threaded compositing with bitmap mode
-- Fix idling CPU usage ([#126](https://github.com/fathyb/carbonyl/issues/126))
-- Package proper library in binaries ([#127](https://github.com/fathyb/carbonyl/issues/127))
+- Fix idling CPU usage ([#126](https://github.com/jmagly/carbonyl/issues/126))
+- Package proper library in binaries ([#127](https://github.com/jmagly/carbonyl/issues/127))
 
 ### 📖 Documentation
 
 - Update download links
-- Fix commit_preprocessors url ([#102](https://github.com/fathyb/carbonyl/issues/102))
-- Add `--rm` to Docker example ([#101](https://github.com/fathyb/carbonyl/issues/101))
+- Fix commit_preprocessors url ([#102](https://github.com/jmagly/carbonyl/issues/102))
+- Add `--rm` to Docker example ([#101](https://github.com/jmagly/carbonyl/issues/101))
 
 ## [0.0.2] - 2023-02-09
 
@@ -202,39 +218,41 @@ All notable changes to this project will be documented in this file.
 - Linux support
 - Xterm title
 - Hide stderr unless crash
-- Add `--debug` to print stderr on exit ([#23](https://github.com/fathyb/carbonyl/issues/23))
-- Add navigation UI ([#86](https://github.com/fathyb/carbonyl/issues/86))
-- Handle terminal resize ([#87](https://github.com/fathyb/carbonyl/issues/87))
+- Add `--debug` to print stderr on exit ([#23](https://github.com/jmagly/carbonyl/issues/23))
+- Add navigation UI ([#86](https://github.com/jmagly/carbonyl/issues/86))
+- Handle terminal resize ([#87](https://github.com/jmagly/carbonyl/issues/87))
 
 ### 🐛 Bug Fixes
 
 - Parser fixes
 - Properly enter tab and return keys
-- Fix some special characters ([#35](https://github.com/fathyb/carbonyl/issues/35))
-- Improve terminal size detection ([#36](https://github.com/fathyb/carbonyl/issues/36))
-- Allow working directories that contain spaces ([#63](https://github.com/fathyb/carbonyl/issues/63))
-- Do not use tags for checkout ([#64](https://github.com/fathyb/carbonyl/issues/64))
-- Do not checkout nacl ([#79](https://github.com/fathyb/carbonyl/issues/79))
-- Wrap zip files in carbonyl folder ([#88](https://github.com/fathyb/carbonyl/issues/88))
-- Fix WebGL support on Linux ([#90](https://github.com/fathyb/carbonyl/issues/90))
-- Fix initial freeze on Docker ([#91](https://github.com/fathyb/carbonyl/issues/91))
+- Fix some special characters ([#35](https://github.com/jmagly/carbonyl/issues/35))
+- Improve terminal size detection ([#36](https://github.com/jmagly/carbonyl/issues/36))
+- Allow working directories that contain spaces ([#63](https://github.com/jmagly/carbonyl/issues/63))
+- Do not use tags for checkout ([#64](https://github.com/jmagly/carbonyl/issues/64))
+- Do not checkout nacl ([#79](https://github.com/jmagly/carbonyl/issues/79))
+- Wrap zip files in carbonyl folder ([#88](https://github.com/jmagly/carbonyl/issues/88))
+- Fix WebGL support on Linux ([#90](https://github.com/jmagly/carbonyl/issues/90))
+- Fix initial freeze on Docker ([#91](https://github.com/jmagly/carbonyl/issues/91))
 
 ### 📖 Documentation
 
 - Upload demo videos
 - Fix video layout
-- Fix a typo ([#1](https://github.com/fathyb/carbonyl/issues/1))
-- Fix a typo `ie.` -> `i.e.` ([#9](https://github.com/fathyb/carbonyl/issues/9))
-- Fix build instructions ([#15](https://github.com/fathyb/carbonyl/issues/15))
+- Fix a typo ([#1](https://github.com/jmagly/carbonyl/issues/1))
+- Fix a typo `ie.` -> `i.e.` ([#9](https://github.com/jmagly/carbonyl/issues/9))
+- Fix build instructions ([#15](https://github.com/jmagly/carbonyl/issues/15))
 - Add ascii logo
-- Add comparisons ([#34](https://github.com/fathyb/carbonyl/issues/34))
-- Add OS support ([#50](https://github.com/fathyb/carbonyl/issues/50))
+- Add comparisons ([#34](https://github.com/jmagly/carbonyl/issues/34))
+- Add OS support ([#50](https://github.com/jmagly/carbonyl/issues/50))
 - Add download link
 - Fix linux download links
 - Document shared library
-- Fix a typo (`know` -> `known`) ([#71](https://github.com/fathyb/carbonyl/issues/71))
+- Fix a typo (`know` -> `known`) ([#71](https://github.com/jmagly/carbonyl/issues/71))
 - Add license
 
 ### Build
 
-- Various build system fixes ([#20](https://github.com/fathyb/carbonyl/issues/20))
+- Various build system fixes ([#20](https://github.com/jmagly/carbonyl/issues/20))
+
+
