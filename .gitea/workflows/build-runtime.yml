@@ -115,39 +115,45 @@ jobs:
       # the lock for the queued combo.
       - name: Acquire chromium/src host lock
         run: |
+          # NOTE: act_runner runs `run:` blocks with `bash -eo pipefail`.
+          # Disable both inside this step — the spin-wait loop deliberately
+          # tolerates non-zero exits from pgrep/docker probes, and any
+          # propagation here was the root cause of the #84 follow-up bugs.
+          set +e
+          set +o pipefail
+
           LOCK="/tmp/carbonyl-chromium-src.lock-${{ github.event.inputs.arch || 'amd64' }}"
           BUILDER_IMG="git.integrolabs.net/roctinam/carbonyl-builder"
+          MY_HOLDER="${{ matrix.ozone }} run-${{ github.run_id }}"
           start=$(date +%s)
           while ! mkdir "$LOCK" 2>/dev/null; do
             held_by=$(cat "$LOCK/holder" 2>/dev/null || echo '?')
             elapsed=$(( $(date +%s) - start ))
             lock_age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
 
-            # Stale-lock detection (#81, #84): if the lock is older than
-            # 5 minutes AND no live state on the host references it, the
-            # holder was killed before its `if: always()` release step
-            # could run. Forfeit the lock so the next caller can proceed.
+            # Stale-lock detection: if the lock is older than 10 minutes
+            # AND no live state on the host references it, the holder
+            # was killed before its `if: always()` release step could
+            # run. Forfeit the lock so the next caller can proceed.
             #
-            # The 5-minute grace covers the longest legitimate acquire-to-
-            # first-container gap (cold builder image pull, slow registry
-            # auth, etc.). The previous 60s threshold (#81) clobbered a
-            # legitimate slow holder — see #84 for the race that fixed
-            # this version.
-            #
-            # Live-state probe includes ALL container states (not just
-            # running) because the legitimate holder runs short-lived
-            # `docker run --rm` invocations with gaps between them.
-            if [ "$lock_age" -gt 300 ]; then
-              # Any builder container, any state (created/running/exited/restarting)
-              live_containers=$(docker ps -a --filter "ancestor=${BUILDER_IMG}" -q 2>/dev/null | wc -l)
-              # Build/sync tools and depot_tools wrappers
-              live_builds=$(pgrep -af 'autoninja|gclient|depot_tools|cargo.*build' 2>/dev/null | grep -v "pgrep" | wc -l)
+            # 10 minutes is well past any legitimate acquire-to-first-
+            # container gap (cold image pull is the slowest path, ~3-5 min).
+            # Live-state probe checks containers AND build processes.
+            # Every command guarded against pipefail propagation.
+            if [ "$lock_age" -gt 600 ]; then
+              live_containers=0
+              live_builds=0
+              { docker ps -a --filter "ancestor=${BUILDER_IMG}" -q 2>/dev/null | wc -l > /tmp/.lockprobe.$$ 2>/dev/null; } || true
+              [ -s /tmp/.lockprobe.$$ ] && live_containers=$(cat /tmp/.lockprobe.$$ 2>/dev/null || echo 0)
+              { pgrep -af 'autoninja|gclient|depot_tools|cargo.*chromium' 2>/dev/null | grep -v "pgrep" | wc -l > /tmp/.lockprobe.$$ 2>/dev/null; } || true
+              [ -s /tmp/.lockprobe.$$ ] && live_builds=$(cat /tmp/.lockprobe.$$ 2>/dev/null || echo 0)
+              rm -f /tmp/.lockprobe.$$ 2>/dev/null
               if [ "${live_containers:-0}" -eq 0 ] && [ "${live_builds:-0}" -eq 0 ]; then
-                echo "[lock] holder '$held_by' has no live state (age=${lock_age}s, containers=${live_containers}, builds=${live_builds}); reclaiming stale lock" >&2
+                echo "[lock] holder '$held_by' has no live state (age=${lock_age}s, containers=${live_containers}, builds=${live_builds}); reclaiming" >&2
                 rm -rf "$LOCK"
                 continue
               fi
-              echo "[lock] holder '$held_by' lock_age=${lock_age}s but has live state (containers=${live_containers}, builds=${live_builds}); waiting" >&2
+              echo "[lock] holder '$held_by' lock_age=${lock_age}s, live state present (containers=${live_containers}, builds=${live_builds}); waiting" >&2
             fi
 
             if [ "$elapsed" -gt 14400 ]; then
@@ -157,8 +163,8 @@ jobs:
             echo "[lock] waiting on $LOCK (held by '$held_by'); waited ${elapsed}s..."
             sleep 30
           done
-          echo "${{ matrix.ozone }} run-${{ github.run_id }}" > "$LOCK/holder"
-          echo "[lock] acquired $LOCK for ${{ matrix.ozone }}"
+          echo "$MY_HOLDER" > "$LOCK/holder"
+          echo "[lock] acquired $LOCK for $MY_HOLDER"
 
       - name: Resolve builder image
         run: |
@@ -571,6 +577,22 @@ jobs:
       - name: Release chromium/src host lock
         if: always()
         run: |
+          # Only release the lock if we ARE the holder. A task that failed
+          # while still spin-waiting in `Acquire` never actually owned the
+          # lock — `rm -rf` here would clobber the legitimate holder's lock
+          # mid-build, which is exactly the bug that killed run 161 (x11's
+          # acquire timed out, its always-on release wiped headless's
+          # in-flight lock).
           LOCK="/tmp/carbonyl-chromium-src.lock-${{ github.event.inputs.arch || 'amd64' }}"
-          rm -rf "$LOCK" 2>/dev/null || true
-          echo "[lock] released $LOCK"
+          MY_HOLDER="${{ matrix.ozone }} run-${{ github.run_id }}"
+          if [ ! -d "$LOCK" ]; then
+            echo "[lock] no lock to release ($LOCK does not exist)"
+          else
+            current=$(cat "$LOCK/holder" 2>/dev/null || echo '')
+            if [ "$current" = "$MY_HOLDER" ]; then
+              rm -rf "$LOCK"
+              echo "[lock] released $LOCK (was holder)"
+            else
+              echo "[lock] not releasing — holder is '$current', not us ('$MY_HOLDER')"
+            fi
+          fi
