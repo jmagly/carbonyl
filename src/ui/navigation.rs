@@ -30,6 +30,7 @@ pub struct Navigation {
     cursor: Option<usize>,
     can_go_back: bool,
     can_go_forward: bool,
+    chrome_rows: u32,
 }
 
 impl Default for Navigation {
@@ -40,17 +41,29 @@ impl Default for Navigation {
 
 impl Navigation {
     pub fn new() -> Self {
+        Self::with_chrome_rows(1)
+    }
+
+    pub fn with_chrome_rows(chrome_rows: u32) -> Self {
         Self {
             url: None,
             size: (0, 0).into(),
             cursor: None,
             can_go_back: false,
             can_go_forward: false,
+            chrome_rows: chrome_rows.max(1),
         }
     }
 
+    /// Number of terminal rows the chrome occupies (always >= 1).
+    pub fn height(&self) -> u32 {
+        self.chrome_rows
+    }
+
     pub fn cursor(&self) -> Option<Point> {
-        Some((11 + self.cursor? as i32, 0).into())
+        // Place the text cursor on the middle chrome row so it sits inside
+        // the URL band when chrome_rows > 1.
+        Some((11 + self.cursor? as i32, (self.chrome_rows as i32) / 2).into())
     }
 
     pub fn keypress(&mut self, key: &Key) -> NavigationAction {
@@ -114,7 +127,7 @@ impl Navigation {
     }
 
     pub fn mouse_up(&mut self, origin: Point) -> NavigationAction {
-        if origin.y != 0 {
+        if origin.y < 0 || (origin.y as u32) >= self.chrome_rows {
             self.cursor = None;
 
             NavigationAction::Forward
@@ -123,7 +136,7 @@ impl Navigation {
         }
     }
     pub fn mouse_down(&mut self, origin: Point) -> NavigationAction {
-        if origin.y != 0 {
+        if origin.y < 0 || (origin.y as u32) >= self.chrome_rows {
             self.cursor = None;
 
             return NavigationAction::Forward;
@@ -205,20 +218,37 @@ impl Navigation {
         let width = url.width();
         let padded = format!(" {}{} ", url, " ".repeat(space - width));
         let mut elements = Vec::new();
-        let mut point = Point::splat(0);
 
-        for list in [
+        let lists = [
             self.render_btn("\u{276e}", self.can_go_back),
             self.render_btn("\u{276f}", self.can_go_forward),
             self.render_btn("↻", true),
             self.render_btn(&padded, true),
-        ] {
-            for element in list {
-                let width = element.text.width() as i32;
+        ];
 
-                elements.push((point, element));
+        // Stack chrome across N rows. Each row renders the full button
+        // strip so the URL bar reads at chrome_rows x cell height; at
+        // chrome_rows=1 this matches the historical single-row layout
+        // exactly. The renderer treats each emitted element as a 1-row
+        // background-fill plus the text glyph at the same origin.
+        for row in 0..(self.chrome_rows as i32) {
+            let mut point = Point::new(0, row);
 
-                point = point + (width, 0);
+            for list in &lists {
+                for element in list {
+                    let elem_width = element.text.width() as i32;
+
+                    elements.push((
+                        point,
+                        NavigationElement {
+                            text: element.text.clone(),
+                            background: element.background,
+                            foreground: element.foreground,
+                        },
+                    ));
+
+                    point = point + (elem_width, 0);
+                }
             }
         }
 

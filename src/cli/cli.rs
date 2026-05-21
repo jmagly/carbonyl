@@ -17,6 +17,12 @@ pub struct CommandLine {
     /// resulting physical raster. When unset, falls back to the legacy
     /// cells-derived viewport. Set via `--viewport=WIDTHxHEIGHT`.
     pub viewport: Option<(u32, u32)>,
+    /// Number of terminal rows the URL/navigation chrome occupies.
+    /// Defaults to 1 (legacy single-row chrome). Larger values stack the
+    /// chrome buttons and URL text across multiple rows, restoring
+    /// legibility on large terminals (e.g. 360x100) where a single row
+    /// is ~10-12px tall and the chrome smears. Set via `--chrome-rows=N`.
+    pub chrome_rows: u32,
 }
 
 pub enum EnvVar {
@@ -49,6 +55,7 @@ impl CommandLine {
         let mut bitmap = false;
         let mut shell_mode = false;
         let mut viewport: Option<(u32, u32)> = None;
+        let mut chrome_rows: u32 = 1;
         let mut program = CommandLineProgram::Main;
         let args = env::args().skip(1).collect::<Vec<String>>();
 
@@ -91,6 +98,15 @@ impl CommandLine {
                         }
                     }
                 }
+                "--chrome-rows" => {
+                    if let Some(value) = value {
+                        if let Ok(rows) = value.parse::<u32>() {
+                            if rows > 0 {
+                                chrome_rows = rows;
+                            }
+                        }
+                    }
+                }
 
                 "-h" | "--help" => program = CommandLineProgram::Help,
                 "-v" | "--version" => program = CommandLineProgram::Version,
@@ -101,6 +117,16 @@ impl CommandLine {
         if viewport.is_none() {
             if let Ok(value) = env::var("CARBONYL_VIEWPORT") {
                 viewport = parse_viewport(&value);
+            }
+        }
+
+        if chrome_rows == 1 {
+            if let Ok(value) = env::var("CARBONYL_CHROME_ROWS") {
+                if let Ok(rows) = value.parse::<u32>() {
+                    if rows > 0 {
+                        chrome_rows = rows;
+                    }
+                }
             }
         }
 
@@ -125,6 +151,7 @@ impl CommandLine {
             program,
             shell_mode,
             viewport,
+            chrome_rows,
         }
     }
 }

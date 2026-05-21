@@ -14,6 +14,10 @@ Options:
                                terminal samples a cells * (2, 4) window of the
                                resulting physical raster. Use for reproducible
                                layout across terminal sizes.
+    --chrome-rows=<N>          stack the URL/nav chrome across N terminal rows
+                               (default: 1; also via CARBONYL_CHROME_ROWS env
+                               var). Use at large terminal sizes where a
+                               single-row chrome smears; try 3 at 360x100.
     -b, --bitmap               render text as bitmaps
     -d, --debug                enable debug logs
     -h, --help                 display this help message
@@ -21,6 +25,7 @@ Options:
 
 Environment variables:
     CARBONYL_VIEWPORT=WxH      same as --viewport
+    CARBONYL_CHROME_ROWS=N     same as --chrome-rows
     CARBONYL_ENV_DEBUG=1       same as --debug
     CARBONYL_ENV_BITMAP=1      same as --bitmap
     CARBONYL_X_MIRROR=1        with --ozone-platform=x11, also blit

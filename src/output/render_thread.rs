@@ -65,7 +65,7 @@ impl RenderThread {
     fn boot(rx: Receiver<Message>) {
         let cmd = CommandLine::parse();
         let mut sync = FrameSync::new(cmd.fps);
-        let mut renderer = Renderer::new();
+        let mut renderer = Renderer::with_chrome_rows(cmd.chrome_rows);
         let mut needs_render = false;
 
         loop {

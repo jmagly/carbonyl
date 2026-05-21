@@ -30,8 +30,12 @@ impl Default for Renderer {
 
 impl Renderer {
     pub fn new() -> Renderer {
+        Self::with_chrome_rows(1)
+    }
+
+    pub fn with_chrome_rows(chrome_rows: u32) -> Renderer {
         Renderer {
-            nav: Navigation::new(),
+            nav: Navigation::with_chrome_rows(chrome_rows),
             cells: Vec::with_capacity(0),
             painter: Painter::new(),
             size: Size::new(0, 0),
