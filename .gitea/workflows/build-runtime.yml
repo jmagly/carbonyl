@@ -123,20 +123,31 @@ jobs:
             elapsed=$(( $(date +%s) - start ))
             lock_age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
 
-            # Stale-lock detection (#81): if the lock is older than 60s
-            # AND no carbonyl-builder containers AND no autoninja chromium
-            # build processes are alive on the host, the holder was killed
-            # mid-build (cancelled run, OOM-killed shell, restarted runner)
-            # and its `if: always()` release step never ran. Forfeit the
-            # lock so the next caller can proceed.
-            if [ "$lock_age" -gt 60 ]; then
-              live_containers=$(docker ps --filter "ancestor=${BUILDER_IMG}" -q 2>/dev/null | wc -l)
-              live_builds=$(pgrep -af 'autoninja' 2>/dev/null | grep -v "pgrep" | wc -l)
+            # Stale-lock detection (#81, #84): if the lock is older than
+            # 5 minutes AND no live state on the host references it, the
+            # holder was killed before its `if: always()` release step
+            # could run. Forfeit the lock so the next caller can proceed.
+            #
+            # The 5-minute grace covers the longest legitimate acquire-to-
+            # first-container gap (cold builder image pull, slow registry
+            # auth, etc.). The previous 60s threshold (#81) clobbered a
+            # legitimate slow holder — see #84 for the race that fixed
+            # this version.
+            #
+            # Live-state probe includes ALL container states (not just
+            # running) because the legitimate holder runs short-lived
+            # `docker run --rm` invocations with gaps between them.
+            if [ "$lock_age" -gt 300 ]; then
+              # Any builder container, any state (created/running/exited/restarting)
+              live_containers=$(docker ps -a --filter "ancestor=${BUILDER_IMG}" -q 2>/dev/null | wc -l)
+              # Build/sync tools and depot_tools wrappers
+              live_builds=$(pgrep -af 'autoninja|gclient|depot_tools|cargo.*build' 2>/dev/null | grep -v "pgrep" | wc -l)
               if [ "${live_containers:-0}" -eq 0 ] && [ "${live_builds:-0}" -eq 0 ]; then
-                echo "[lock] holder '$held_by' has no live containers or autoninja processes (age=${lock_age}s); reclaiming stale lock" >&2
+                echo "[lock] holder '$held_by' has no live state (age=${lock_age}s, containers=${live_containers}, builds=${live_builds}); reclaiming stale lock" >&2
                 rm -rf "$LOCK"
                 continue
               fi
+              echo "[lock] holder '$held_by' lock_age=${lock_age}s but has live state (containers=${live_containers}, builds=${live_builds}); waiting" >&2
             fi
 
             if [ "$elapsed" -gt 14400 ]; then
@@ -314,7 +325,11 @@ jobs:
                 if [ -d "$d/.git" ]; then
                   echo "[reset] cleaning $d"
                   cd "$d"
-                  # Clean up interrupted git am / rebase state first.
+                  # Clear stale git locks left by killed prior operations
+                  # (#84): SIGKILLed git leaves index.lock/HEAD.lock behind
+                  # and the next git command fails with `File exists`.
+                  find "$d/.git" -maxdepth 2 -name "*.lock" -mmin +1 -print -delete 2>/dev/null || true
+                  # Clean up interrupted git am / rebase state.
                   git am --abort 2>/dev/null || true
                   git rebase --abort 2>/dev/null || true
                   git reset --hard HEAD
