@@ -35,6 +35,11 @@ component("dump_text") {
   deps = [
     "//base",
     "//content/public/browser",
+    # HeadlessBrowserImpl + ShutdownWithExitCode (per #93, ordered shutdown
+    # path). Headers under headless/lib/browser/ are not part of the
+    # public surface but :headless_browser exposes them for embedders
+    # already (see headless/app/headless_shell.cc).
+    "//headless:headless_browser",
   ]
 }
 

@@ -18,6 +18,10 @@ namespace content {
 class WebContents;
 }
 
+namespace headless {
+class HeadlessBrowser;
+}
+
 namespace carbonyl {
 
 // Implements `--dump-text[=<mode>]` (issue #88) without going through the
@@ -33,6 +37,12 @@ namespace carbonyl {
 // A hard timeout (default 30 s; tunable via `--max-wait=<ms>`) terminates
 // the process with a non-zero exit code if the page never reaches the
 // load-complete state.
+//
+// Termination uses `HeadlessBrowserImpl::ShutdownWithExitCode()` (per #93),
+// which runs chromium's orderly teardown — RenderFrameHost / WebContents
+// destructors, viz compositor cleanup, etc. The earlier `std::_Exit` path
+// was fast but produced a `WebFrame LEAKED` stderr line on every invocation
+// and could leave OS-level resources (temp dirs, sockets) un-cleaned.
 //
 // The handler self-deletes when the WebContents is destroyed or after the
 // result has been emitted, mirroring the lifetime convention of
@@ -54,10 +64,18 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
   // Install a handler on the given WebContents and start the idle/timeout
   // timers. Lifetime: self-owned — the handler deletes itself when finished.
   // Safe to call once per process; subsequent calls are ignored.
-  static void StartFor(content::WebContents* web_contents);
+  //
+  // `browser` is the HeadlessBrowser the WebContents belongs to. It is
+  // captured for the ordered-shutdown path (#93) and downcast to
+  // `headless::HeadlessBrowserImpl` to call `ShutdownWithExitCode()`. The
+  // pointer must outlive this handler — which it does, because the browser
+  // owns the WebContents that drives this handler's lifecycle.
+  static void StartFor(content::WebContents* web_contents,
+                       headless::HeadlessBrowser* browser);
 
  private:
   DumpTextHandler(content::WebContents* web_contents,
+                  headless::HeadlessBrowser* browser,
                   Mode mode,
                   int idle_ms,
                   int max_wait_ms);
@@ -71,6 +89,13 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
   void OnMaxWaitElapsed();
   void OnJavaScriptResult(base::Value result);
   void EmitAndExit(const std::string& text, int exit_code);
+
+  // RAW_PTR_EXCLUSION: HeadlessBrowser lifetime is owned by chromium's
+  // browser-main loop, not by carbonyl, and outlives this observer by
+  // construction (we are torn down when the browser shuts down the
+  // WebContents we observe). raw_ptr would add hash-map churn for no
+  // safety gain in this single-process / single-instance scenario.
+  RAW_PTR_EXCLUSION headless::HeadlessBrowser* browser_;
 
   Mode mode_;
   int idle_ms_;

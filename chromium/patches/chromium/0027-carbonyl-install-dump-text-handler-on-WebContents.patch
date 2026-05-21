@@ -16,8 +16,11 @@ command line (parsed by the Rust CLI at `src/cli/cli.rs`, but visible
 to `base::CommandLine::ForCurrentProcess()` here for free because the
 user typed it on argv). When active, it observes the WebContents
 through the content layer's `ExecuteJavaScriptInIsolatedWorld` API and
-writes the extracted page text to stdout before terminating the
-process. This deliberately does not use the upstream
+writes the extracted page text to stdout, then triggers chromium's
+orderly shutdown via `HeadlessBrowserImpl::ShutdownWithExitCode()`
+(per #93 — replaces the earlier `std::_Exit` path).
+
+The handler deliberately does not use the upstream
 `HeadlessCommandHandler` because that path depends on
 `headless_enable_commands = true`, which is incompatible with
 carbonyl's `headless_use_embedded_resources = true` build (see
@@ -27,19 +30,22 @@ The new `//carbonyl/src/browser:dump_text` GN component is kept
 separate from `:bridge` because `:bridge` sits below skia in the dep
 graph; pulling `//content/public/browser` into it would introduce a
 cycle. The new component depends on `:bridge`'s siblings (`//base`,
-`//content/public/browser`) and is pulled in by `headless_shell` only.
+`//content/public/browser`, and `//headless:headless_browser` for the
+`HeadlessBrowserImpl` shutdown call) and is pulled in by
+`headless_shell` only.
 
 See `chromium/src/carbonyl/src/browser/dump_text_handler.{cc,h}` for
 the handler implementation and `docs/runtime-modes.md` Mode 4 for the
 operator-facing documentation.
 
 Refs: roctinam/carbonyl#88
+Refs: roctinam/carbonyl#93
 Refs: roctinam/carbonyl#4
 Refs: roctinam/carbonyl#5
 ---
- headless/BUILD.gn              | 1 +
- headless/app/headless_shell.cc | 9 +++++++++
- 2 files changed, 10 insertions(+)
+ headless/BUILD.gn              |  1 +
+ headless/app/headless_shell.cc | 13 +++++++++++++
+ 2 files changed, 14 insertions(+)
 
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
 index 28d25d86087a9..4691cdc61cbac 100644
@@ -54,7 +60,7 @@ index 28d25d86087a9..4691cdc61cbac 100644
      "//build:branding_buildflags",
      "//components/os_crypt/common:switches",
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 2446f07b906c2..2ee3094277785 100644
+index 2446f07b906c2..f7ac18c3eff01 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -4,6 +4,7 @@
@@ -65,17 +71,21 @@ index 2446f07b906c2..2ee3094277785 100644
  #include "carbonyl/src/browser/renderer.h"
 
  #include <memory>
-@@ -149,6 +150,14 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -149,6 +150,18 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
      LOG(ERROR) << "Navigation to " << target_url << " failed.";
      ShutdownSoon();
    }
 +
 +  // Carbonyl issue #88: install the --dump-text observer on the freshly
-+  // built WebContents. No-op unless --dump-text is on the command line
-+  // (parsed by the Rust CLI; visible to base::CommandLine here for free).
++  // built WebContents. No-op unless --carbonyl-dump-text is on the
++  // command line (set by the Rust CLI when the user passed --dump-text).
 +  if (web_contents && carbonyl::DumpTextHandler::IsRequested()) {
++    // Passing `browser` along enables the ordered-shutdown path in
++    // DumpTextHandler::EmitAndExit (per #93). The handler downcasts to
++    // HeadlessBrowserImpl to call ShutdownWithExitCode.
 +    carbonyl::DumpTextHandler::StartFor(
-+        HeadlessWebContentsImpl::From(web_contents)->web_contents());
++        HeadlessWebContentsImpl::From(web_contents)->web_contents(),
++        browser);
 +  }
  }
 

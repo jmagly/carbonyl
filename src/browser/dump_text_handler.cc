@@ -19,9 +19,13 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "headless/lib/browser/headless_browser_impl.h"
 
 namespace carbonyl {
 
@@ -110,8 +114,9 @@ bool DumpTextHandler::IsRequested() {
 }
 
 // static
-void DumpTextHandler::StartFor(content::WebContents* web_contents) {
-  if (g_handler_started || !web_contents || !IsRequested()) {
+void DumpTextHandler::StartFor(content::WebContents* web_contents,
+                               headless::HeadlessBrowser* browser) {
+  if (g_handler_started || !web_contents || !browser || !IsRequested()) {
     return;
   }
   g_handler_started = true;
@@ -125,16 +130,22 @@ void DumpTextHandler::StartFor(content::WebContents* web_contents) {
       ParsePositiveInt(cmd->GetSwitchValueASCII(kSwitchDumpMaxWait),
                        kDefaultMaxWaitMs);
 
-  // Self-owned: deleted on WebContentsDestroyed or EmitAndExit (which calls
-  // _exit; the destructor only runs on the destruction path).
-  new DumpTextHandler(web_contents, mode, idle_ms, max_wait_ms);
+  // Self-owned: deleted on WebContentsDestroyed or as part of the chromium
+  // teardown chain that ShutdownWithExitCode triggers (which destroys the
+  // WebContents, which fires our WebContentsObserver::WebContentsDestroyed,
+  // which `delete this`'s).
+  new DumpTextHandler(web_contents, browser, mode, idle_ms, max_wait_ms);
 }
 
 DumpTextHandler::DumpTextHandler(content::WebContents* web_contents,
+                                 headless::HeadlessBrowser* browser,
                                  Mode mode,
                                  int idle_ms,
                                  int max_wait_ms)
-    : mode_(mode), idle_ms_(idle_ms), max_wait_ms_(max_wait_ms) {
+    : browser_(browser),
+      mode_(mode),
+      idle_ms_(idle_ms),
+      max_wait_ms_(max_wait_ms) {
   content::WebContentsObserver::Observe(web_contents);
 
   // Hard timeout — fires if the page never reaches load-complete.
@@ -161,15 +172,26 @@ void DumpTextHandler::DocumentOnLoadCompletedInPrimaryMainFrame() {
 }
 
 void DumpTextHandler::WebContentsDestroyed() {
-  if (finished_) {
-    return;
-  }
+  // Two paths land here:
+  //   (1) Unexpected renderer destruction before extraction completed —
+  //       we have not yet called EmitAndExit, so finished_ is false.
+  //       Shut down with a non-zero exit code.
+  //   (2) Orderly teardown initiated by our own ShutdownWithExitCode call
+  //       in EmitAndExit — finished_ is true, the exit code is already
+  //       latched on the browser. Just self-delete and return.
+  const bool unexpected = !finished_;
   finished_ = true;
-  LOG(ERROR) << "carbonyl --dump-text: WebContents destroyed before "
-                "extraction completed";
-  // Mirror headless_command_handler: terminate with non-zero on
-  // unexpected renderer destruction.
-  std::_Exit(3);
+  idle_timer_.Stop();
+  max_wait_timer_.Stop();
+  if (unexpected) {
+    LOG(ERROR) << "carbonyl --dump-text: WebContents destroyed before "
+                  "extraction completed";
+    if (browser_) {
+      static_cast<headless::HeadlessBrowserImpl*>(browser_)
+          ->ShutdownWithExitCode(3);
+    }
+  }
+  delete this;
 }
 
 void DumpTextHandler::OnIdleElapsed() {
@@ -222,13 +244,31 @@ void DumpTextHandler::EmitAndExit(const std::string& text, int exit_code) {
     std::cout << text << std::endl;
   }
   std::cout.flush();
-  // Hard-exit to skip the rest of chromium teardown (which can take
-  // hundreds of milliseconds and is unnecessary for a single-shot
-  // extraction). Matches the behavior `_exit` provides without running
-  // atexit handlers — chromium's own headless command handler uses an
-  // ordered shutdown, but it has the headless library's lifecycle
-  // wiring that we deliberately don't depend on.
-  std::_Exit(exit_code);
+
+  // Initiate chromium's orderly shutdown (per #93) instead of std::_Exit.
+  // ShutdownWithExitCode posts a quit closure on the UI message loop;
+  // the destructor chain that follows tears down the WebContents — which
+  // fires our WebContentsObserver::WebContentsDestroyed and self-deletes
+  // this handler. We MUST post to the UI thread because this method runs
+  // on the JS-result callback (which may not be on the UI thread).
+  if (browser_) {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](headless::HeadlessBrowser* browser, int code) {
+              static_cast<headless::HeadlessBrowserImpl*>(browser)
+                  ->ShutdownWithExitCode(code);
+            },
+            browser_, exit_code));
+  } else {
+    // Fallback if we somehow lost the browser pointer (shouldn't happen
+    // — StartFor requires a non-null browser). Preserve exit-code
+    // propagation by falling back to _Exit; logged so the regression is
+    // visible.
+    LOG(ERROR) << "carbonyl --dump-text: browser pointer null at exit; "
+                  "falling back to _Exit (regression vs #93)";
+    std::_Exit(exit_code);
+  }
 }
 
 }  // namespace carbonyl
