@@ -1,6 +1,6 @@
 use std::{env, ffi::OsStr};
 
-use super::CommandLineProgram;
+use super::{CommandLineProgram, DumpTextMode};
 
 #[derive(Clone, Debug)]
 pub struct CommandLine {
@@ -57,6 +57,13 @@ impl CommandLine {
         let mut viewport: Option<(u32, u32)> = None;
         let mut chrome_rows: u32 = 1;
         let mut program = CommandLineProgram::Main;
+        // --dump-text scaffolding — collected during the loop and folded into
+        // `program` after, so it composes with `--help` / `--version` /
+        // `CARBONYL_DUMP_TEXT` env-var precedence. See #88.
+        let mut dump_text_requested = false;
+        let mut dump_text_mode = DumpTextMode::InnerText;
+        let mut dump_text_idle_ms: u64 = 500;
+        let mut dump_text_max_wait_ms: u64 = 30_000;
         let args = env::args().skip(1).collect::<Vec<String>>();
 
         for arg in &args {
@@ -108,6 +115,31 @@ impl CommandLine {
                     }
                 }
 
+                "--dump-text" => {
+                    dump_text_requested = true;
+                    if let Some(value) = value {
+                        if let Some(mode) = parse_dump_text_mode(value) {
+                            dump_text_mode = mode;
+                        }
+                    }
+                }
+                "--idle" => {
+                    if let Some(value) = value {
+                        if let Ok(ms) = value.parse::<u64>() {
+                            dump_text_idle_ms = ms;
+                        }
+                    }
+                }
+                "--max-wait" => {
+                    if let Some(value) = value {
+                        if let Ok(ms) = value.parse::<u64>() {
+                            if ms > 0 {
+                                dump_text_max_wait_ms = ms;
+                            }
+                        }
+                    }
+                }
+
                 "-h" | "--help" => program = CommandLineProgram::Help,
                 "-v" | "--version" => program = CommandLineProgram::Version,
                 _ => (),
@@ -128,6 +160,44 @@ impl CommandLine {
                     }
                 }
             }
+        }
+
+        if !dump_text_requested {
+            if let Ok(value) = env::var("CARBONYL_DUMP_TEXT") {
+                // Empty value, "1", or an unrecognized mode keeps the default
+                // InnerText. Anything we can parse overrides.
+                dump_text_requested = true;
+                if !value.is_empty() && value != "1" {
+                    if let Some(mode) = parse_dump_text_mode(&value) {
+                        dump_text_mode = mode;
+                    }
+                }
+            }
+        }
+
+        if let Ok(value) = env::var("CARBONYL_DUMP_IDLE_MS") {
+            if let Ok(ms) = value.parse::<u64>() {
+                dump_text_idle_ms = ms;
+            }
+        }
+
+        if let Ok(value) = env::var("CARBONYL_DUMP_MAX_WAIT_MS") {
+            if let Ok(ms) = value.parse::<u64>() {
+                if ms > 0 {
+                    dump_text_max_wait_ms = ms;
+                }
+            }
+        }
+
+        // --dump-text wins over Main but loses to --help / --version so the
+        // operator can still ask "what does --dump-text do?" without firing
+        // the dump path.
+        if dump_text_requested && matches!(program, CommandLineProgram::Main) {
+            program = CommandLineProgram::DumpText {
+                mode: dump_text_mode,
+                idle_ms: dump_text_idle_ms,
+                max_wait_ms: dump_text_max_wait_ms,
+            };
         }
 
         if env::var(EnvVar::Debug).is_ok() {
@@ -166,4 +236,39 @@ fn parse_viewport(value: &str) -> Option<(u32, u32)> {
         return None;
     }
     Some((w, h))
+}
+
+/// Parse the `--dump-text=<mode>` value. Returns None on unrecognized input,
+/// letting the caller keep whichever default was already in effect.
+fn parse_dump_text_mode(value: &str) -> Option<DumpTextMode> {
+    match value.to_ascii_lowercase().as_str() {
+        "innertext" | "inner-text" => Some(DumpTextMode::InnerText),
+        "accessibility" | "a11y" | "ax" => Some(DumpTextMode::Accessibility),
+        "raw-dom" | "rawdom" | "dom" | "outerhtml" => Some(DumpTextMode::RawDom),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dump_text_mode_aliases() {
+        assert_eq!(parse_dump_text_mode("innertext"), Some(DumpTextMode::InnerText));
+        assert_eq!(parse_dump_text_mode("INNER-TEXT"), Some(DumpTextMode::InnerText));
+        assert_eq!(parse_dump_text_mode("accessibility"), Some(DumpTextMode::Accessibility));
+        assert_eq!(parse_dump_text_mode("a11y"), Some(DumpTextMode::Accessibility));
+        assert_eq!(parse_dump_text_mode("raw-dom"), Some(DumpTextMode::RawDom));
+        assert_eq!(parse_dump_text_mode("OuterHTML"), Some(DumpTextMode::RawDom));
+        assert_eq!(parse_dump_text_mode("nope"), None);
+    }
+
+    #[test]
+    fn viewport_parsing() {
+        assert_eq!(parse_viewport("1280x800"), Some((1280, 800)));
+        assert_eq!(parse_viewport("1280X800"), Some((1280, 800)));
+        assert_eq!(parse_viewport("0x800"), None);
+        assert_eq!(parse_viewport("abcxdef"), None);
+    }
 }

@@ -1,0 +1,84 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <carbonyl@integrolabs.net>
+Date: Wed, 21 May 2026 13:00:00 +0000
+Subject: [PATCH 27/27] carbonyl: install --dump-text handler on
+ OnBrowserStart's WebContents
+
+Wires `carbonyl::DumpTextHandler::StartFor()` into the headless shell's
+`OnBrowserStart()`, right after the initial `HeadlessWebContents` is
+built. Pre-existing carbonyl patch 0009 already removed the upstream
+`HeadlessCommandHandler::ProcessCommands(...)` invocation from this
+function; this patch re-establishes a carbonyl-owned command-handler
+hook at the same site.
+
+The handler is no-op unless `--dump-text` is present on the process
+command line (parsed by the Rust CLI at `src/cli/cli.rs`, but visible
+to `base::CommandLine::ForCurrentProcess()` here for free because the
+user typed it on argv). When active, it observes the WebContents
+through the content layer's `ExecuteJavaScriptInIsolatedWorld` API and
+writes the extracted page text to stdout before terminating the
+process. This deliberately does not use the upstream
+`HeadlessCommandHandler` because that path depends on
+`headless_enable_commands = true`, which is incompatible with
+carbonyl's `headless_use_embedded_resources = true` build (see
+`BUILD.gn` assert in `chromium/src/headless/BUILD.gn`).
+
+The new `//carbonyl/src/browser:dump_text` GN component is kept
+separate from `:bridge` because `:bridge` sits below skia in the dep
+graph; pulling `//content/public/browser` into it would introduce a
+cycle. The new component depends on `:bridge`'s siblings (`//base`,
+`//content/public/browser`) and is pulled in by `headless_shell` only.
+
+See `chromium/src/carbonyl/src/browser/dump_text_handler.{cc,h}` for
+the handler implementation and `docs/runtime-modes.md` Mode 4 for the
+operator-facing documentation.
+
+Refs: roctinam/carbonyl#88
+Refs: roctinam/carbonyl#4
+Refs: roctinam/carbonyl#5
+---
+ headless/BUILD.gn              | 1 +
+ headless/app/headless_shell.cc | 9 +++++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index 28d25d86087a9..4691cdc61cbac 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -946,6 +946,7 @@ executable("headless_shell") {
+
+   deps = [
+     ":headless_shell_lib",
++    "//carbonyl/src/browser:dump_text",
+     "//carbonyl/src/browser:renderer",
+     "//build:branding_buildflags",
+     "//components/os_crypt/common:switches",
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+index 2446f07b906c2..2ee3094277785 100644
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -4,6 +4,7 @@
+
+ #include "headless/public/headless_shell.h"
+
++#include "carbonyl/src/browser/dump_text_handler.h"
+ #include "carbonyl/src/browser/renderer.h"
+
+ #include <memory>
+@@ -149,6 +150,14 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+     LOG(ERROR) << "Navigation to " << target_url << " failed.";
+     ShutdownSoon();
+   }
++
++  // Carbonyl issue #88: install the --dump-text observer on the freshly
++  // built WebContents. No-op unless --dump-text is on the command line
++  // (parsed by the Rust CLI; visible to base::CommandLine here for free).
++  if (web_contents && carbonyl::DumpTextHandler::IsRequested()) {
++    carbonyl::DumpTextHandler::StartFor(
++        HeadlessWebContentsImpl::From(web_contents)->web_contents());
++  }
+ }
+
+ #if defined(HEADLESS_ENABLE_COMMANDS)
+--
+2.43.0

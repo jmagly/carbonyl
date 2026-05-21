@@ -119,6 +119,31 @@ fn main() -> io::Result<Option<i32>> {
         Some(cmd) => cmd,
     };
 
+    // --dump-text mode (issue #88): bypass the shell-mode fork. The
+    // chromium process writes the extracted page text directly to its
+    // own stdout via `carbonyl::DumpTextHandler` (browser-side C++,
+    // installed by patch 0027). The handler reads `--dump-text`,
+    // `--idle`, and `--max-wait` directly from chromium's
+    // `base::CommandLine` — those switches are already on argv because
+    // the user typed them, so no argv mutation is needed here.
+    //
+    // Returning Ok(None) makes carbonyl_bridge_main fall through to
+    // chromium init in this same process — there is no child to spawn
+    // and no terminal to set up; stdout already points at the user's
+    // pipe.
+    if matches!(cmd.program, CommandLineProgram::DumpText { .. }) {
+        // Set CARBONYL_ENV_SHELL_MODE=1 in our env so chromium subprocesses
+        // (zygote, gpu, renderer, ...) inherit it. Without this, each
+        // subprocess re-enters Rust main() with the chromium-stripped argv
+        // (no `--dump-text`) and falls through to the terminal-setup branch,
+        // pumping ANSI escapes into the same stdout the dump handler is
+        // about to write to. Setting shell_mode=true on the subprocess side
+        // short-circuits `main()` to `Ok(None)` and lets chromium proceed
+        // cleanly.
+        env::set_var(EnvVar::ShellMode, "1");
+        return Ok(None);
+    }
+
     if cmd.shell_mode {
         return Ok(None);
     }
@@ -151,6 +176,7 @@ fn main() -> io::Result<Option<i32>> {
     Ok(Some(code))
 }
 
+
 #[no_mangle]
 pub extern "C" fn carbonyl_bridge_main() {
     if let Some(code) = main().unwrap() {
@@ -181,6 +207,15 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
 
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
+    // --dump-text (#88): the C++-side DumpTextHandler writes the
+    // extracted page text directly to stdout. Enabling the terminal
+    // renderer would interleave its ANSI escape sequences and chrome
+    // bar into the same fd, corrupting the dump output. Skip the
+    // render-thread spin-up in this mode.
+    if matches!(CommandLine::parse().program, CommandLineProgram::DumpText { .. }) {
+        return;
+    }
+
     {
         let bridge = unsafe { bridge.as_ref() };
         let mut bridge = bridge.unwrap().lock().unwrap();

@@ -1,0 +1,234 @@
+// Copyright 2026 The Carbonyl Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// See `src/browser/bridge.rs::main()` for the Rust-side companion that
+// propagates `CARBONYL_ENV_SHELL_MODE=1` to chromium subprocesses when
+// `--dump-text` is selected, preventing renderer-thread spin-up that
+// would otherwise interleave ANSI escapes into the dump output (#88).
+
+#include "carbonyl/src/browser/dump_text_handler.h"
+
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <utility>
+
+#include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/time/time.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
+
+namespace carbonyl {
+
+namespace {
+
+// The user-facing CLI switch names — parsed by `src/cli/cli.rs` on the
+// Rust side, AND read directly here on the C++ side. They appear on
+// `base::CommandLine::ForCurrentProcess()` for free because the user
+// typed them on the command line; no argv re-injection needed.
+constexpr char kSwitchDumpText[] = "dump-text";
+constexpr char kSwitchDumpIdle[] = "idle";
+constexpr char kSwitchDumpMaxWait[] = "max-wait";
+
+// Default timings — match the Rust CLI defaults in src/cli/cli.rs.
+constexpr int kDefaultIdleMs = 500;
+constexpr int kDefaultMaxWaitMs = 30000;
+
+// Isolated-world ID for the extraction script. The content layer caps
+// embedder world IDs at `ISOLATED_WORLD_ID_MAX = 11` (private constant in
+// render_frame_host_impl.cc; the CHECK fires hard if we exceed it). 0 is
+// the main world. carbonyl's headless build does not load extensions, so
+// any value 1..11 is safe; we pick 1.
+constexpr int32_t kCarbonylDumpTextWorldId = 1;
+
+// At most one handler per process. The chromium bootstrap calls StartFor
+// once after the initial WebContents is built; this guard tolerates a
+// double-install without leaking state.
+bool g_handler_started = false;
+
+DumpTextHandler::Mode ParseMode(const std::string& raw) {
+  // Empty value (just `--carbonyl-dump-text` with no `=`) defaults to
+  // innertext, matching how the Rust CLI emits this switch.
+  if (raw.empty() || raw == "innertext" || raw == "inner-text") {
+    return DumpTextHandler::Mode::kInnerText;
+  }
+  if (raw == "accessibility" || raw == "a11y" || raw == "ax") {
+    return DumpTextHandler::Mode::kAccessibility;
+  }
+  if (raw == "raw-dom" || raw == "rawdom" || raw == "dom" ||
+      raw == "outerhtml") {
+    return DumpTextHandler::Mode::kRawDom;
+  }
+  LOG(WARNING) << "carbonyl --dump-text: unknown mode '" << raw
+               << "', falling back to innertext";
+  return DumpTextHandler::Mode::kInnerText;
+}
+
+int ParsePositiveInt(const std::string& raw, int fallback) {
+  int value = 0;
+  if (base::StringToInt(raw, &value) && value > 0) {
+    return value;
+  }
+  return fallback;
+}
+
+// JS expression for each mode. Each must return a string when evaluated
+// in an isolated world; ExecuteJavaScriptInIsolatedWorld delivers the
+// result through the callback as a base::Value.
+const char* ScriptForMode(DumpTextHandler::Mode mode) {
+  switch (mode) {
+    case DumpTextHandler::Mode::kInnerText:
+      return "document.body ? document.body.innerText : ''";
+    case DumpTextHandler::Mode::kRawDom:
+      return
+          "(document.doctype "
+          "? new XMLSerializer().serializeToString(document.doctype) + '\\n' "
+          ": '') + document.documentElement.outerHTML";
+    case DumpTextHandler::Mode::kAccessibility:
+      // The accessibility-tree extraction backed by issue #4 is not yet
+      // wired. Until it lands, fall back to innerText so callers get
+      // useful output instead of an empty string. The Rust CLI warns
+      // about this in the cycle-1 docs; the warning here is for callers
+      // who bypass the Rust layer.
+      LOG(WARNING) << "carbonyl --dump-text=accessibility: backing API "
+                      "(issue #4) not yet wired; emitting innerText";
+      return "document.body ? document.body.innerText : ''";
+  }
+  return "''";
+}
+
+}  // namespace
+
+// static
+bool DumpTextHandler::IsRequested() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(kSwitchDumpText);
+}
+
+// static
+void DumpTextHandler::StartFor(content::WebContents* web_contents) {
+  if (g_handler_started || !web_contents || !IsRequested()) {
+    return;
+  }
+  g_handler_started = true;
+
+  const auto* cmd = base::CommandLine::ForCurrentProcess();
+  Mode mode = ParseMode(cmd->GetSwitchValueASCII(kSwitchDumpText));
+  int idle_ms =
+      ParsePositiveInt(cmd->GetSwitchValueASCII(kSwitchDumpIdle),
+                       kDefaultIdleMs);
+  int max_wait_ms =
+      ParsePositiveInt(cmd->GetSwitchValueASCII(kSwitchDumpMaxWait),
+                       kDefaultMaxWaitMs);
+
+  // Self-owned: deleted on WebContentsDestroyed or EmitAndExit (which calls
+  // _exit; the destructor only runs on the destruction path).
+  new DumpTextHandler(web_contents, mode, idle_ms, max_wait_ms);
+}
+
+DumpTextHandler::DumpTextHandler(content::WebContents* web_contents,
+                                 Mode mode,
+                                 int idle_ms,
+                                 int max_wait_ms)
+    : mode_(mode), idle_ms_(idle_ms), max_wait_ms_(max_wait_ms) {
+  content::WebContentsObserver::Observe(web_contents);
+
+  // Hard timeout — fires if the page never reaches load-complete.
+  max_wait_timer_.Start(
+      FROM_HERE, base::Milliseconds(max_wait_ms_),
+      base::BindOnce(&DumpTextHandler::OnMaxWaitElapsed,
+                     base::Unretained(this)));
+}
+
+DumpTextHandler::~DumpTextHandler() = default;
+
+void DumpTextHandler::DocumentOnLoadCompletedInPrimaryMainFrame() {
+  if (load_complete_ || finished_) {
+    return;
+  }
+  load_complete_ = true;
+
+  // Schedule the idle window. Once it elapses (no further intervening
+  // load events), we execute the extraction script.
+  idle_timer_.Start(
+      FROM_HERE, base::Milliseconds(idle_ms_),
+      base::BindOnce(&DumpTextHandler::OnIdleElapsed,
+                     base::Unretained(this)));
+}
+
+void DumpTextHandler::WebContentsDestroyed() {
+  if (finished_) {
+    return;
+  }
+  finished_ = true;
+  LOG(ERROR) << "carbonyl --dump-text: WebContents destroyed before "
+                "extraction completed";
+  // Mirror headless_command_handler: terminate with non-zero on
+  // unexpected renderer destruction.
+  std::_Exit(3);
+}
+
+void DumpTextHandler::OnIdleElapsed() {
+  if (finished_) {
+    return;
+  }
+  auto* rfh = web_contents() ? web_contents()->GetPrimaryMainFrame() : nullptr;
+  if (!rfh) {
+    EmitAndExit(std::string(), 4);
+    return;
+  }
+
+  const std::string script_utf8 = ScriptForMode(mode_);
+  rfh->ExecuteJavaScriptInIsolatedWorld(
+      base::UTF8ToUTF16(script_utf8),
+      base::BindOnce(&DumpTextHandler::OnJavaScriptResult,
+                     base::Unretained(this)),
+      kCarbonylDumpTextWorldId);
+}
+
+void DumpTextHandler::OnMaxWaitElapsed() {
+  if (finished_) {
+    return;
+  }
+  LOG(ERROR) << "carbonyl --dump-text: --max-wait elapsed (" << max_wait_ms_
+             << " ms); page never finished loading";
+  EmitAndExit(std::string(), 5);
+}
+
+void DumpTextHandler::OnJavaScriptResult(base::Value result) {
+  if (finished_) {
+    return;
+  }
+  std::string text;
+  if (result.is_string()) {
+    text = result.GetString();
+  } else if (!result.is_none()) {
+    // Mode scripts always return strings; anything else means the page's
+    // global state interfered. Stringify defensively.
+    text = result.DebugString();
+  }
+  EmitAndExit(text, 0);
+}
+
+void DumpTextHandler::EmitAndExit(const std::string& text, int exit_code) {
+  finished_ = true;
+  idle_timer_.Stop();
+  max_wait_timer_.Stop();
+  if (!text.empty()) {
+    std::cout << text << std::endl;
+  }
+  std::cout.flush();
+  // Hard-exit to skip the rest of chromium teardown (which can take
+  // hundreds of milliseconds and is unnecessary for a single-shot
+  // extraction). Matches the behavior `_exit` provides without running
+  // atexit handlers — chromium's own headless command handler uses an
+  // ordered shutdown, but it has the headless library's lifecycle
+  // wiring that we deliberately don't depend on.
+  std::_Exit(exit_code);
+}
+
+}  // namespace carbonyl

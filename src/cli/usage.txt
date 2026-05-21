@@ -18,6 +18,16 @@ Options:
                                (default: 1; also via CARBONYL_CHROME_ROWS env
                                var). Use at large terminal sizes where a
                                single-row chrome smears; try 3 at 360x100.
+    --dump-text[=<mode>]       skip the terminal renderer entirely; load the
+                               URL, wait for the page, dump page text to
+                               stdout, and exit. Modes: innertext (default),
+                               accessibility (falls back to innertext until
+                               #4 lands), raw-dom. Also via CARBONYL_DUMP_TEXT
+                               env var. See docs/runtime-modes.md Mode 4.
+    --idle=<ms>                with --dump-text: wait <ms> after the load
+                               event before extracting (default: 500).
+    --max-wait=<ms>            with --dump-text: hard timeout in ms
+                               (default: 30000).
     -b, --bitmap               render text as bitmaps
     -d, --debug                enable debug logs
     -h, --help                 display this help message
@@ -28,6 +38,11 @@ Environment variables:
     CARBONYL_CHROME_ROWS=N     same as --chrome-rows
     CARBONYL_ENV_DEBUG=1       same as --debug
     CARBONYL_ENV_BITMAP=1      same as --bitmap
+    CARBONYL_DUMP_TEXT=<mode>  same as --dump-text (empty / "1" implies
+                               default mode); CLI flag wins if both set
+    CARBONYL_DUMP_IDLE_MS=<ms> same as --idle
+    CARBONYL_DUMP_MAX_WAIT_MS=<ms>
+                               same as --max-wait
     CARBONYL_X_MIRROR=1        with --ozone-platform=x11, also blit
                                compositor frames into a visible X window
                                on $DISPLAY so external tools (scrot,
@@ -38,3 +53,5 @@ Runtime modes (see docs/runtime-modes.md for the full operator guide):
     terminal-only              carbonyl <url>
     x11 + trusted input        carbonyl --ozone-platform=x11 <url>
     x11 + visual capture       CARBONYL_X_MIRROR=1 carbonyl --ozone-platform=x11 <url>
+    dump-text                  carbonyl --dump-text <url>
+       (text-only extraction)  (see docs/runtime-modes.md Mode 4)

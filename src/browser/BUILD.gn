@@ -19,6 +19,25 @@ component("bridge") {
   ]
 }
 
+# Separate component for the --dump-text observer (issue #88). Kept out of
+# ":bridge" because that target sits below skia in the dep graph and adding
+# `//content/public/browser` would introduce a cycle. Anything that needs
+# the handler (presently just `headless/app/headless_shell.cc` via patch
+# 0027) depends on this target directly.
+component("dump_text") {
+  output_name = "carbonyl_dump_text"
+  defines = [ "CARBONYL_BRIDGE_IMPLEMENTATION" ]
+  sources = [
+    "dump_text_handler.cc",
+    "dump_text_handler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+  ]
+}
+
 component("viz") {
   output_name = "carbonyl_viz"
   defines = [ "CARBONYL_VIZ_IMPLEMENTATION" ]

@@ -19,6 +19,7 @@ notes before switching modes mid-engagement.
 | Read a webpage in a tmux pane | **Terminal-only** | terminal keystrokes (`isTrusted=false`) | none | full |
 | Automation against bot-detecting sites | **x11 + uinput** | kernel uinput → Xorg → Chromium (`isTrusted=true`) | none (X window stays blank) | full |
 | Automation **and** screenshot/video capture | **x11 + uinput + X-mirror** | same as above | `scrot`, `ffmpeg`, `x11vnc` against `$DISPLAY` | full |
+| Text-only extraction (scraping, LLM pipes) | **`--dump-text`** | none — single-shot navigation | none — bypasses renderer | full |
 
 **Rule of thumb:** if you don't need bot-detection-resistant input, stay
 in terminal-only mode — it has the smallest dependency surface and the
@@ -123,6 +124,60 @@ var.
 | `CARBONYL_X_MIRROR=1` | Enable. Any other value (or unset) → disabled. |
 | `DISPLAY` | Required when enabled. Mirror opens this display. |
 | `--viewport=WxH` | Pin the CSS viewport so framebuffer captures are size-stable across terminal-cell variation. |
+
+---
+
+## Mode 4 — `--dump-text` (text-only extraction, no renderer)
+
+`--dump-text` skips the terminal renderer entirely. Carbonyl boots
+chromium, navigates to the URL, waits for load + an idle window, then
+emits the page's text on stdout and exits. No half-block sampling, no
+ANSI, no terminal control sequences in the output.
+
+```bash
+carbonyl --dump-text https://example.com
+carbonyl --dump-text=accessibility --idle=2000 https://example.com
+carbonyl --dump-text=raw-dom --max-wait=10000 https://example.com
+```
+
+**Modes:**
+
+| Mode | Source | Use case |
+|---|---|---|
+| `innertext` (default) | `document.body.innerText` | Visual order; paragraphs, list items, table rows |
+| `accessibility` | Accessibility tree (requires #4) | Semantic structure; headings, landmarks |
+| `raw-dom` | `document.documentElement.outerHTML` | No transformation; full HTML |
+
+**Timing flags:**
+
+- `--idle=<ms>` — wait this long after the load event before extracting (default: 500). Set higher for SPA hydration.
+- `--max-wait=<ms>` — hard timeout (default: 30000).
+
+**Why not just use `--ozone-platform=x11` and grab the page through DevTools?**
+
+Two reasons. First, this mode is *single-shot*: one URL in, one text blob
+out, exit. No long-lived browser, no driver, no `$DISPLAY`. Second, the
+implementation does not raster anything — no compositor frames, no Skia,
+no terminal output stream. The renderer-side hook reads the text out of
+Blink directly, which means downstream callers don't pay for visual
+rendering they're only going to post-process back into text.
+
+**Implementation notes:**
+
+The renderer-side extraction lives on the carbonyl renderer process
+(where Blink runs), reached from the browser process via the existing
+Mojo channel defined in `chromium/src/carbonyl/src/browser/`. The
+browser process triggers extraction after the load + idle window, the
+renderer reads `Document::body().innerText()` (or the accessibility
+tree / outerHTML per mode), and the result returns over Mojo for the
+browser to emit on stdout. See #88 for the integration plan and #4 / #5
+for the dependent Blink-facing FFI work.
+
+**Exit codes:**
+
+- `0` — load succeeded, text emitted on stdout.
+- `2` — CLI parsed but the renderer-side hook isn't wired (this build).
+- non-zero — navigation failure, timeout, or unsupported mode.
 
 ---
 
