@@ -80,14 +80,7 @@ impl Window {
         // Keep one row for the UI bar.
         self.cells = Size::new(term.width.max(1), term.height.max(2) - 1).cast();
 
-        // Two paths: consumer-provided viewport vs legacy terminal-derived.
-        //
-        // Legacy path: `browser = cells * scale` where `scale = (2, 4) / dpi`
-        // and `dpi` comes from terminal cell-metric gymnastics. Blink lays out
-        // against a CSS viewport whose size depends on terminal cell count —
-        // at small terminals that produces an absurdly wide CSS viewport
-        // (see #37: a 220x50 terminal yields ~6926x4129 CSS viewport, pushing
-        // the X login modal off-screen).
+        // Two paths: consumer-provided viewport vs terminal-derived.
         //
         // Consumer-provided (`--viewport=WxH` or `CARBONYL_VIEWPORT=WxH`):
         // browser is fixed at the requested CSS size, `dpi = 1.0`. Chromium
@@ -95,28 +88,43 @@ impl Window {
         // in physical pixels. The terminal samples a `cells * (2, 4)` window
         // of that raster — if the terminal is large enough the whole page is
         // visible, otherwise the SDK can pan/stitch to cover the rest.
+        //
+        // Terminal-derived (no `--viewport`): the CSS layout viewport equals
+        // the sample window dimensions (`cells * (2, 4) / zoom`). This makes
+        // "what Blink lays out against" and "what the terminal samples"
+        // identical — a page with `margin: 0 auto` centers within the rendered
+        // area, with no phantom-wider-viewport gutter (see #99 Gap 2). `dpi`
+        // is fixed at 1.0; the per-cell sample factor is the `scale` field.
+        //
+        // The pre-#99 path computed `dpi` from cell-pixel gymnastics and
+        // produced a CSS viewport substantially wider than the sample window
+        // — for a 360-cell-wide terminal the layout viewport was ~1895 px
+        // while the sample window was 720 px, so 60%+ of the laid-out width
+        // was never sampled and centered content rendered offset by hundreds
+        // of pixels. See issue #99 for the empirical evidence (dead-space
+        // measurements across six URLs at PTY 360×100).
+        //
+        // `cmd.zoom` is preserved by dividing browser size by the zoom factor:
+        // a larger zoom shrinks the CSS viewport so each CSS pixel maps to
+        // more terminal pixels, making rendered content visually larger
+        // within the same sample window.
         if let Some((w, h)) = self.cmd.viewport {
             self.dpi = 1.0;
             self.scale = Size::new(2.0, 4.0);
             self.browser = Size::new(w, h);
         } else {
-            let zoom = 1.5 * self.cmd.zoom;
-            let auto_scale = false;
-            let cell_pixels = if auto_scale {
-                Size::new(cell.width as f32, cell.height as f32)
-                    / self.cells.cast()
-            } else {
-                Size::new(8.0, 16.0)
-            };
-            // Normalize the cells dimensions for an aspect ratio of 1:2
-            let cell_width = (cell_pixels.width + cell_pixels.height / 2.0) / 2.0;
-
-            // Round DPI to 2 decimals for proper viewport computations
-            self.dpi = (2.0 / cell_width * zoom * 100.0).ceil() / 100.0;
-            // A virtual cell should contain a 2x4 pixel quadrant
-            self.scale = Size::new(2.0, 4.0) / self.dpi;
-            self.browser = self.cells.cast::<f32>().mul(self.scale).ceil().cast();
+            let zoom = self.cmd.zoom.max(0.01);  // guard against divide-by-zero
+            self.dpi = 1.0;
+            self.scale = Size::new(2.0, 4.0);
+            // Sample window in physical pixels; divide by zoom so larger zoom
+            // -> smaller CSS viewport -> bigger-looking rendered content.
+            let sample_window = self.cells.cast::<f32>().mul(self.scale);
+            self.browser = (sample_window / zoom).ceil().cast();
         }
+        // Silence unused-variable warning on `cell`; the terminal cell-pixel
+        // hint is no longer consulted now that we derive the CSS viewport
+        // directly from the cell count and the half-block sample factor.
+        let _ = cell;
 
         self
     }
