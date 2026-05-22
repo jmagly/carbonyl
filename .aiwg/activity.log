@@ -26,3 +26,8 @@
 ## [2026-05-21 23:19] update | address-issues #92 closed via PR #94 (80b4405); #93 PR #95 opened, runtime build #201 in flight; #90 deferred (blocked by #4); #91 pending
 ## [2026-05-22 00:15] update | address-issues batch resolved: #91 merged (846cb8e), #92 merged (80b4405), #93 merged (80080ed), #90 deferred (blocked by #4); cosmetic follow-up #97 filed
 ## [2026-05-22 03:54] update | Posted AL CYCLE #1 plan + auth gate to roctinam/carbonyl#4 (AXTree FFI)
+## [2026-05-22 04:24] update | PR #98 opened for #4 (AXTree FFI): 5 files +541 LOC; AL CYCLE #2 posted; awaiting CI
+## [2026-05-22 05:45] update | PR #98 merged (squash 94b4d0b); #4 auto-closed; AL CYCLE #3 posted with verification; unblocks #90 and carbonyl-fleet#10
+## [2026-05-22 06:23] update | Posted AL CYCLE #1 to roctinam/carbonyl#99 (--viewport ignored); identified Gap 1 (x11 ozone bypasses HeadlessScreen) + Gap 2 (terminal-render dpi); 3 fix paths a/b/c presented
+## [2026-05-22 14:28] update | PR #100 opened for #99 Gap 2 (terminal-render viewport); cycle 2 posted; PR 2 (chromium patch 0029 for x11) queued
+## [2026-05-22 14:34] update | PR #100 merged (squash); PR #101 opened with chromium patch 0029 for #99 Gap 1; cycle 3 posted

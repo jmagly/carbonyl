@@ -12,6 +12,8 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/values.h"
+#include "content/public/browser/browser_accessibility_state.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -163,14 +165,17 @@ void AccessibilityHandler::InstallFor(content::WebContents* web_contents) {
   // Force-enable browser-side AX mode so subsequent
   // `RequestAXTreeSnapshotWithinBrowserProcess()` calls return a
   // populated tree rather than an empty update (per cycle #1 lock:
-  // "Force AXMode::kWebContents at startup").
-  ui::AXMode mode = web_contents->GetAccessibilityMode();
-  mode |= ui::kAXModeWebContentsOnly;
-  // SetAccessibilityMode is not on the public WebContents API; mode is
-  // applied via the chromium-side patch 0028 hook calling the internal
-  // BrowserAccessibilityState. Here we only read it to log.
+  // "Force AXMode::kWebContentsOnly at startup"). Applying the mode at
+  // the BrowserContext level means any WebContents subsequently attached
+  // to the context inherits it — patches 0027 and 0028 both install
+  // handlers on the same context, so this also covers the implicit
+  // dependency of `DumpTextHandler::Mode::kAccessibility` on AX being
+  // on (see #90 unblock note in PR #98).
+  content::BrowserAccessibilityState::GetInstance()
+      ->SetAccessibilityModeForBrowserContext(
+          web_contents->GetBrowserContext(), ui::kAXModeWebContentsOnly);
   LOG(INFO) << "carbonyl::AccessibilityHandler: bound to WebContents, "
-            << "AX mode = " << mode.ToString();
+            << "AX mode forced to kAXModeWebContentsOnly";
 
   g_instance_ = new AccessibilityHandler(web_contents);
 }
