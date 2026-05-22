@@ -175,9 +175,16 @@ for the dependent Blink-facing FFI work.
 
 **Exit codes:**
 
-- `0` — load succeeded, text emitted on stdout.
-- `2` — CLI parsed but the renderer-side hook isn't wired (this build).
-- non-zero — navigation failure, timeout, or unsupported mode.
+| Code | Meaning |
+|------|---------|
+| `0`  | Load succeeded; text emitted on stdout |
+| `3`  | WebContents destroyed before extraction completed (renderer crash) |
+| `4`  | Primary frame host unavailable when the idle timer elapsed |
+| `5`  | `--max-wait` elapsed; page never reached the load-complete state |
+| `6`  | Navigation failed (DNS, connection refused, TLS error, etc.) — chromium would have served its error page; instead exit 6 is returned and stdout stays empty (#91) |
+
+A useful caller pattern is to check both the exit code and the stdout
+length, since a real page can legitimately have an empty `innerText`.
 
 ---
 

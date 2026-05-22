@@ -40,6 +40,9 @@ component("dump_text") {
     # public surface but :headless_browser exposes them for embedders
     # already (see headless/app/headless_shell.cc).
     "//headless:headless_browser",
+    # net::Error + net::ErrorToString (per #91, navigation-failure
+    # detection in DidFinishNavigation).
+    "//net",
   ]
 }
 

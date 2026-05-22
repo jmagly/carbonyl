@@ -23,9 +23,11 @@
 #include "base/time/time.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "headless/lib/browser/headless_browser_impl.h"
+#include "net/base/net_errors.h"
 
 namespace carbonyl {
 
@@ -171,6 +173,32 @@ void DumpTextHandler::DocumentOnLoadCompletedInPrimaryMainFrame() {
                      base::Unretained(this)));
 }
 
+void DumpTextHandler::DidFinishNavigation(
+    content::NavigationHandle* navigation_handle) {
+  // Track only primary-frame, committed navigations. Sub-frame iframe
+  // failures and aborted navigations don't change the dump-text result.
+  // Per #91, the goal here is to distinguish "page loaded with no text"
+  // (exit 0) from "navigation failed; chromium served an error page"
+  // (exit 6).
+  if (!navigation_handle->IsInPrimaryMainFrame() ||
+      !navigation_handle->HasCommitted()) {
+    return;
+  }
+
+  const net::Error net_error = navigation_handle->GetNetErrorCode();
+  const bool is_error_page = navigation_handle->IsErrorPage();
+
+  if (is_error_page || net_error != net::OK) {
+    nav_failed_ = true;
+    nav_error_code_ = static_cast<int>(net_error);
+  } else {
+    // A subsequent navigation succeeded (e.g. redirect to a real page);
+    // clear any prior failure so the success path runs.
+    nav_failed_ = false;
+    nav_error_code_ = 0;
+  }
+}
+
 void DumpTextHandler::WebContentsDestroyed() {
   // Two paths land here:
   //   (1) Unexpected renderer destruction before extraction completed —
@@ -198,6 +226,18 @@ void DumpTextHandler::OnIdleElapsed() {
   if (finished_) {
     return;
   }
+
+  // Per #91: if the primary-frame navigation that just completed was a
+  // chromium error page or had a non-OK net::Error, skip JS extraction
+  // and exit with code 6. Otherwise the extractor would yield the empty
+  // body of the styled chrome-error page and mask the failure as exit 0.
+  if (nav_failed_) {
+    LOG(WARNING) << "carbonyl --dump-text: navigation failed (net::"
+                 << net::ErrorToString(nav_error_code_) << "); exit 6";
+    EmitAndExit(std::string(), 6);
+    return;
+  }
+
   auto* rfh = web_contents() ? web_contents()->GetPrimaryMainFrame() : nullptr;
   if (!rfh) {
     EmitAndExit(std::string(), 4);

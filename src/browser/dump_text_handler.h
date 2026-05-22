@@ -83,6 +83,8 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
 
   // content::WebContentsObserver:
   void DocumentOnLoadCompletedInPrimaryMainFrame() override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void WebContentsDestroyed() override;
 
   void OnIdleElapsed();
@@ -102,6 +104,13 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
   int max_wait_ms_;
   bool finished_ = false;
   bool load_complete_ = false;
+
+  // Set by DidFinishNavigation when the latest primary-frame commit was a
+  // chromium error page or had a non-OK net::Error code (per #91). Read
+  // by OnIdleElapsed to decide whether to skip JS extraction and emit
+  // exit code 6 instead of 0.
+  bool nav_failed_ = false;
+  int nav_error_code_ = 0;  // net::Error (negative on failure, 0 = net::OK)
 
   base::OneShotTimer idle_timer_;
   base::OneShotTimer max_wait_timer_;
