@@ -18,3 +18,11 @@
 ## [2026-05-18 05:11] update | aiwg index stats --json
 ## [2026-05-18 05:15] update | aiwg index stats --json
 ## [2026-05-21 00:23] create | .aiwg/architecture/adr-005-terminal-rendering-approach.md (post-hoc renderer ADR)
+## [2026-05-21 17:12] update | address-issues #88 cycle 1: --dump-text CLI scaffolding (cli.rs/program.rs/usage.txt/runtime-modes.md), branch fix/88-dump-text-mode, PR #89
+## [2026-05-21 18:18] update | address-issues #88 cycle 2: dump_text_handler C++ + patch 0027 landed; dump_text_handler.o compiles against M148 tree; PR #89 updated
+## [2026-05-21 20:42] update | address-issues #88 cycle 3: smoke test passed (runtime-a98928556d7c96c1); PR #89 finalized with Closes #88; resolved
+## [2026-05-21 20:48] update | address-issues #88 cycle 3: PR #89 merged to main (25d0061); #88 auto-closed; feature branch deleted
+## [2026-05-21 22:20] create | 4 follow-up issues filed: #90 accessibility, #91 nav-failure exit, #92 runtime-hash Rust, #93 _Exit teardown
+## [2026-05-21 23:19] update | address-issues #92 closed via PR #94 (80b4405); #93 PR #95 opened, runtime build #201 in flight; #90 deferred (blocked by #4); #91 pending
+## [2026-05-22 00:15] update | address-issues batch resolved: #91 merged (846cb8e), #92 merged (80b4405), #93 merged (80080ed), #90 deferred (blocked by #4); cosmetic follow-up #97 filed
+## [2026-05-22 03:54] update | Posted AL CYCLE #1 plan + auth gate to roctinam/carbonyl#4 (AXTree FFI)

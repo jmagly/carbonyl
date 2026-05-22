@@ -492,3 +492,56 @@ pub extern "C" fn carbonyl_renderer_listen(bridge: RendererPtr, delegate: *mut B
         // }
     });
 }
+
+// ----- Accessibility Tree FFI (issue #4) ----------------------------------
+//
+// The C++ side lives in `carbonyl/src/browser/accessibility_handler.{cc,h}`
+// (GN component `:accessibility`). The handler is installed as a
+// process-wide singleton on the primary `WebContents` by chromium patch
+// 0028, and `RequestAXTreeSnapshotWithinBrowserProcess()` is invoked
+// synchronously inside `carbonyl_get_accessibility_tree()` — no IPC
+// roundtrip, no callback plumbing on this side.
+//
+// Ownership: the C++ side allocates the returned C string with `new
+// char[]`. We MUST release it via `carbonyl_free_string()` (also defined
+// C++-side) — `libc::free` is wrong (mismatched allocator) and so is
+// letting it leak. `get_accessibility_tree()` below handles this
+// internally so callers receive an owned `String`.
+//
+// Thread-affinity: per the handler header, calls must occur on the
+// browser UI thread. The socket-command code path that reaches this FFI
+// (carbonyl-fleet#10) must `post_task` from the input/socket thread to
+// the UI thread before invoking — see how the existing `BrowserDelegate`
+// callbacks above are dispatched via `post_task` from the input thread.
+
+extern "C" {
+    fn carbonyl_get_accessibility_tree() -> *const c_char;
+    fn carbonyl_free_string(ptr: *const c_char);
+}
+
+/// Returns the current accessibility tree of the primary WebContents as
+/// a JSON `String`. On any failure path (AX mode not enabled, no
+/// snapshot available, JSON serialization failure) returns the sentinel
+/// JSON `{"error":"no_tree"}` — never panics, never returns `None`.
+///
+/// Must be called on the browser UI thread (see module-level note above
+/// the FFI declarations).
+pub fn get_accessibility_tree() -> String {
+    // SAFETY: `carbonyl_get_accessibility_tree` is documented (in the
+    // C++ header) to always return a non-null heap-allocated UTF-8 C
+    // string. We immediately copy into an owned `String` and hand the
+    // raw pointer back to `carbonyl_free_string`, so the pointer is
+    // never read after free.
+    unsafe {
+        let raw = carbonyl_get_accessibility_tree();
+        if raw.is_null() {
+            // Defensive — should not happen given the C++ contract, but
+            // surfacing the sentinel here is cheaper than panicking and
+            // matches what the C++ side would have returned anyway.
+            return String::from(r#"{"error":"no_tree"}"#);
+        }
+        let owned = CStr::from_ptr(raw).to_string_lossy().into_owned();
+        carbonyl_free_string(raw);
+        owned
+    }
+}

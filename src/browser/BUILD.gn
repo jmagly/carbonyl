@@ -46,6 +46,27 @@ component("dump_text") {
   ]
 }
 
+# AXTree extraction handler + FFI (issue #4). Kept out of `:bridge` for
+# the same reason `:dump_text` is — `:bridge` sits below skia, and
+# `//content/public/browser` would close a dep cycle. Pulled in by
+# `headless_shell` via chromium patch 0028.
+component("accessibility") {
+  output_name = "carbonyl_accessibility"
+  defines = [ "CARBONYL_BRIDGE_IMPLEMENTATION" ]
+  sources = [
+    "accessibility_handler.cc",
+    "accessibility_handler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    # ui::AXTreeUpdate, AXNodeData, gfx::RectF, Role-to-string utility.
+    "//ui/accessibility",
+    "//ui/gfx/geometry",
+  ]
+}
+
 component("viz") {
   output_name = "carbonyl_viz"
   defines = [ "CARBONYL_VIZ_IMPLEMENTATION" ]

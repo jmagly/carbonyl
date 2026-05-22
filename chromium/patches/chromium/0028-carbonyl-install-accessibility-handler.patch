@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <carbonyl@integrolabs.net>
+Date: Fri, 22 May 2026 04:00:00 +0000
+Subject: [PATCH 28/28] carbonyl: install accessibility handler on
+ OnBrowserStart's WebContents
+
+Wires `carbonyl::AccessibilityHandler::InstallFor()` into the headless
+shell's `OnBrowserStart()`, right after the initial `HeadlessWebContents`
+is built and adjacent to the `DumpTextHandler::StartFor()` installation
+from patch 0027.
+
+The handler is a process-wide singleton (carbonyl runs one WebContents
+per process in headless mode) that exposes
+`carbonyl_get_accessibility_tree()` to the Rust FFI in
+`carbonyl/src/browser/bridge.rs`. The Rust side dispatches to it when
+the carbonyl-fleet socket layer (roctinam/carbonyl-fleet#10) receives
+`{"type": "accessibility_tree"}`.
+
+Before installing the handler, the patch forces
+`ui::kAXModeWebContentsOnly` on the WebContents via
+`BrowserAccessibilityState::SetAccessibilityModeForBrowserContext`
+(per the cycle-1 design lock in roctinam/carbonyl#4 — "Force AXMode
+at startup"). Without this, the first snapshot from
+`RequestAXTreeSnapshotWithinBrowserProcess()` returns an empty
+`AXTreeUpdate`, which the handler surfaces as `{"error":"no_tree"}`.
+
+The new `//carbonyl/src/browser:accessibility` GN component sits next
+to `:dump_text` for the same reason — `:bridge` sits below skia in the
+dep graph, so pulling `//content/public/browser` into it would close
+a cycle.
+
+Refs: roctinam/carbonyl#4
+Refs: roctinam/carbonyl-fleet#10
+---
+ headless/BUILD.gn              |  1 +
+ headless/app/headless_shell.cc | 19 +++++++++++++++++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index 4691cdc61cbac..5f3a0c0d61cbb 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -946,6 +946,7 @@ executable("headless_shell") {
+
+   deps = [
+     ":headless_shell_lib",
++    "//carbonyl/src/browser:accessibility",
+     "//carbonyl/src/browser:dump_text",
+     "//carbonyl/src/browser:renderer",
+     "//build:branding_buildflags",
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+index f7ac18c3eff01..3d8a91c0eff01 100644
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -4,6 +4,7 @@
+
+ #include "headless/public/headless_shell.h"
+
++#include "carbonyl/src/browser/accessibility_handler.h"
+ #include "carbonyl/src/browser/dump_text_handler.h"
+ #include "carbonyl/src/browser/renderer.h"
+
+@@ -12,6 +13,9 @@
+ #include "base/check.h"
+ #include "base/command_line.h"
+ #include "base/logging.h"
++#include "content/public/browser/browser_accessibility_state.h"
++#include "ui/accessibility/ax_mode.h"
++
+
+ namespace headless {
+
+@@ -160,6 +164,21 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+     carbonyl::DumpTextHandler::StartFor(
+         HeadlessWebContentsImpl::From(web_contents)->web_contents(),
+         browser);
+   }
++
++  // Carbonyl issue #4: install the accessibility-tree FFI handler on
++  // the freshly built WebContents. Unlike --dump-text this is
++  // always-on (no CLI gate) because the FFI surface is process-wide
++  // and the carbonyl-fleet socket layer (#10) decides whether to
++  // expose it externally. Force AXMode::kWebContentsOnly first so
++  // the first FFI snapshot has nodes to walk.
++  if (web_contents) {
++    auto* impl_contents =
++        HeadlessWebContentsImpl::From(web_contents)->web_contents();
++    content::BrowserAccessibilityState::GetInstance()
++        ->SetAccessibilityModeForBrowserContext(
++            impl_contents->GetBrowserContext(),
++            ui::kAXModeWebContentsOnly);
++    carbonyl::AccessibilityHandler::InstallFor(impl_contents);
++  }
+ }
+
+ #if defined(HEADLESS_ENABLE_COMMANDS)
+--
+2.43.0
