@@ -1,0 +1,213 @@
+# validate-patches.yml — Pre-merge chromium patch validation
+#
+# Catches patch-apply failures BEFORE merge to main. Build #196 (2026-05-22)
+# discovered that PR #98's patch 0028 had hallucinated source context (line
+# 12 of `headless_shell.cc` was assumed to be `#include "base/check.h"` when
+# the actual line was `#include "base/base_switches.h"`). The PR merged
+# successfully because patch files are just text — git only catches the
+# corruption when `git am` runs against real Chromium source, which only
+# happens in build-runtime.yml's full 4-hour pipeline.
+#
+# This workflow closes that gap: every PR that touches `chromium/patches/**`
+# runs `git am` against the same synced Chromium source build-runtime would
+# use, in a read-only worktree, and fails fast (<2 min) if any patch in the
+# stack fails to apply. The full build is unchanged — this is a pre-flight
+# check, not a replacement.
+#
+# Triggered by:
+#   - pull_request to main when chromium/patches/** changes (the prevention case)
+#   - push to main when chromium/patches/** changes (the verification case —
+#     should never fail since the pull_request gate caught it, but belt &
+#     suspenders against direct-to-main pushes from maintainers)
+#   - workflow_dispatch (manual)
+
+name: Validate Patches
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'chromium/patches/**'
+      - '.gitea/workflows/validate-patches.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'chromium/patches/**'
+      - '.gitea/workflows/validate-patches.yml'
+  workflow_dispatch:
+
+env:
+  HOST_CARBONYL_DIR: /srv/carbonyl
+  HOST_CHROMIUM_SRC_DIR: /srv/carbonyl/chromium/src
+
+# Reuse the same lock semantics as build-runtime.yml: matrix combos and
+# this validator both touch chromium/src on titan, and the validator
+# uses `git worktree` which mutates the .git directory. Without this
+# lock a concurrent build-runtime sync would race with worktree add.
+concurrency:
+  group: validate-patches-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-patches:
+    name: Validate chromium patches apply cleanly
+    runs-on: titan
+    timeout-minutes: 15
+
+    steps:
+      - name: Acquire chromium/src host lock
+        # Same pattern as build-runtime.yml — see that file's comments for
+        # the rationale (mkdir-as-atomic-lock, 10-min staleness reclaim,
+        # 30s spin-wait). Validator's lock holder string is distinguishable
+        # from build-runtime's so operators can tell from `cat $LOCK/holder`
+        # which workflow is sitting on the tree.
+        run: |
+          set +e
+          set +o pipefail
+          LOCK="/tmp/carbonyl-chromium-src.lock-amd64"
+          MY_HOLDER="validate-patches run-${{ github.run_id }}"
+          start=$(date +%s)
+          while ! mkdir "$LOCK" 2>/dev/null; do
+            held_by=$(cat "$LOCK/holder" 2>/dev/null || echo '?')
+            elapsed=$(( $(date +%s) - start ))
+            lock_age=$(( $(date +%s) - $(stat -c %Y "$LOCK" 2>/dev/null || date +%s) ))
+            if [ "$lock_age" -gt 600 ]; then
+              echo "[lock] holder '$held_by' age=${lock_age}s; reclaiming stale lock" >&2
+              rm -rf "$LOCK"
+              continue
+            fi
+            if [ "$elapsed" -gt 900 ]; then
+              echo "[lock] timed out after 15 min waiting on $LOCK (holder=$held_by)" >&2
+              exit 1
+            fi
+            echo "[lock] waiting on $LOCK (held by '$held_by'); waited ${elapsed}s..."
+            sleep 15
+          done
+          echo "$MY_HOLDER" > "$LOCK/holder"
+          echo "[lock] acquired $LOCK for $MY_HOLDER"
+
+      - name: Resolve builder image
+        run: |
+          PIN_URL="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/raw/.gitea/builder-image-pin?ref=${GITHUB_SHA:-main}"
+          TAG="$(curl -sf -H "Authorization: token ${{ github.token }}" "$PIN_URL" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+          [ -z "$TAG" ] && TAG="latest"
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:${TAG}"
+          echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          echo "[resolve] using builder image: ${IMAGE}"
+
+      - name: Log in to registry
+        run: |
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull builder image
+        run: docker pull "${BUILDER_IMAGE}"
+
+      - name: Checkout carbonyl (workspace)
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          # Need the PR's head commit, not the merge base. For pull_request
+          # events, GITHUB_REF is `refs/pull/N/merge` (the merge-into-main
+          # commit) — that's actually what we want to validate. For push,
+          # GITHUB_SHA is the pushed commit.
+          git clone --depth 50 \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          git checkout "${GITHUB_SHA}"
+          echo "[checkout] HEAD at $(git rev-parse HEAD)"
+
+      - name: Sync patch files to host carbonyl dir
+        # Patches live in chromium/patches/chromium/*.patch — sync just that
+        # directory + scripts so patches.sh works.
+        run: |
+          rsync -a --no-owner --no-group \
+            --include='chromium/' --include='chromium/patches/' --include='chromium/patches/**' \
+            --include='scripts/' --include='scripts/**' \
+            --include='src/' --include='src/browser/' \
+            --include='src/browser/args.gn' \
+            --exclude='*' \
+            "${GITHUB_WORKSPACE}/.repo-clone/" "${HOST_CARBONYL_DIR}/"
+
+      - name: Validate patch stack applies cleanly
+        # Uses a `git worktree` so we don't disturb the main chromium/src
+        # checkout that build-runtime uses. The worktree shares .git with
+        # the source tree (cheap — only the working dir is copied), so
+        # `git am` against it is identical to what build-runtime would
+        # see when it applies patches for real.
+        #
+        # Fails fast on the FIRST patch that fails to apply, with the
+        # patch filename and the failing hunk. CI cost: <90s on a warm host.
+        run: |
+          docker run --rm \
+            -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
+            -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
+            -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
+            -w ${HOST_CARBONYL_DIR} \
+            "${BUILDER_IMAGE}" \
+            bash -c '
+              set -e
+              git config --global --add safe.directory "*"
+              git config --global user.email "validate@carbonyl.local"
+              git config --global user.name "Carbonyl Validator"
+
+              WORKTREE="/tmp/carbonyl-validate-worktree-$$"
+              trap "git -C ${CHROMIUM_SRC} worktree remove --force ${WORKTREE} 2>/dev/null || rm -rf ${WORKTREE}" EXIT
+
+              # Add a worktree at the current chromium/src HEAD (the pinned
+              # upstream commit, no carbonyl patches yet). git am will apply
+              # the patch stack on top of this fresh tree.
+              git -C ${CHROMIUM_SRC} worktree add --detach ${WORKTREE} HEAD
+
+              cd ${WORKTREE}
+              PATCH_DIR="${CARBONYL_ROOT}/chromium/patches/chromium"
+              PATCHES=$(ls "${PATCH_DIR}"/*.patch | sort)
+              echo "[validate] applying $(echo "$PATCHES" | wc -l) patches in sequence..."
+
+              FAILED_PATCH=""
+              for p in $PATCHES; do
+                if git am --keep-cr --quiet "$p" 2>&1; then
+                  echo "[validate] OK: $(basename "$p")"
+                else
+                  FAILED_PATCH="$p"
+                  echo "[validate] FAIL: $(basename "$p")" >&2
+                  echo "----- failing patch hunk (first 80 lines) -----" >&2
+                  git am --show-current-patch=diff 2>&1 | head -80 >&2 || true
+                  echo "----- end -----" >&2
+                  git am --abort 2>/dev/null || true
+                  break
+                fi
+              done
+
+              if [ -n "$FAILED_PATCH" ]; then
+                echo "" >&2
+                echo "❌ Patch validation failed at: $(basename "$FAILED_PATCH")" >&2
+                echo "" >&2
+                echo "This patch will fail to apply in build-runtime.yml when it" >&2
+                echo "runs against the same Chromium pin. Fix the patch context" >&2
+                echo "by reading the actual lines in chromium/src/ and rewriting" >&2
+                echo "the hunk headers + body to match." >&2
+                echo "" >&2
+                echo "Tip: run \`git apply --check chromium/patches/chromium/<N>-...\`" >&2
+                echo "locally against chromium/src/ to verify before pushing." >&2
+                exit 1
+              fi
+
+              echo ""
+              echo "✅ All $(ls "${PATCH_DIR}"/*.patch | wc -l) patches applied cleanly"
+            '
+
+      - name: Release chromium/src host lock
+        if: always()
+        run: |
+          LOCK="/tmp/carbonyl-chromium-src.lock-amd64"
+          MY_HOLDER="validate-patches run-${{ github.run_id }}"
+          if [ -d "$LOCK" ]; then
+            current=$(cat "$LOCK/holder" 2>/dev/null || echo '')
+            if [ "$current" = "$MY_HOLDER" ]; then
+              rm -rf "$LOCK"
+              echo "[lock] released $LOCK"
+            else
+              echo "[lock] not releasing — holder is '$current'"
+            fi
+          fi
