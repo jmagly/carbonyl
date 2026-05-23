@@ -37,6 +37,14 @@ fi
 
 cd "$CHROMIUM_SRC/out/$target"
 
+# Build-time helper binaries, such as v8_context_snapshot_generator, may
+# inherit the libcarbonyl dependency through patched headless/content deps.
+# They run from this output dir before copy-binaries.sh packages the runtime,
+# so make the freshly copied libcarbonyl.so discoverable to the dynamic loader.
+if [ -f "libcarbonyl.so" ]; then
+    export LD_LIBRARY_PATH="$PWD:${LD_LIBRARY_PATH:-}"
+fi
+
 # Build headless_shell plus the graphics runtime libs that
 # copy-binaries.sh copies into the final carbonyl runtime tarball:
 # ANGLE (libEGL.so, libGLESv2.so) and SwiftShader Vulkan
