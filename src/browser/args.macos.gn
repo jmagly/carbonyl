@@ -1,0 +1,38 @@
+# Carbonyl macOS (aarch64-apple-darwin) headless build args. (#109)
+#
+# Counterpart to src/browser/args.gn (Linux). Selected by
+# scripts/build-macos.sh. The Linux args.gn carries X11/Wayland/Ozone/dbus/
+# glib/gtk/qt/cups/kerberos/vaapi/pipewire flags that gn rejects on the mac
+# toolchain, so the mac build uses this trimmed, mac-appropriate set instead.
+
+is_debug = false
+is_component_build = false
+
+# Carbonyl headless core
+headless_enable_commands = false
+headless_use_embedded_resources = true
+
+# Codecs
+ffmpeg_branding = "Chrome"
+proprietary_codecs = true
+
+# Software/static ANGLE (no GPU). On macOS this links ANGLE statically, so the
+# runtime ships SwiftShader (libvk_swiftshader.dylib) rather than separate
+# libEGL/libGLESv2 dylibs.
+use_static_angle = true
+
+# Local build, no remote execution / RBE.
+use_remoteexec = false
+
+# Build against the current macOS SDK (26.x). M148 source uses 26.x-only
+# symbols (e.g. kCGImageByteOrder32Host, absent from the 15.x SDK). Deployment
+# target stays 12.0 (set by Chromium's mac_deployment_target) so the runtime
+# remains compatible with macOS 12+.
+mac_sdk_min = "26.0"
+
+# CLT-only host has no full Xcode: the 15.x SDK lacks DarwinFoundation
+# modulemaps that clang C++ modules require, and ANGLE's Metal backend needs
+# `xcrun metal` (Xcode-only). A headless software-rendering browser needs
+# neither, so disable both.
+use_clang_modules = false
+angle_enable_metal = false

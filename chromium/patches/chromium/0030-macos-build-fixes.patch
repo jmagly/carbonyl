@@ -1,0 +1,86 @@
+From 1a39f76a72980b3ca1c43241e9c0e155ad8753db Mon Sep 17 00:00:00 2001
+From: carbonyl <carbonyl@local>
+Date: Sun, 24 May 2026 21:05:15 -0400
+Subject: [PATCH] fix(macos): CLT find_sdk fallback + patch-0013 orphan #endif
+ + headless geolocation fwd-decl
+
+macOS arm64 build fixes (carbonyl #109), all in code paths only compiled on
+mac so they were never caught by the Linux build:
+- build/mac/find_sdk.py: fall back to Command Line Tools SDK/bin layout when
+  no full Xcode.app is present.
+- printing/printing_context_mac.mm: remove orphan #endif injected by the
+  rendering-bridge patch (unbalanced preprocessor).
+- headless/lib/browser/headless_browser_impl.h: forward-declare
+  device::GeolocationSystemPermissionManager (M148 dropped it from this header).
+---
+ build/mac/find_sdk.py                        | 16 ++++++++++++----
+ headless/lib/browser/headless_browser_impl.h |  4 ++++
+ printing/printing_context_mac.mm             |  1 -
+ 3 files changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/build/mac/find_sdk.py b/build/mac/find_sdk.py
+index c83a3d1151dd5..5faf2269967cb 100755
+--- a/build/mac/find_sdk.py
++++ b/build/mac/find_sdk.py
+@@ -71,11 +71,19 @@ def main():
+   dev_dir = out.decode('UTF-8').rstrip()
+   sdk_dir = os.path.join(
+       dev_dir, 'Platforms/MacOSX.platform/Developer/SDKs')
++  _clt_bin_subpath = None
+ 
+   if not os.path.isdir(sdk_dir):
+-    raise SdkError('Install Xcode, launch it, accept the license ' +
+-      'agreement, and run `sudo xcode-select -s /path/to/Xcode.app` ' +
+-      'to continue.')
++    # Command Line Tools layout (no full Xcode.app): SDKs live directly
++    # under <dev_dir>/SDKs and tools under <dev_dir>/usr/bin. (carbonyl #109)
++    _clt_sdk_dir = os.path.join(dev_dir, 'SDKs')
++    if os.path.isdir(_clt_sdk_dir):
++      sdk_dir = _clt_sdk_dir
++      _clt_bin_subpath = 'usr/bin/'
++    else:
++      raise SdkError('Install Xcode, launch it, accept the license ' +
++        'agreement, and run `sudo xcode-select -s /path/to/Xcode.app` ' +
++        'to continue.')
+   sdk_dir_list = os.listdir(sdk_dir)
+   sdks = [re.findall('^MacOSX(\d+\.\d+)\.sdk$', s) for s in sdk_dir_list]
+   sdks = [s[0] for s in sdks if s]  # [['10.5'], ['10.6']] => ['10.5', '10.6']
+@@ -92,7 +100,7 @@ def main():
+     print(sdk_path)
+ 
+   if options.print_bin_path:
+-    bin_path = 'Toolchains/XcodeDefault.xctoolchain/usr/bin/'
++    bin_path = _clt_bin_subpath or 'Toolchains/XcodeDefault.xctoolchain/usr/bin/'
+     print(os.path.join(dev_dir, bin_path))
+ 
+   if options.print_sdk_build:
+diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
+index 840cf9c5d4fa4..c8817b31bfc22 100644
+--- a/headless/lib/browser/headless_browser_impl.h
++++ b/headless/lib/browser/headless_browser_impl.h
+@@ -40,6 +40,10 @@ namespace ui {
+ class Compositor;
+ }
+ 
++namespace device {
++class GeolocationSystemPermissionManager;  // carbonyl #109: M148 moved this out of headless_browser_impl.h
++}  // namespace device
++
+ namespace headless {
+ 
+ class HeadlessBrowserContextImpl;
+diff --git a/printing/printing_context_mac.mm b/printing/printing_context_mac.mm
+index fafb60088e0de..53add77b12fcc 100644
+--- a/printing/printing_context_mac.mm
++++ b/printing/printing_context_mac.mm
+@@ -750,7 +750,6 @@ bool IsIppColorModelColorful(mojom::ColorModel color_model) {
+                    GetIppColorModelForModel(color_model))) {
+     return false;
+   }
+-#endif
+ 
+   // Even when interfacing with printer settings using CUPS IPP, the print job
+   // may still expect PPD color values if the printer was added to the system
+-- 
+2.50.1 (Apple Git-155)
+
