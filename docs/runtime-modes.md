@@ -198,6 +198,8 @@ carbonyl [options] [url]
   --viewport=<WIDTHxHEIGHT>  override the CSS viewport Chromium lays out
                              against. Also via CARBONYL_VIEWPORT.
   -b, --bitmap               render text as quadrant bitmaps (default)
+  --chrome-rows=<N>          stack the URL/chrome bar across N terminal rows
+                             (default 1)
   -d, --debug                enable debug logs (also CARBONYL_ENV_DEBUG=1)
   -h, --help                 print usage
   -v, --version              print version
@@ -303,6 +305,13 @@ flag. `runtime-push.sh` accepts the same `--ozone=…` flag for
 symmetry. Tags published: `runtime-<hash>` (headless) and
 `runtime-x11-<hash>` (x11), keyed on hashes of the patch + bridge
 source set.
+
+**Platforms.** Runtimes are published per platform triple:
+`x86_64-unknown-linux-gnu` (Linux) and `aarch64-apple-darwin` (macOS,
+Apple Silicon). `runtime-pull.sh` resolves the host triple automatically
+(override with explicit `cpu`/`platform` args). The macOS arm64 runtime is
+built on the `mutsu` host over SSH rather than a Gitea runner — see
+[ci-runner-mutsu.md](ci-runner-mutsu.md).
 
 ## Cutting a release
 
