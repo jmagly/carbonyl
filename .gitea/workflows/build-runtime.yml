@@ -487,12 +487,50 @@ jobs:
 
       - name: Smoke test binary
         run: |
+          set -euo pipefail
           TRIPLE="${{ env.TRIPLE }}"
           OZONE="${{ matrix.ozone }}"
-          BINARY="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}/carbonyl"
-          LD_LIBRARY_PATH="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}" \
-            "${BINARY}" --version
-          echo "[smoke] built carbonyl ${OZONE}/${TRIPLE}"
+          CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          BIN_DIR="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}"
+          BINARY="${BIN_DIR}/carbonyl"
+
+          # The built binary must exist for every arch.
+          if [ ! -x "${BINARY}" ]; then
+            echo "ERROR: built binary missing or not executable: ${BINARY}" >&2
+            exit 1
+          fi
+
+          # Normalise target + host CPU so we can tell native from cross builds.
+          case "${CPU}" in
+            amd64|x86_64)  target_cpu="x86_64" ;;
+            arm64|aarch64) target_cpu="aarch64" ;;
+            *) echo "ERROR: unknown arch '${CPU}'" >&2; exit 1 ;;
+          esac
+          host_cpu="$(uname -m)"
+
+          if [ "${target_cpu}" = "${host_cpu}" ]; then
+            # Native build — full exec smoke test (unchanged behaviour for amd64
+            # on the x86_64 titan host; the working path keeps its real signal).
+            LD_LIBRARY_PATH="${BIN_DIR}" "${BINARY}" --version
+            echo "[smoke] native exec OK: carbonyl ${OZONE}/${TRIPLE}"
+          else
+            # Cross-compiled build (e.g. aarch64 target on the x86_64 titan host):
+            # the binary cannot exec natively, so verify it IS the expected
+            # architecture rather than failing on exec or skipping silently.
+            # End-to-end exec of the arm64 runtime is covered by #107.
+            echo "[smoke] cross-arch build (target=${target_cpu}, host=${host_cpu}) — exec smoke skipped, checking binary architecture"
+            arch_report="$(file -b "${BINARY}")"
+            echo "[smoke] file: ${arch_report}"
+            case "${target_cpu}" in
+              aarch64) pattern='aarch64|ARM aarch64' ;;
+              x86_64)  pattern='x86-64|x86_64' ;;
+            esac
+            if ! printf '%s\n' "${arch_report}" | grep -qiE "${pattern}"; then
+              echo "ERROR: expected ${target_cpu} binary, got: ${arch_report}" >&2
+              exit 1
+            fi
+            echo "[smoke] cross-arch arch-check OK: carbonyl ${OZONE}/${TRIPLE}"
+          fi
 
       - name: Restore args.gn to canonical state
         # So the next CI run sees the canonical (headless) args.gn, not our
