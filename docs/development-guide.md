@@ -163,11 +163,25 @@ Keep patch diffs minimal. Larger Chromium changes dramatically increase future r
 - Conventional Commits format: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`
 - Subject line: imperative mood, under 72 characters.
 - Body: explain *why*, not *what*.
+- **Commit identity**: every commit and merge MUST carry the operator's global
+  git identity (`git config --global user.name` / `user.email`) — not a bot or
+  API-token account, and not a repo-local or env override. Verify with
+  `git config user.email` before committing.
 
 **Pull Requests**
 - One logical change per PR.
 - Tests required for new code.
 - Reference the relevant issue or ADR when applicable.
+- **Merge locally, not via the forge API.** A Gitea/GitHub API merge (the web
+  "Merge" button, `gh pr merge`, or an MCP `pull_request_write merge`) authors
+  the squash/merge commit as the *API token's* account, not the human operator.
+  Merge on your machine instead so the merge carries your global identity:
+  ```bash
+  git fetch origin && git checkout main && git pull --ff-only origin main
+  git merge --squash origin/<branch>
+  git commit                       # subject: "<type>(scope): … (#PR)"
+  git push origin main             # PR auto-closes on push
+  ```
 
 ---
 
