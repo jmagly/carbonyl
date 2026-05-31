@@ -31,3 +31,30 @@
 ## [2026-05-22 06:23] update | Posted AL CYCLE #1 to roctinam/carbonyl#99 (--viewport ignored); identified Gap 1 (x11 ozone bypasses HeadlessScreen) + Gap 2 (terminal-render dpi); 3 fix paths a/b/c presented
 ## [2026-05-22 14:28] update | PR #100 opened for #99 Gap 2 (terminal-render viewport); cycle 2 posted; PR 2 (chromium patch 0029 for x11) queued
 ## [2026-05-22 14:34] update | PR #100 merged (squash); PR #101 opened with chromium patch 0029 for #99 Gap 1; cycle 3 posted
+## [2026-05-24 05:10] deploy | aiwg refresh --dry-run
+## [2026-05-24 05:11] deploy | aiwg use all
+## [2026-05-24 05:11] update | aiwg index stats --json
+## [2026-05-24 05:11] deploy | aiwg refresh
+## [2026-05-24 05:18] update | aiwg index stats --json
+## [2026-05-24 05:18] update | aiwg index stats --json
+## [2026-05-24 07:19] update | address-issues #67: posted AL CYCLE #1 audit + decomposition proposal; full close blocked on titan cross-compile + macOS ARM hardware
+## [2026-05-24 07:26] create | address-issues #67: created sub-issues #107/#108/#109; opened PR #110 (cross-arch smoke guard) under #107
+## [2026-05-24 19:49] create | #109 macOS arm64: bootstrapped mutsu (repo+depot_tools+rust 1.91.0), started detached gclient sync (M148, ~150GB) under caffeinate/nohup
+## [2026-05-24 20:54] update | #109 macOS arm64: gclient sync COMPLETE (src@65db666=148.0.7778.167, clean, DEPS consistent, mac-arm PGO present). Proceeding to patches.sh apply.
+## [2026-05-24 21:03] update | #109 macOS arm64: gn gen SUCCEEDS (29906 targets). Fixes: xcodebuild shim + find_sdk.py CLT fallback + minimal mac args.gn (SDK 15.4, no full Xcode). Building libcarbonyl next.
+## [2026-05-24 21:07] create | #109 macOS arm64: ninja dry-run green (37978 steps -> LINK headless_shell); launched real compile detached (PID 95248) + watcher b9evi69ch
+## [2026-05-24 21:14] update | #109 macOS arm64: build halted at 1457/37978 on python3.9 (env.sh appends depot_tools; system py 3.9 lacks PEP604). Fixed via .pybin shim->depot_tools py3.11.8; build resumed (PID 97817).
+## [2026-05-24 21:20] update | #109 macOS arm64: build halted ~922/36522 on 'Too many open files' (macOS soft ulimit -n=256). Fix: ulimit -n 61440 + -j8 (16GB/10core). Resuming.
+## [2026-05-24 21:27] update | #109 macOS arm64: build failed ~3441/35597 — skia_utils_mac.mm needs kCGImageByteOrder32Host (absent in 15.4 SDK, present in 26.4). Fix: mac_sdk_min=26.0 (build vs 26.4 SDK, deploy target 12.0). Full rebuild.
+## [2026-05-24 21:38] update | #109 macOS arm64: 26.4 SDK cleared skia symbol; build reached ~6870/36956, failed on ANGLE Metal shader compile (xcrun metal = Xcode-only). Headless needs no Metal -> angle_enable_metal=false. Resuming.
+## [2026-05-25 00:02] update | #109 macOS arm64: build reached 27404/30006 (91%); failed on printing_context_mac.mm orphan #endif — spurious hunk from carbonyl patch 0013 (latent bug, mac-only file uncompiled on Linux). Removing orphan #endif in-tree; patch 0013 needs correction for PR. Resuming.
+## [2026-05-25 00:36] update | #109 macOS arm64: build 2556/2596; headless_browser_impl.h references device::GeolocationSystemPermissionManager (patch-readded stale IS_MAC block, missing fwd-decl; not in M148 baseline). Adding fwd decl in-tree; patch needs fix for PR. Resuming.
+## [2026-05-25 00:39] create | #109 macOS arm64: BUILD SUCCESS — headless_shell linked (420MB Mach-O arm64) on CLT-only mutsu. Smoke-testing + packaging next.
+## [2026-05-25 00:43] create | #109 macOS arm64: FUNCTIONAL SUCCESS — carbonyl --version + --dump-text render OK on mutsu (Carbonyl 0.2.0-alpha.3). Packaged aarch64-apple-darwin.tgz (112M). Tarball built with in-tree fixes not yet folded to patches (reproducibility pending).
+## [2026-05-25 03:51] promote | merged #110/#111 + release-prep #112 to main (fb957f0, global identity); v0.2.0-alpha.7 prepped
+## [2026-05-25 04:32] promote | cut v0.2.0-alpha.7: tag pushed (Joseph Magly), release.yml published linux headless+x11, macOS arm64 attached; runtime e38a57d2afdbe7e7 (3 platforms)
+## [2026-05-25 05:02] update | rewrote #110/#111 (aeb4f0b,e3853a7) authorship roctibot->Joseph Magly; force-pushed main fb957f0->445cb22 + moved tag v0.2.0-alpha.7; tree identical, release 3-platform assets intact
+## [2026-05-31 18:19] deploy | aiwg use all
+## [2026-05-31 18:19] deploy | aiwg use all --provider codex
+## [2026-05-31 18:20] deploy | aiwg use all
+## [2026-05-31 18:20] deploy | aiwg use all --provider codex
