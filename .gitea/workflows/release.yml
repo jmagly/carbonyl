@@ -42,6 +42,14 @@ on:
         description: 'carbonyl-builder image tag (sha-<7>, latest, or empty for the repo pin)'
         required: false
         default: ''
+      include_macos:
+        description: 'Include the aarch64-apple-darwin (macOS) runtime; fails loudly if its runtime asset is missing'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
   CARGO_TERM_COLOR: always
@@ -74,6 +82,12 @@ jobs:
             *) echo "ERROR: unknown ozone_platform '${OZONE_INPUT}'" >&2; exit 1 ;;
           esac
 
+          # macOS (aarch64-apple-darwin) inclusion — default on (#113).
+          # macOS is headless-only and its tarball lives on the shared
+          # runtime-<hash> release alongside the Linux x86_64 tarball.
+          # arm64-linux is a separate triple, tracked under #108/#116.
+          INCLUDE_MACOS="${{ github.event.inputs.include_macos || 'true' }}"
+
           # Builder image resolution — same order as check.yml /
           # build-runtime.yml: dispatch input → .gitea/builder-image-pin
           # → :latest fallback. See #66.
@@ -98,7 +112,8 @@ jobs:
           echo "OZONE_INPUT=${OZONE_INPUT}"       >> "$GITHUB_ENV"
           echo "OZONE_VARIANTS=${OZONE_VARIANTS}" >> "$GITHUB_ENV"
           echo "BUILDER_IMAGE=${IMAGE}"           >> "$GITHUB_ENV"
-          echo "[release] tag=${TAG} version=${VERSION} variants=[${OZONE_VARIANTS}]"
+          echo "INCLUDE_MACOS=${INCLUDE_MACOS}"   >> "$GITHUB_ENV"
+          echo "[release] tag=${TAG} version=${VERSION} variants=[${OZONE_VARIANTS}] include_macos=${INCLUDE_MACOS}"
 
       - name: Validate token presence
         run: |
@@ -140,9 +155,12 @@ jobs:
           echo "HASH=${HASH}" >> "$GITHUB_ENV"
           echo "[release] runtime hash: ${HASH}"
 
-      - name: Resolve target architecture (amd64 only for now)
+      - name: Resolve Linux target architecture
         run: |
-          # Multi-arch is tracked under #67. Today we publish amd64 only.
+          # Linux triple for the ozone-variant loop below. macOS
+          # (aarch64-apple-darwin) is staged separately (#113). The
+          # aarch64-unknown-linux-gnu Linux triple is still pending a
+          # published runtime (#116) before it joins this matrix (#108).
           TRIPLE="x86_64-unknown-linux-gnu"
           echo "TRIPLE=${TRIPLE}" >> "$GITHUB_ENV"
 
@@ -172,6 +190,31 @@ jobs:
             echo "       Releasing without all requested variants would silently" >&2
             echo "       drift artefacts. Run build-runtime.yml for the missing" >&2
             echo "       variant(s), then re-run this workflow." >&2
+            exit 1
+          fi
+
+      - name: Verify macOS runtime asset exists (#113)
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          if [ "${INCLUDE_MACOS}" != "true" ]; then
+            echo "[release] include_macos=false — skipping macOS runtime"
+            exit 0
+          fi
+          # macOS is headless-only; the aarch64-apple-darwin tarball is
+          # published onto the shared headless runtime-<hash> release by
+          # scripts/runtime-push.sh arm64 (run on mutsu — docs/ci-runner-mutsu.md).
+          runtime_tag="runtime-${HASH}"
+          API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
+          assets="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" \
+            | jq -r '.assets[].name' 2>/dev/null || true)"
+          if echo "${assets}" | grep -qx "aarch64-apple-darwin.tgz"; then
+            echo "[release] macOS runtime asset present on ${runtime_tag}"
+          else
+            echo "ERROR: macOS runtime 'aarch64-apple-darwin.tgz' not found on '${runtime_tag}'." >&2
+            echo "       Build it on mutsu (scripts/build-macos.sh) and publish for this hash:" >&2
+            echo "         CARBONYL_OZONE_TAG=headless bash scripts/runtime-push.sh arm64" >&2
+            echo "       OR re-run this workflow with include_macos=false for a Linux-only release." >&2
             exit 1
           fi
 
@@ -206,6 +249,27 @@ jobs:
 
           ls -lh "${STAGE}"
           echo "STAGE=${STAGE}" >> "$GITHUB_ENV"
+
+      - name: Stage macOS (aarch64-apple-darwin) asset (#113)
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          if [ "${INCLUDE_MACOS}" != "true" ]; then
+            echo "[release] include_macos=false — not staging macOS asset"
+            exit 0
+          fi
+          # Headless-only; pulled from the shared runtime-<hash> release.
+          # Staged into the same STAGE dir, so the Gitea-upload and
+          # GitHub-mirror steps below carry it with no further changes.
+          runtime_tag="runtime-${HASH}"
+          asset_name="carbonyl-${VERSION}-aarch64-apple-darwin.tgz"
+          url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/aarch64-apple-darwin.tgz"
+          tmp="${STAGE}/.dl-macos.tgz"
+          curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${tmp}" "${url}"
+          mv "${tmp}" "${STAGE}/${asset_name}"
+          ( cd "${STAGE}" && sha256sum "${asset_name}" > "${asset_name}.sha256" )
+          echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
+          ls -lh "${STAGE}"
 
       - name: Resolve release notes
         run: |
