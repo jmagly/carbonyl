@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "carbonyl/src/browser/accessibility_handler.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -83,9 +84,13 @@ int ParsePositiveInt(const std::string& raw, int fallback) {
   return fallback;
 }
 
-// JS expression for each mode. Each must return a string when evaluated
-// in an isolated world; ExecuteJavaScriptInIsolatedWorld delivers the
-// result through the callback as a base::Value.
+// JS expression for the isolated-world eval modes. Each must return a
+// string when evaluated in an isolated world; ExecuteJavaScriptInIsolatedWorld
+// delivers the result through the callback as a base::Value.
+//
+// kAccessibility is NOT handled here: it takes the browser-process AX
+// snapshot path in OnIdleElapsed (issue #4 / #90), not a JS eval. This
+// function is only consulted for the JS-eval modes.
 const char* ScriptForMode(DumpTextHandler::Mode mode) {
   switch (mode) {
     case DumpTextHandler::Mode::kInnerText:
@@ -96,14 +101,10 @@ const char* ScriptForMode(DumpTextHandler::Mode mode) {
           "? new XMLSerializer().serializeToString(document.doctype) + '\\n' "
           ": '') + document.documentElement.outerHTML";
     case DumpTextHandler::Mode::kAccessibility:
-      // The accessibility-tree extraction backed by issue #4 is not yet
-      // wired. Until it lands, fall back to innerText so callers get
-      // useful output instead of an empty string. The Rust CLI warns
-      // about this in the cycle-1 docs; the warning here is for callers
-      // who bypass the Rust layer.
-      LOG(WARNING) << "carbonyl --dump-text=accessibility: backing API "
-                      "(issue #4) not yet wired; emitting innerText";
-      return "document.body ? document.body.innerText : ''";
+      // Unreachable: kAccessibility is intercepted in OnIdleElapsed and
+      // never routed through the JS-eval path. Kept for switch
+      // exhaustiveness; returns a benign empty expression.
+      return "''";
   }
   return "''";
 }
@@ -232,9 +233,26 @@ void DumpTextHandler::OnIdleElapsed() {
   // and exit with code 6. Otherwise the extractor would yield the empty
   // body of the styled chrome-error page and mask the failure as exit 0.
   if (nav_failed_) {
-    LOG(WARNING) << "carbonyl --dump-text: navigation failed (net::"
+    // net::ErrorToString already prepends "net::"; don't double it (#97).
+    LOG(WARNING) << "carbonyl --dump-text: navigation failed ("
                  << net::ErrorToString(nav_error_code_) << "); exit 6";
     EmitAndExit(std::string(), 6);
+    return;
+  }
+
+  // Accessibility mode (#4 / #90): use the browser-process AX snapshot
+  // rather than an isolated-world JS eval. AccessibilityHandler is
+  // installed unconditionally in OnBrowserStart (chromium patch 0028) and
+  // forces ui::kAXModeWebContentsOnly, so by the time the load+idle window
+  // has elapsed the tree is populated. GetTreeJSON() is synchronous, runs
+  // on this (UI) thread, never returns nullptr, and yields the sentinel
+  // {"error":"no_tree"} on any failure path. The returned C string is heap
+  // allocated and must be released via carbonyl_free_string().
+  if (mode_ == Mode::kAccessibility) {
+    const char* tree_json = AccessibilityHandler::GetTreeJSON();
+    std::string out = tree_json ? tree_json : "";
+    carbonyl_free_string(tree_json);
+    EmitAndExit(out, 0);
     return;
   }
 

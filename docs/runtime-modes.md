@@ -145,8 +145,13 @@ carbonyl --dump-text=raw-dom --max-wait=10000 https://example.com
 | Mode | Source | Use case |
 |---|---|---|
 | `innertext` (default) | `document.body.innerText` | Visual order; paragraphs, list items, table rows |
-| `accessibility` | Accessibility tree (requires #4) | Semantic structure; headings, landmarks |
+| `accessibility` | Browser-process AX snapshot, serialized to JSON | Semantic structure; headings, landmarks, roles |
 | `raw-dom` | `document.documentElement.outerHTML` | No transformation; full HTML |
+
+`accessibility` mode does not eval JavaScript. It calls the browser-process
+accessibility-tree snapshot (the FFI from #4, `AccessibilityHandler`) and
+emits the role/name/value/landmark JSON tree on stdout. On any failure path
+(AX mode off, no bound WebContents) it emits the sentinel `{"error":"no_tree"}`.
 
 **Timing flags:**
 

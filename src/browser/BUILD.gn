@@ -35,6 +35,11 @@ component("dump_text") {
   deps = [
     "//base",
     "//content/public/browser",
+    # AccessibilityHandler::GetTreeJSON() + carbonyl_free_string() for the
+    # --dump-text=accessibility browser-process snapshot path (#4 / #90).
+    # Sibling component; both already depend on //content/public/browser,
+    # and :accessibility does not depend on :dump_text, so no dep cycle.
+    ":accessibility",
     # HeadlessBrowserImpl + ShutdownWithExitCode (per #93, ordered shutdown
     # path). Headers under headless/lib/browser/ are not part of the
     # public surface but :headless_browser exposes them for embedders
