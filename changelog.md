@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.8] - 2026-06-02
+
+### 🐛 Bug Fixes
+
+- Wire --dump-text=accessibility to browser-process AX snapshot
+
+### Ci
+
+- Automate aarch64-apple-darwin staging + mirror ([#113](https://github.com/jmagly/carbonyl/issues/113))
+
+## [0.2.0-alpha.7] - 2026-05-25
+
+### 🚀 Features
+
+- --chrome-rows=N flag to stack URL bar across N rows ([#75](https://github.com/jmagly/carbonyl/issues/75)) ([#80](https://github.com/jmagly/carbonyl/issues/80))
+- --dump-text mode for headless text extraction ([#88](https://github.com/jmagly/carbonyl/issues/88))
+- Add accessibility tree FFI ([#98](https://github.com/jmagly/carbonyl/issues/98))
+- Formalize aarch64-apple-darwin build path ([#109](https://github.com/jmagly/carbonyl/issues/109)) ([#111](https://github.com/jmagly/carbonyl/issues/111))
+
+### 🐛 Bug Fixes
+
+- Collapse near-uniform quadrants to single color ([#74](https://github.com/jmagly/carbonyl/issues/74)) ([#79](https://github.com/jmagly/carbonyl/issues/79))
+- Exit 6 on navigation failure ([#91](https://github.com/jmagly/carbonyl/issues/91))
+- Use sample window as CSS viewport in terminal-render mode ([#100](https://github.com/jmagly/carbonyl/issues/100))
+- Rewrite patch 0028 with verified source context ([#102](https://github.com/jmagly/carbonyl/issues/102))
+- Repair post-99 main failures ([#104](https://github.com/jmagly/carbonyl/issues/104))
+- Expose libcarbonyl to build helpers ([#105](https://github.com/jmagly/carbonyl/issues/105))
+- Prevent same-run runtime lock steal ([#106](https://github.com/jmagly/carbonyl/issues/106))
+
+### 📖 Documentation
+
+- Require global git identity, merge PRs locally
+
+### ⚡ Performance
+
+- Replace std::_Exit with ordered chromium shutdown ([#93](https://github.com/jmagly/carbonyl/issues/93))
+
+### Chromium
+
+- Honor --viewport in X11 ozone screen (patch 0029) ([#101](https://github.com/jmagly/carbonyl/issues/101))
+
+### Ci
+
+- Pipefail-safe lock probes + holder-aware release ([#84](https://github.com/jmagly/carbonyl/issues/84) follow-on) ([#86](https://github.com/jmagly/carbonyl/issues/86))
+- Add validate-patches workflow for pre-merge patch verification ([#103](https://github.com/jmagly/carbonyl/issues/103))
+- Guard smoke test for cross-arch builds ([#110](https://github.com/jmagly/carbonyl/issues/110))
+
 ## [0.2.0-alpha.6] - 2026-05-21
 
 ### 🐛 Bug Fixes
@@ -214,6 +261,13 @@ All notable changes to this project will be documented in this file.
 
 ### 🚀 Features
 
+- Add Docker image ([#4](https://github.com/jmagly/carbonyl/issues/4))
+- Add PDF support ([#8](https://github.com/jmagly/carbonyl/issues/8))
+- Add `--width` and `--height` options ([#15](https://github.com/jmagly/carbonyl/issues/15))
+- Add `--full` option
+- Add `--wait` option
+- Complete unicode support ([#20](https://github.com/jmagly/carbonyl/issues/20))
+- Raster support ([#22](https://github.com/jmagly/carbonyl/issues/22))
 - Better true color detection
 - Linux support
 - Xterm title
@@ -224,6 +278,13 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Bug Fixes
 
+- Fix gmail.com and youtube.com in Docker ([#7](https://github.com/jmagly/carbonyl/issues/7))
+- Fix `<canvas>` vectorization ([#10](https://github.com/jmagly/carbonyl/issues/10))
+- Remove docker-specific error messages ([#13](https://github.com/jmagly/carbonyl/issues/13))
+- Fix viewport height with `--full`
+- Prevent truncated stdout ([#16](https://github.com/jmagly/carbonyl/issues/16))
+- Dedupe `--wait` shortcut to `-W` ([#28](https://github.com/jmagly/carbonyl/issues/28))
+- Support websites with zone.js ([#29](https://github.com/jmagly/carbonyl/issues/29))
 - Parser fixes
 - Properly enter tab and return keys
 - Fix some special characters ([#35](https://github.com/jmagly/carbonyl/issues/35))
@@ -237,6 +298,10 @@ All notable changes to this project will be documented in this file.
 
 ### 📖 Documentation
 
+- Add CLI help to readme ([#18](https://github.com/jmagly/carbonyl/issues/18))
+- Fix Docker build instructions ([#21](https://github.com/jmagly/carbonyl/issues/21))
+- Fix readme blockquotes and add post link
+- Update CLI help
 - Upload demo videos
 - Fix video layout
 - Fix a typo ([#1](https://github.com/jmagly/carbonyl/issues/1))
@@ -251,8 +316,13 @@ All notable changes to this project will be documented in this file.
 - Fix a typo (`know` -> `known`) ([#71](https://github.com/jmagly/carbonyl/issues/71))
 - Add license
 
+### ⚡ Performance
+
+- Stream output instead of buffering it
+
 ### Build
 
+- Fix arm64 build
 - Various build system fixes ([#20](https://github.com/jmagly/carbonyl/issues/20))
 
 

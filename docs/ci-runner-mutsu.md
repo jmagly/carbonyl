@@ -3,8 +3,14 @@
 Carbonyl's macOS ARM runtime (`aarch64-apple-darwin`) is built on **mutsu**, an
 Apple Silicon Mac. Unlike titan (see [ci-runner-titan.md](ci-runner-titan.md)),
 mutsu is **not** a Gitea Actions runner — the fleet does not run the Gitea
-runner on macOS (an RPC issue), so the mac build is driven over SSH. CI wiring
-can come later; today an operator (or an agent with SSH access) runs one script.
+runner on macOS (an RPC issue), so the mac build is driven over SSH. The
+**release side is now automated**: once a macOS runtime is published to
+`runtime-<hash>`, `release.yml` stages `carbonyl-<version>-aarch64-apple-darwin.tgz`
+and mirrors it to GitHub with no manual steps (gated by the `include_macos`
+toggle; #113 / #117). The **build trigger** is still manual — an operator (or an
+agent with SSH access) runs the one script below. Automating that trigger
+(SSH-dispatch / scheduled build) is tracked under #113, alongside the
+arm64-linux build plumbing (#116).
 
 Tracks: roctinam/carbonyl #109 (parent #67).
 
