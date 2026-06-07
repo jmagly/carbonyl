@@ -13,7 +13,10 @@ __pycache__/
 /.ccache
 /.git_cache
 /.vscode
-/build
+/build/*
+!/build/Dockerfile.builder
+!/build/Dockerfile.runtime
+!/build/.dockerignore
 /chromium/*
 !/chromium/.gclient
 !/chromium/depot_tools

@@ -1,0 +1,145 @@
+# Publish runnable Carbonyl runtime images to GHCR.
+#
+# Builds from pre-built release tarballs (no Chromium compile). Triggered on
+# v* tags and manual dispatch. See build/Dockerfile.runtime and readme.md.
+
+name: Docker
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without leading v (e.g. 0.2.0-alpha.8)'
+        required: true
+        default: '0.2.0-alpha.8'
+      ozone:
+        description: 'Ozone variant to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - headless
+          - x11
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: carbonyl
+  # Runtime tarballs are published on the upstream repo's GitHub Releases.
+  RELEASE_REPO: jmagly/carbonyl
+
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
+jobs:
+  docker:
+    name: Build ${{ matrix.ozone }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ozone: [headless, x11]
+        include:
+          - ozone: headless
+            asset_suffix: x86_64-unknown-linux-gnu
+            tag_suffix: ''
+          - ozone: x11
+            asset_suffix: x11-x86_64-unknown-linux-gnu
+            tag_suffix: '-x11'
+    # Skip matrix rows that don't match a single-variant manual dispatch.
+    if: >-
+      github.event_name != 'workflow_dispatch'
+      || github.event.inputs.ozone == 'both'
+      || github.event.inputs.ozone == matrix.ozone
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          [ -n "$VERSION" ] || { echo "ERROR: empty version" >&2; exit 1; }
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "asset=carbonyl-${VERSION}-${{ matrix.asset_suffix }}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Download runtime tarball
+        run: |
+          gh release download "v${{ steps.meta.outputs.version }}" \
+            -R "${{ env.RELEASE_REPO }}" \
+            -p "${{ steps.meta.outputs.asset }}" \
+            -p "${{ steps.meta.outputs.asset }}.sha256" \
+            -D /tmp/runtime
+
+      - name: Verify SHA256
+        run: |
+          cd /tmp/runtime
+          sha256sum -c "${{ steps.meta.outputs.asset }}.sha256"
+
+      - name: Prepare build context
+        run: |
+          rm -rf build/carbonyl-runtime
+          mkdir -p build/carbonyl-runtime
+          tar -xzf "/tmp/runtime/${{ steps.meta.outputs.asset }}" \
+            -C build/carbonyl-runtime --strip-components=1
+
+      - name: Set up Docker Buildx
+        id: setup-buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Cache apt mount directory
+        uses: actions/cache@v4
+        id: apt-cache
+        with:
+          path: cache-mount
+          key: apt-cache-${{ matrix.ozone }}-${{ hashFiles('build/Dockerfile.runtime') }}
+
+      - name: Restore apt cache mounts
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.setup-buildx.outputs.name }}
+          cache-dir: cache-mount
+          dockerfile: build/Dockerfile.runtime
+          skip-extraction: ${{ steps.apt-cache.outputs.cache-hit }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: docker-meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.meta.outputs.version }}${{ matrix.tag_suffix }}
+            type=raw,value=latest,enable=${{ matrix.ozone == 'headless' && github.event_name != 'workflow_dispatch' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: build
+          file: build/Dockerfile.runtime
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.docker-meta.outputs.tags }}
+          labels: ${{ steps.docker-meta.outputs.labels }}
+          provenance: false
+          cache-from: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.ozone }}
+            type=gha,scope=carbonyl-${{ matrix.ozone }}
+          cache-to: |
+            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.ozone }},mode=max,compression=zstd
+            type=gha,mode=max,scope=carbonyl-${{ matrix.ozone }}

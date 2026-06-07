@@ -19,6 +19,7 @@ pip install carbonyl-agent && carbonyl-agent install
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Chromium M147](https://img.shields.io/badge/chromium-M147.0.7727.94-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromium.googlesource.com/chromium/src/+/refs/tags/147.0.7727.94)
 [![Runtime](https://img.shields.io/badge/runtime-releases-green?style=flat-square)](https://github.com/jmagly/carbonyl/releases)
+[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Fjmagly%2Fcarbonyl-blue?style=flat-square)](https://github.com/jmagly/carbonyl/pkgs/container/carbonyl)
 
 [**Get Started**](#-get-started) · [**Fork Status**](#active-fork--continued-maintenance) · [**Build from Source**](#building-from-source) · [**Comparisons**](#comparisons) · [**Blog**](https://fathy.fr/carbonyl)
 
@@ -72,17 +73,98 @@ The installer downloads a verified-by-SHA256 runtime tarball from the release pa
 
 ### Run Carbonyl directly
 
+#### Docker (recommended for CLI use)
+
+Images are published to GitHub Container Registry on each `v*` release tag via [`.github/workflows/docker.yml`](.github/workflows/docker.yml). Built from verified release tarballs — no compilation required.
+
+| Tag | Contents | Use when |
+|-----|----------|----------|
+| `ghcr.io/jmagly/carbonyl:latest` | headless runtime, current release | Default terminal browsing |
+| `ghcr.io/jmagly/carbonyl:<version>` | headless runtime, pinned (e.g. `0.2.0-alpha.8`) | Reproducible deploys |
+| `ghcr.io/jmagly/carbonyl:<version>-x11` | x11 ozone runtime, pinned | Automation needing `--ozone-platform=x11` |
+
+The image `ENTRYPOINT` is the `carbonyl` binary with safe container defaults (`--no-sandbox`, `--disable-dev-shm-usage`, `--user-data-dir=/carbonyl/data`). **Arguments you pass to `docker run` after the image name are forwarded to the carbonyl CLI.**
+
 ```bash
-# From Docker (upstream image — M111-era, dated but works)
-docker run --rm -ti fathyb/carbonyl https://youtube.com
-
-# Or via npm (upstream package — M111-era)
-npm install --global carbonyl
-carbonyl https://github.com
-
-# Or download a pre-built runtime from release assets (M147, current)
-# See: https://github.com/jmagly/carbonyl/releases
+docker pull ghcr.io/jmagly/carbonyl:latest
 ```
+
+**Browse a site in your terminal (interactive):**
+
+```bash
+docker run --rm -it ghcr.io/jmagly/carbonyl:latest https://example.com
+```
+
+**Print version or help (no URL):**
+
+```bash
+docker run --rm ghcr.io/jmagly/carbonyl:latest --version
+docker run --rm ghcr.io/jmagly/carbonyl:latest --help
+```
+
+**Extract page text (non-interactive, pipe-friendly):**
+
+```bash
+docker run --rm ghcr.io/jmagly/carbonyl:latest \
+  --dump-text https://example.com
+
+docker run --rm ghcr.io/jmagly/carbonyl:latest \
+  --dump-text=accessibility --idle=2000 https://example.com
+
+docker run --rm ghcr.io/jmagly/carbonyl:latest \
+  --dump-text=raw-dom --max-wait=10000 https://example.com > page.html
+```
+
+**Persist cookies and session data:**
+
+```bash
+docker volume create carbonyl-profile
+
+docker run --rm -it \
+  -v carbonyl-profile:/carbonyl/data \
+  ghcr.io/jmagly/carbonyl:latest https://app.example.com/login
+```
+
+**Pin a specific release:**
+
+```bash
+docker run --rm -it \
+  ghcr.io/jmagly/carbonyl:0.2.0-alpha.8 https://example.com
+```
+
+**x11 variant (automation / trusted input):**
+
+```bash
+docker run --rm -it \
+  -e DISPLAY=:99 \
+  --device=/dev/uinput \
+  --group-add input \
+  ghcr.io/jmagly/carbonyl:0.2.0-alpha.8-x11 \
+  --ozone-platform=x11 https://example.com
+```
+
+Requires a host or sidecar X server and uinput access. For a turnkey container stack, see [`carbonyl-agent` docker patterns](https://github.com/jmagly/carbonyl-agent) and [docs/runtime-modes.md](docs/runtime-modes.md).
+
+| Flag | Why |
+|------|-----|
+| `--rm` | Remove container on exit (recommended for one-shot CLI use) |
+| `-it` | Interactive terminal browsing |
+| `-v name:/carbonyl/data` | Persist profile/cookies |
+| `-e DISPLAY=:99` | Required for x11 ozone mode |
+| `--device=/dev/uinput` | Required for trusted input in x11 mode |
+
+> **Keyboard / vim-like navigation:** Carbonyl does **not** support Chromium extensions (Vimium, uBlock Origin, etc.) today. The runtime is based on `headless_shell`, which has no extension API ([fathyb/carbonyl#13](https://github.com/fathyb/carbonyl/issues/13)). Vim-like keyboard control is tracked as native keybindings ([#151](https://github.com/fathyb/carbonyl/issues/151)).
+
+**Legacy upstream (M111-era, outdated):**
+
+```bash
+docker run --rm -ti fathyb/carbonyl https://youtube.com   # original upstream image
+npm install --global carbonyl && carbonyl https://github.com
+```
+
+**Or download a pre-built runtime from release assets (current):**
+
+See [github.com/jmagly/carbonyl/releases](https://github.com/jmagly/carbonyl/releases)
 
 ### Runtime modes
 
@@ -272,6 +354,18 @@ Produces:
 - `out/Default/v8_context_snapshot.bin`
 
 #### Build the Docker image
+
+**GHCR runtime image (recommended — tarball-based, no Chromium compile):**
+
+```bash
+scripts/docker-runtime-context.sh 0.2.0-alpha.8        # headless
+scripts/docker-runtime-context.sh 0.2.0-alpha.8 x11    # x11 variant
+docker build -f build/Dockerfile.runtime build/
+```
+
+Published automatically on `v*` tag push via [`.github/workflows/docker.yml`](.github/workflows/docker.yml).
+
+**Legacy full-runtime Docker build (requires pre-built Chromium binaries):**
 
 ```bash
 ./scripts/docker-build.sh Default arm64
