@@ -29,6 +29,7 @@ env:
   IMAGE_NAME: carbonyl
   # Runtime tarballs are published on the upstream repo's GitHub Releases.
   RELEASE_REPO: jmagly/carbonyl
+  GH_TOKEN: ${{ github.token }}
 
 permissions:
   contents: read
