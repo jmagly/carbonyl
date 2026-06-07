@@ -8,6 +8,11 @@ name: Docker
 on:
   push:
     tags: ['v*']
+    branches: [main]
+    paths:
+      - 'build/Dockerfile.runtime'
+      - 'build/.dockerignore'
+      - '.github/workflows/docker.yml'
   workflow_dispatch:
     inputs:
       version:
@@ -77,8 +82,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          else
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          else
+            # main-branch rebuilds: pin to the newest published runtime on RELEASE_REPO.
+            VERSION="$(gh release list -R "${{ env.RELEASE_REPO }}" --limit 1 --json tagName --jq '.[0].tagName' | sed 's/^v//')"
           fi
           [ -n "$VERSION" ] || { echo "ERROR: empty version" >&2; exit 1; }
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -137,7 +145,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.meta.outputs.version }}${{ matrix.tag_suffix }}
-            type=raw,value=latest,enable=${{ matrix.ozone == 'headless' && github.event_name != 'workflow_dispatch' }}
+            type=raw,value=latest,enable=${{ matrix.ozone == 'headless' }}
 
       - name: Build and push
         uses: docker/build-push-action@v7
