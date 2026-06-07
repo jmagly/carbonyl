@@ -13,13 +13,13 @@
 **Chromium-based browser that runs in a terminal — 60 FPS, 0% idle CPU, SSH-friendly**
 
 ```bash
-docker run --rm -it ghcr.io/eslider/carbonyl:latest https://example.com
+docker run --rm -it ghcr.io/jmagly/carbonyl:latest https://example.com
 ```
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Chromium M147](https://img.shields.io/badge/chromium-M147.0.7727.94-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromium.googlesource.com/chromium/src/+/refs/tags/147.0.7727.94)
-[![Runtime](https://img.shields.io/badge/runtime-upstream%20releases-green?style=flat-square)](https://github.com/jmagly/carbonyl/releases)
-[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Feslider%2Fcarbonyl-blue?style=flat-square)](https://github.com/eSlider/carbonyl/pkgs/container/carbonyl)
+[![Runtime](https://img.shields.io/badge/runtime-releases-green?style=flat-square)](https://github.com/jmagly/carbonyl/releases)
+[![GHCR](https://img.shields.io/badge/GHCR-ghcr.io%2Fjmagly%2Fcarbonyl-blue?style=flat-square)](https://github.com/jmagly/carbonyl/pkgs/container/carbonyl)
 
 [**Get Started**](#-get-started) · [**Fork Status**](#active-fork--continued-maintenance) · [**Build from Source**](#building-from-source) · [**Comparisons**](#comparisons) · [**Blog**](https://fathy.fr/carbonyl)
 
@@ -31,7 +31,7 @@ docker run --rm -it ghcr.io/eslider/carbonyl:latest https://example.com
 
 Carbonyl is a Chromium-based browser that renders into terminal text. It supports pretty much all Web APIs — WebGL, WebGPU, audio and video playback, animations — and starts in less than a second, runs at 60 FPS, and idles at 0% CPU. It does not require a window server (works in a safe-mode console) and runs comfortably over SSH. Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
 
-This repository ([`eSlider/carbonyl`](https://github.com/eSlider/carbonyl)) is a fork of the actively maintained [`jmagly/carbonyl`](https://github.com/jmagly/carbonyl) line, which continues the original [`fathyb/carbonyl`](https://github.com/fathyb/carbonyl) project. It tracks upstream Chromium stable (currently M147) and ships runnable images via [`ghcr.io/eslider/carbonyl`](https://github.com/eSlider/carbonyl/pkgs/container/carbonyl).
+This repository (`jmagly/carbonyl`) is the **maintained fork** of the original [`fathyb/carbonyl`](https://github.com/fathyb/carbonyl), which has been inactive since early 2023. It tracks upstream Chromium stable (currently M147) and publishes runtime tarballs as release assets and Docker images on GHCR.
 
 ---
 
@@ -56,7 +56,7 @@ b.close()
 
 For multi-instance orchestration (N concurrent browsers over PTY + Unix socket, with gRPC + REST), see **[carbonyl-fleet](https://github.com/jmagly/carbonyl-fleet)**.
 
-This repo ([`eSlider/carbonyl`](https://github.com/eSlider/carbonyl)) packages the Chromium fork as Docker images on GHCR. Most users do **not** need to build it.
+This repo (`jmagly/carbonyl`) is the Chromium fork and the source of the runtime tarballs. Most users do **not** need to build it.
 
 ---
 
@@ -75,43 +75,43 @@ The installer downloads a verified-by-SHA256 runtime tarball from the release pa
 
 #### Docker (recommended for CLI use)
 
-Images are published to [`ghcr.io/eslider/carbonyl`](https://github.com/eSlider/carbonyl/pkgs/container/carbonyl) via [`.github/workflows/docker.yml`](.github/workflows/docker.yml) on `main` (when Docker files change) and on `v*` tags. Built from verified upstream release tarballs — no compilation required.
+Images are published to [`ghcr.io/jmagly/carbonyl`](https://github.com/jmagly/carbonyl/pkgs/container/carbonyl) via [`.github/workflows/docker.yml`](.github/workflows/docker.yml) on `main` (when Docker files change) and on `v*` tags. Built from verified release tarballs — no compilation required.
 
 | Tag | Contents | Use when |
 |-----|----------|----------|
-| `ghcr.io/eslider/carbonyl:latest` | headless runtime, current release | Default terminal browsing |
-| `ghcr.io/eslider/carbonyl:<version>` | headless runtime, pinned (e.g. `0.2.0-alpha.8`) | Reproducible deploys |
-| `ghcr.io/eslider/carbonyl:<version>-x11` | x11 ozone runtime, pinned | Automation needing `--ozone-platform=x11` |
+| `ghcr.io/jmagly/carbonyl:latest` | headless runtime, current release | Default terminal browsing |
+| `ghcr.io/jmagly/carbonyl:<version>` | headless runtime, pinned (e.g. `0.2.0-alpha.8`) | Reproducible deploys |
+| `ghcr.io/jmagly/carbonyl:<version>-x11` | x11 ozone runtime, pinned | Automation needing `--ozone-platform=x11` |
 
 The image runs via [`build/docker-entrypoint.sh`](build/docker-entrypoint.sh) with container-safe defaults (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `tini` as PID 1). **Arguments after the image name are forwarded to the carbonyl CLI.** Use a real terminal (`-it`); for scripts/CI without a TTY, prefer `--dump-text`.
 
 ```bash
-docker pull ghcr.io/eslider/carbonyl:latest
+docker pull ghcr.io/jmagly/carbonyl:latest
 ```
 
 **Browse a site in your terminal (interactive — requires a TTY):**
 
 ```bash
-docker run --rm -it ghcr.io/eslider/carbonyl:latest https://example.com
+docker run --rm -it ghcr.io/jmagly/carbonyl:latest https://example.com
 ```
 
 **Print version or help (no URL):**
 
 ```bash
-docker run --rm ghcr.io/eslider/carbonyl:latest --version
-docker run --rm ghcr.io/eslider/carbonyl:latest --help
+docker run --rm ghcr.io/jmagly/carbonyl:latest --version
+docker run --rm ghcr.io/jmagly/carbonyl:latest --help
 ```
 
 **Extract page text (non-interactive, pipe-friendly):**
 
 ```bash
-docker run --rm ghcr.io/eslider/carbonyl:latest \
+docker run --rm ghcr.io/jmagly/carbonyl:latest \
   --dump-text https://example.com
 
-docker run --rm ghcr.io/eslider/carbonyl:latest \
+docker run --rm ghcr.io/jmagly/carbonyl:latest \
   --dump-text=accessibility --idle=2000 https://example.com
 
-docker run --rm ghcr.io/eslider/carbonyl:latest \
+docker run --rm ghcr.io/jmagly/carbonyl:latest \
   --dump-text=raw-dom --max-wait=10000 https://example.com > page.html
 ```
 
@@ -122,14 +122,14 @@ docker volume create carbonyl-profile
 
 docker run --rm -it \
   -v carbonyl-profile:/carbonyl/data \
-  ghcr.io/eslider/carbonyl:latest https://app.example.com/login
+  ghcr.io/jmagly/carbonyl:latest https://app.example.com/login
 ```
 
 **Pin a specific release:**
 
 ```bash
 docker run --rm -it \
-  ghcr.io/eslider/carbonyl:0.2.0-alpha.8 https://example.com
+  ghcr.io/jmagly/carbonyl:0.2.0-alpha.8 https://example.com
 ```
 
 **x11 variant (automation / trusted input):**
@@ -139,7 +139,7 @@ docker run --rm -it \
   -e DISPLAY=:99 \
   --device=/dev/uinput \
   --group-add input \
-  ghcr.io/eslider/carbonyl:0.2.0-alpha.8-x11 \
+  ghcr.io/jmagly/carbonyl:0.2.0-alpha.8-x11 \
   --ozone-platform=x11 https://example.com
 ```
 
@@ -193,7 +193,7 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 - **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
 - **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.
 - **CI infrastructure** — automated workflows for fast checks and full Chromium runtime builds, pinned to dedicated build hosts.
-- **GHCR Docker images** ([`ghcr.io/eslider/carbonyl`](https://github.com/eSlider/carbonyl/pkgs/container/carbonyl)) — runnable headless and x11 images built from upstream release tarballs via GitHub Actions on this fork.
+- **GHCR Docker images** ([`ghcr.io/jmagly/carbonyl`](https://github.com/jmagly/carbonyl/pkgs/container/carbonyl)) — runnable headless and x11 images built from release tarballs via GitHub Actions.
 
 **`--carbonyl-b64-text` restored in M135**: the experimental text-capture mode was temporarily disabled during the initial M135 ship and has been re-enabled via a structural refactor (Path A, [issue #28](https://github.com/jmagly/carbonyl/issues/28)). Both bitmap rendering (default) and b64 text capture are functional on M147.
 
@@ -205,7 +205,7 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 
 | Repo | Purpose | Build tech |
 |------|---------|------------|
-| [`carbonyl`](https://github.com/eSlider/carbonyl) ([upstream](https://github.com/jmagly/carbonyl)) | Chromium fork + GHCR Docker images (this repo) | Chromium, GN, ninja, Rust |
+| [`carbonyl`](https://github.com/jmagly/carbonyl) | Chromium fork + runtime tarballs (this repo) | Chromium, GN, ninja, Rust |
 | [`carbonyl-agent`](https://github.com/jmagly/carbonyl-agent) | Python automation SDK (single-instance) | Python 3.11+, pyte, pexpect |
 | [`carbonyl-fleet`](https://github.com/jmagly/carbonyl-fleet) | Fleet server (N concurrent browsers, gRPC + REST) | Rust, tonic, axum |
 
@@ -364,7 +364,7 @@ scripts/docker-runtime-context.sh 0.2.0-alpha.8 x11    # x11 variant
 docker build -f build/Dockerfile.runtime build/
 ```
 
-Published automatically to `ghcr.io/eslider/carbonyl` on `main` and `v*` tags via [`.github/workflows/docker.yml`](.github/workflows/docker.yml).
+Published automatically to `ghcr.io/jmagly/carbonyl` on `main` and `v*` tags via [`.github/workflows/docker.yml`](.github/workflows/docker.yml).
 
 **Legacy full-runtime Docker build (requires pre-built Chromium binaries):**
 
@@ -397,9 +397,7 @@ See [MAINTENANCE.md](MAINTENANCE.md) for detailed upgrade procedures, patch reba
 
 ## Contributing
 
-PRs and issues welcome at [github.com/eSlider/carbonyl](https://github.com/eSlider/carbonyl).
-
-Upstream maintenance continues at [`jmagly/carbonyl`](https://github.com/jmagly/carbonyl).
+PRs and issues welcome at [github.com/jmagly/carbonyl](https://github.com/jmagly/carbonyl).
 
 Most meaningful changes to the Python automation path belong in [`carbonyl-agent`](https://github.com/jmagly/carbonyl-agent). This repo is the Chromium side — patches, build scripts, runtime infrastructure.
 
@@ -407,9 +405,9 @@ Most meaningful changes to the Python automation path belong in [`carbonyl-agent
 
 ## Community & Support
 
-- **Issues**: [github.com/eSlider/carbonyl/issues](https://github.com/eSlider/carbonyl/issues)
-- **GitHub Discussions**: [github.com/eSlider/carbonyl/discussions](https://github.com/eSlider/carbonyl/discussions)
-- **Docker images**: [ghcr.io/eslider/carbonyl](https://github.com/eSlider/carbonyl/pkgs/container/carbonyl)
+- **Issues**: [github.com/jmagly/carbonyl/issues](https://github.com/jmagly/carbonyl/issues)
+- **GitHub Discussions**: [github.com/jmagly/carbonyl/discussions](https://github.com/jmagly/carbonyl/discussions)
+- **Docker images**: [ghcr.io/jmagly/carbonyl](https://github.com/jmagly/carbonyl/pkgs/container/carbonyl)
 
 ---
 
@@ -455,7 +453,7 @@ Custom AI and blockchain solutions for the digital age.
 </tr>
 </table>
 
-**Interested in sponsoring?** Open a [GitHub Discussion](https://github.com/eSlider/carbonyl/discussions).
+**Interested in sponsoring?** Open a [GitHub Discussion](https://github.com/jmagly/carbonyl/discussions).
 
 ---
 
