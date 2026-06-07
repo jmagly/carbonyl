@@ -50,11 +50,7 @@ jobs:
           - ozone: x11
             asset_suffix: x11-x86_64-unknown-linux-gnu
             tag_suffix: '-x11'
-    # Skip matrix rows that don't match a single-variant manual dispatch.
-    if: >-
-      github.event_name != 'workflow_dispatch'
-      || github.event.inputs.ozone == 'both'
-      || github.event.inputs.ozone == matrix.ozone
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.ozone == 'both' || github.event.inputs.ozone == matrix.ozone }}
 
     steps:
       - name: Checkout
