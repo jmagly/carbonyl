@@ -69,6 +69,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Normalize GHCR image owner
+        run: echo "IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Resolve version
         id: meta
         run: |
@@ -131,7 +134,7 @@ jobs:
         id: docker-meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ steps.meta.outputs.version }}${{ matrix.tag_suffix }}
             type=raw,value=latest,enable=${{ matrix.ozone == 'headless' && github.event_name != 'workflow_dispatch' }}
@@ -147,8 +150,8 @@ jobs:
           labels: ${{ steps.docker-meta.outputs.labels }}
           provenance: false
           cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.ozone }}
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.ozone }}
             type=gha,scope=carbonyl-${{ matrix.ozone }}
           cache-to: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.ozone }},mode=max,compression=zstd
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.ozone }},mode=max,compression=zstd
             type=gha,mode=max,scope=carbonyl-${{ matrix.ozone }}
