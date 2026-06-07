@@ -17,6 +17,7 @@ __pycache__/
 !/build/Dockerfile.builder
 !/build/Dockerfile.runtime
 !/build/.dockerignore
+!/build/docker-entrypoint.sh
 /chromium/*
 !/chromium/.gclient
 !/chromium/depot_tools

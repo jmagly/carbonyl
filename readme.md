@@ -83,13 +83,13 @@ Images are published to [`ghcr.io/eslider/carbonyl`](https://github.com/eSlider/
 | `ghcr.io/eslider/carbonyl:<version>` | headless runtime, pinned (e.g. `0.2.0-alpha.8`) | Reproducible deploys |
 | `ghcr.io/eslider/carbonyl:<version>-x11` | x11 ozone runtime, pinned | Automation needing `--ozone-platform=x11` |
 
-The image `ENTRYPOINT` is the `carbonyl` binary with safe container defaults (`--no-sandbox`, `--disable-dev-shm-usage`, `--user-data-dir=/carbonyl/data`). **Arguments you pass to `docker run` after the image name are forwarded to the carbonyl CLI.**
+The image runs via [`build/docker-entrypoint.sh`](build/docker-entrypoint.sh) with container-safe defaults (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `tini` as PID 1). **Arguments after the image name are forwarded to the carbonyl CLI.** Use a real terminal (`-it`); for scripts/CI without a TTY, prefer `--dump-text`.
 
 ```bash
 docker pull ghcr.io/eslider/carbonyl:latest
 ```
 
-**Browse a site in your terminal (interactive):**
+**Browse a site in your terminal (interactive — requires a TTY):**
 
 ```bash
 docker run --rm -it ghcr.io/eslider/carbonyl:latest https://example.com
@@ -148,7 +148,7 @@ Requires a host or sidecar X server and uinput access. For a turnkey container s
 | Flag | Why |
 |------|-----|
 | `--rm` | Remove container on exit (recommended for one-shot CLI use) |
-| `-it` | Interactive terminal browsing |
+| `-it` | Interactive terminal browsing (**required** for rendered UI; omit only for `--dump-text` / `--version`) |
 | `-v name:/carbonyl/data` | Persist profile/cookies |
 | `-e DISPLAY=:99` | Required for x11 ozone mode |
 | `--device=/dev/uinput` | Required for trusted input in x11 mode |
@@ -193,6 +193,7 @@ The original repository ([fathyb/carbonyl](https://github.com/fathyb/carbonyl)) 
 - **Bot-detection mitigations** — Firefox UA spoof, `--disable-http2`, `AutomationControlled` suppressed, organic mouse movement API.
 - **Session management** — named persistent profiles, fork/snapshot, `SessionManager` CLI.
 - **CI infrastructure** — automated workflows for fast checks and full Chromium runtime builds, pinned to dedicated build hosts.
+- **GHCR Docker images** ([`ghcr.io/eslider/carbonyl`](https://github.com/eSlider/carbonyl/pkgs/container/carbonyl)) — runnable headless and x11 images built from upstream release tarballs via GitHub Actions on this fork.
 
 **`--carbonyl-b64-text` restored in M135**: the experimental text-capture mode was temporarily disabled during the initial M135 ship and has been re-enabled via a structural refactor (Path A, [issue #28](https://github.com/jmagly/carbonyl/issues/28)). Both bitmap rendering (default) and b64 text capture are functional on M147.
 
