@@ -11,6 +11,7 @@ on:
     branches: [main]
     paths:
       - 'build/Dockerfile.runtime'
+      - 'build/docker-entrypoint.sh'
       - 'build/.dockerignore'
       - '.github/workflows/docker.yml'
   workflow_dispatch:
