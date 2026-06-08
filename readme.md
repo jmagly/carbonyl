@@ -83,7 +83,7 @@ Images are published to [`ghcr.io/jmagly/carbonyl`](https://github.com/jmagly/ca
 | `ghcr.io/jmagly/carbonyl:<version>` | headless runtime, pinned (e.g. `0.2.0-alpha.8`) | Reproducible deploys |
 | `ghcr.io/jmagly/carbonyl:<version>-x11` | x11 ozone runtime, pinned | Automation needing `--ozone-platform=x11` |
 
-The image runs via [`build/docker-entrypoint.sh`](build/docker-entrypoint.sh) with container-safe defaults (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `tini` as PID 1). Current release runtimes apply an internal 1.5× zoom; the entrypoint defaults to `--zoom=67` so effective zoom is ~100% (override with `-e CARBONYL_ZOOM=100` once tarballs ship without the multiplier, or pass `--zoom=` on the command line). **Arguments after the image name are forwarded to the carbonyl CLI.** Use a real terminal (`-it`); for scripts/CI without a TTY, prefer `--dump-text`.
+The image runs via [`build/docker-entrypoint.sh`](build/docker-entrypoint.sh) with container-safe defaults (`--no-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `tini` as PID 1). Current release runtimes apply an internal 1.5× zoom; the entrypoint defaults to `--zoom=67` so effective zoom is ~100%. Override zoom with `-e CARBONYL_ZOOM=50`, or pass `--zoom=50` / `-z 50` after the image name (the entrypoint normalizes space-separated forms — carbonyl itself only accepts `--zoom=N`). Lower values zoom out; higher values zoom in. Set `CARBONYL_ZOOM=100` once tarballs ship without the 1.5× multiplier. **Arguments after the image name are forwarded to the carbonyl CLI.** Use a real terminal (`-it`); for scripts/CI without a TTY, prefer `--dump-text`.
 
 ```bash
 docker pull ghcr.io/jmagly/carbonyl:latest
