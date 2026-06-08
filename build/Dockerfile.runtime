@@ -46,6 +46,8 @@ VOLUME /carbonyl/data
 ENV HOME=/carbonyl/data \
     TERM=xterm-256color \
     COLORTERM=truecolor \
-    LANG=C.UTF-8
+    LANG=C.UTF-8 \
+    CARBONYL_ENV_SHELL_MODE=1 \
+    CARBONYL_ZOOM=67
 STOPSIGNAL SIGINT
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
