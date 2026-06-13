@@ -7,10 +7,9 @@ runner on macOS (an RPC issue), so the mac build is driven over SSH. The
 **release side is now automated**: once a macOS runtime is published to
 `runtime-<hash>`, `release.yml` stages `carbonyl-<version>-aarch64-apple-darwin.tgz`
 and mirrors it to GitHub with no manual steps (gated by the `include_macos`
-toggle; #113 / #117). The **build trigger** is still manual — an operator (or an
-agent with SSH access) runs the one script below. Automating that trigger
-(SSH-dispatch / scheduled build) is tracked under #113, alongside the
-arm64-linux build plumbing (#116).
+toggle; #113 / #117). The **build trigger** is SSH-dispatched from an
+authorized host using `scripts/mutsu-build-macos.sh`; mutsu itself still does
+not run a Gitea Actions runner.
 
 Tracks: roctinam/carbonyl #109 (parent #67).
 
@@ -41,9 +40,30 @@ bash scripts/patches.sh apply
 
 ## Build + package
 
+From an authorized admin host:
+
+```bash
+bash scripts/mutsu-build-macos.sh --jobs 2
+```
+
+The SSH driver runs against `mutsu:/Volumes/build/carbonyl` by default. It
+refuses to continue when the remote worktree is dirty, fetches and
+fast-forwards `main`, runs `scripts/gclient.sh sync`, reapplies patches, runs
+`scripts/build-macos.sh`, and smokes the resulting runtime with
+`./carbonyl --version`.
+
+Useful overrides:
+
+```bash
+MUTSU_HOST=mutsu bash scripts/mutsu-build-macos.sh --branch main --jobs 2
+bash scripts/mutsu-build-macos.sh --host roctinam@mutsu --remote-dir /Volumes/build/carbonyl
+```
+
+To run directly on mutsu:
+
 ```bash
 cd /Volumes/build/carbonyl
-caffeinate -dimsu nohup bash scripts/build-macos.sh > build-macos.log 2>&1 &
+caffeinate -dimsu nohup bash scripts/build-macos.sh --jobs 2 > build-macos.log 2>&1 &
 # watch: tail -f build-macos.log
 ```
 
@@ -59,6 +79,9 @@ runtime so the operator does not have to:
   soft limit (256) causes "Too many open files".
 - **macOS gn args** — `src/browser/args.macos.gn` (the Linux `args.gn` carries
   X11/Wayland/dbus/etc. flags gn rejects on the mac toolchain).
+- **conservative parallelism** — on a 16 GiB Mac mini, the default is `-j2`.
+  Passing `--jobs 2` is the documented explicit setting for predictable
+  unattended builds.
 
 Output:
 
@@ -74,6 +97,13 @@ Output:
 
 GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
   CARBONYL_OZONE_TAG=headless bash scripts/runtime-push.sh arm64
+```
+
+Or from the authorized SSH driver host:
+
+```bash
+GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
+  bash scripts/mutsu-build-macos.sh --jobs 2 --publish
 ```
 
 The asset lands on the `runtime-<hash>` release (same hash scheme as Linux).

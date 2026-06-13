@@ -14,7 +14,7 @@
 #   - Command Line Tools installed (xcode-select -p -> .../CommandLineTools)
 #
 # Usage:
-#   bash scripts/build-macos.sh [--ozone headless] [-j N]
+#   bash scripts/build-macos.sh [--ozone headless] [--jobs N|-j N]
 #
 # Output:
 #   build/pre-built/aarch64-apple-darwin/            (runtime payload)
@@ -34,6 +34,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --ozone) ozone="$2"; shift 2 ;;
     --ozone=*) ozone="${1#--ozone=}"; shift ;;
+    --jobs) jobs="$2"; shift 2 ;;
+    --jobs=*) jobs="${1#--jobs=}"; shift ;;
     -j) jobs="$2"; shift 2 ;;
     -j*) jobs="${1#-j}"; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -47,6 +49,29 @@ fi
 ARCH="$(uname -m)"   # arm64 on Apple Silicon
 TRIPLE="$(scripts/platform-triple.sh "$ARCH")"   # aarch64-apple-darwin
 OUT="out/Default-${ozone}-mac"
+
+choose_default_jobs() {
+  local cores mem_bytes cpu_jobs mem_jobs selected
+
+  cores="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+  mem_bytes="$(sysctl -n hw.memsize 2>/dev/null || echo 0)"
+
+  cpu_jobs=$(( cores > 10 ? 10 : cores - 2 ))
+  [ "$cpu_jobs" -lt 1 ] && cpu_jobs=1
+
+  if [ "$mem_bytes" -gt 0 ]; then
+    # Chromium links are memory-bound on the 16 GiB Mac mini. Budget roughly
+    # 8 GiB per ninja job, which defaults that host to -j2.
+    mem_jobs=$(( mem_bytes / 1024 / 1024 / 1024 / 8 ))
+    [ "$mem_jobs" -lt 1 ] && mem_jobs=1
+    selected="$cpu_jobs"
+    [ "$mem_jobs" -lt "$selected" ] && selected="$mem_jobs"
+  else
+    selected="$cpu_jobs"
+  fi
+
+  echo "$selected"
+}
 
 # ── 1. CLT toolchain shims (no full Xcode) ──────────────────────────────────
 TC="$CARBONYL_ROOT/chromium/.macos-toolchain"
@@ -96,8 +121,13 @@ cp "$DYLIB" "$CHROMIUM_SRC/$OUT/"
 ( cd "$CHROMIUM_SRC" && gn gen "$OUT" ) || { echo "ERROR: gn gen failed" >&2; exit 1; }
 
 # ── 4. ninja headless_shell ─────────────────────────────────────────────────
-: "${jobs:=$(( $(sysctl -n hw.ncpu) > 10 ? 10 : $(sysctl -n hw.ncpu) - 2 ))}"
-[ "$jobs" -lt 1 ] 2>/dev/null && jobs=4
+if [ -z "$jobs" ]; then
+  jobs="$(choose_default_jobs)"
+fi
+if ! [[ "$jobs" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ERROR: --jobs/-j must be a positive integer (got '$jobs')" >&2
+  exit 2
+fi
 echo "[build-macos] ninja headless:headless_shell -j$jobs"
 ( cd "$CHROMIUM_SRC" && ninja -C "$OUT" -j "$jobs" headless:headless_shell ) \
   || { echo "ERROR: ninja build failed" >&2; exit 1; }
