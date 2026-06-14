@@ -121,9 +121,9 @@ Linux ARM64 is built in an aarch64 Linux Colima VM on mutsu. The driver builds
 a local arm64 `carbonyl-builder:<commit>-arm64` image from
 `build/Dockerfile.builder` because the registry-pinned builder image is
 currently amd64-only. Set `MUTSU_BUILDER_IMAGE` only when an arm64 registry
-image is available. The driver intentionally uses a separate checkout and
-profile so Linux gclient/build state cannot interfere with the macOS runtime
-tree.
+image is available. The driver intentionally uses a separate repo checkout,
+Colima profile, and VM-native Chromium build directory so Linux gclient/build
+state cannot interfere with the macOS runtime tree.
 
 From an authorized SSH driver host:
 
@@ -140,9 +140,15 @@ Default remote resources:
 | SSH host | `mutsu-agent` |
 | Colima profile | `carbonyl-linux-arm64` |
 | Colima home | `/Volumes/build/.colima` |
-| Checkout | `/Volumes/build/carbonyl-linux-arm64` |
-| Mount | `/Volumes/build:w` |
+| Repo checkout | `/Volumes/build/carbonyl-linux-arm64` |
+| Chromium build dir | `/mnt/lima-colima-carbonyl-linux-arm64/carbonyl-linux-arm64` inside the Colima VM |
+| Mounts | `/Volumes/build:w` for the repo checkout; VM ext4 for Chromium `src/out` |
 | CPUs / memory / disk | `8` CPUs, `12` GiB RAM, `500` GiB disk |
+
+Do not put the Linux Chromium `src/out` tree on the macOS `/Volumes/build`
+virtiofs mount. `gclient` and Chromium builds do large Git and filesystem
+walks; keeping that tree on the Colima VM's ext4 disk avoids pathological
+stalls while still keeping the lightweight repo checkout on `/Volumes/build`.
 
 Publishing uses the same runtime tag as Linux amd64:
 
@@ -169,8 +175,8 @@ GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
 
 Expected output:
 
-- `build/pre-built/aarch64-unknown-linux-gnu/`
-- `build/pre-built/aarch64-unknown-linux-gnu.tgz`
+- `build/pre-built/aarch64-unknown-linux-gnu/` in the repo checkout
+- `build/pre-built/aarch64-unknown-linux-gnu.tgz` in the repo checkout
 - Gitea release asset `runtime-<hash>/aarch64-unknown-linux-gnu.tgz`
 
 The release workflow does not include Linux arm64 by default until this asset is

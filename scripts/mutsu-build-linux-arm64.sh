@@ -15,6 +15,7 @@ branch="${MUTSU_BRANCH:-main}"
 ssh_config="${MUTSU_SSH_CONFIG:-}"
 profile="${MUTSU_COLIMA_PROFILE:-carbonyl-linux-arm64}"
 colima_home="${MUTSU_COLIMA_HOME:-/Volumes/build/.colima}"
+vm_build_dir="${MUTSU_VM_BUILD_DIR:-/mnt/lima-colima-${profile}/carbonyl-linux-arm64}"
 cpus="${MUTSU_COLIMA_CPUS:-8}"
 memory="${MUTSU_COLIMA_MEMORY:-12}"
 disk="${MUTSU_COLIMA_DISK:-500}"
@@ -44,6 +45,7 @@ Options:
   --branch BRANCH     Remote branch to fast-forward. Defaults to main.
   --profile NAME      Colima profile. Defaults to carbonyl-linux-arm64.
   --colima-home DIR   Colima home directory. Defaults to /Volumes/build/.colima.
+  --vm-build-dir DIR  Linux VM-native build dir. Defaults to /mnt/lima-colima-<profile>/carbonyl-linux-arm64.
   --cpus N            Colima CPUs. Defaults to 8.
   --memory GiB        Colima memory in GiB. Defaults to 12.
   --disk GiB          Colima disk in GiB. Defaults to 500.
@@ -75,6 +77,8 @@ while [ $# -gt 0 ]; do
     --profile=*) profile="${1#--profile=}"; shift ;;
     --colima-home) colima_home="$2"; shift 2 ;;
     --colima-home=*) colima_home="${1#--colima-home=}"; shift ;;
+    --vm-build-dir) vm_build_dir="$2"; shift 2 ;;
+    --vm-build-dir=*) vm_build_dir="${1#--vm-build-dir=}"; shift ;;
     --cpus) cpus="$2"; shift 2 ;;
     --cpus=*) cpus="${1#--cpus=}"; shift ;;
     --memory) memory="$2"; shift 2 ;;
@@ -121,13 +125,14 @@ printf -v ozone_q '%q' "$ozone"
 printf -v user_q '%q' "$gitea_user"
 printf -v profile_q '%q' "$profile"
 printf -v colima_home_q '%q' "$colima_home"
+printf -v vm_build_dir_q '%q' "$vm_build_dir"
 printf -v cpus_q '%q' "$cpus"
 printf -v memory_q '%q' "$memory"
 printf -v disk_q '%q' "$disk"
 printf -v skip_sync_q '%q' "$skip_sync"
 printf -v preflight_q '%q' "$preflight"
 
-echo "[mutsu-linux] target=$host dir=$remote_dir branch=$branch profile=$profile colima_home=$colima_home publish=$publish jobs=${jobs:-auto}"
+echo "[mutsu-linux] target=$host dir=$remote_dir branch=$branch profile=$profile colima_home=$colima_home vm_build_dir=$vm_build_dir publish=$publish jobs=${jobs:-auto}"
 
 ssh_args=(-o BatchMode=yes)
 if [ -n "$ssh_config" ]; then
@@ -145,7 +150,7 @@ printf -v remote_token_file_q '%q' "$remote_token_file"
 
 # shellcheck disable=SC2029 # values are intentionally quoted locally with printf %q.
 ssh "${ssh_args[@]}" "$host" \
-  "GITEA_USER=$user_q CARBONYL_OZONE_TAG=$ozone_q PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin bash -s -- $remote_dir_q $branch_q $jobs_q $publish_q $profile_q $colima_home_q $cpus_q $memory_q $disk_q $skip_sync_q $preflight_q $remote_token_file_q" <<'REMOTE'
+  "GITEA_USER=$user_q CARBONYL_OZONE_TAG=$ozone_q PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin bash -s -- $remote_dir_q $branch_q $jobs_q $publish_q $profile_q $colima_home_q $vm_build_dir_q $cpus_q $memory_q $disk_q $skip_sync_q $preflight_q $remote_token_file_q" <<'REMOTE'
 set -euo pipefail
 
 remote_dir="$1"; shift
@@ -154,6 +159,7 @@ jobs="$1"; shift
 publish="$1"; shift
 profile="$1"; shift
 colima_home="$1"; shift
+vm_build_dir="$1"; shift
 cpus="$1"; shift
 memory="$1"; shift
 disk="$1"; shift
@@ -204,7 +210,11 @@ if [ "$preflight" = "true" ]; then
   uname -a
   df -h /Volumes/build 2>/dev/null || true
   echo "COLIMA_HOME=${COLIMA_HOME}"
+  echo "vm_build_dir=${vm_build_dir}"
   colima list 2>/dev/null || true
+  if colima status --profile "$profile" >/dev/null 2>&1; then
+    colima ssh --profile "$profile" -- bash -lc "df -h / /mnt/lima-colima-${profile} 2>/dev/null || true; test -d '$vm_build_dir' && du -sh '$vm_build_dir' 2>/dev/null || true"
+  fi
   docker context ls 2>/dev/null || true
   if [ -d "$remote_dir/.git" ]; then
     git -C "$remote_dir" status --short --branch
@@ -261,6 +271,10 @@ fi
 
 export DOCKER_HOST="unix://${COLIMA_HOME}/${profile}/docker.sock"
 docker version >/dev/null
+
+echo "[mutsu-linux] preparing VM-native build dir ${vm_build_dir}"
+colima ssh --profile "$profile" -- sudo mkdir -p "$vm_build_dir"
+
 if [ "$builder_source" = "local" ]; then
   echo "[mutsu-linux] building local arm64 builder image"
   docker build \
@@ -282,10 +296,11 @@ container_root="/workspace"
 docker_run=(
   docker run --rm
   -v "${remote_dir}:${container_root}"
+  -v "${vm_build_dir}:/build"
   -w "${container_root}"
   -e CARBONYL_ROOT="${container_root}"
-  -e CHROMIUM_ROOT="${container_root}/chromium"
-  -e CHROMIUM_SRC="${container_root}/chromium/src"
+  -e CHROMIUM_ROOT="/build/chromium"
+  -e CHROMIUM_SRC="/build/chromium/src"
   -e DEPOT_TOOLS_ROOT="${container_root}/chromium/depot_tools"
   -e DEPOT_TOOLS_UPDATE=0
 )
@@ -295,6 +310,8 @@ if [ "$skip_sync" != "true" ]; then
   run_awake "${docker_run[@]}" "$builder_image" bash -lc '
     set -euo pipefail
     git config --global --add safe.directory "*"
+    mkdir -p "${CHROMIUM_ROOT}"
+    cp chromium/.gclient "${CHROMIUM_ROOT}/.gclient"
 
     TARGET_VERSION="$(sed -n "s/.*src\.git@\([^\"]*\)\".*/\1/p" chromium/.gclient | head -1)"
     TARGET_SHA="$(sed -n "s/^chromium_upstream=\"\([^\"]*\)\".*/\1/p" scripts/patches.sh | head -1)"
@@ -346,11 +363,11 @@ echo "[mutsu-linux] resetting Chromium source and applying patches"
 run_awake "${docker_run[@]}" "$builder_image" bash -lc '
   set -euo pipefail
   git config --global --add safe.directory "*"
-  if [ -d chromium/src/.git ]; then
-    git -C chromium/src am --abort 2>/dev/null || true
-    git -C chromium/src rebase --abort 2>/dev/null || true
-    git -C chromium/src reset --hard HEAD
-    git -C chromium/src clean -fd || true
+  if [ -d "${CHROMIUM_SRC}/.git" ]; then
+    git -C "${CHROMIUM_SRC}" am --abort 2>/dev/null || true
+    git -C "${CHROMIUM_SRC}" rebase --abort 2>/dev/null || true
+    git -C "${CHROMIUM_SRC}" reset --hard HEAD
+    git -C "${CHROMIUM_SRC}" clean -fd || true
   fi
   source scripts/env.sh
   bash scripts/patches.sh apply
