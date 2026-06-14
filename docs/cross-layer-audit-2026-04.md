@@ -200,7 +200,7 @@ Re-run `scripts/audit-cross-layer.sh` after every rebase. **If Category A
 returns to non-zero, the cppgc cascade is back.** This is the canonical
 gate.
 
-Suggested SOP additions in `MAINTENANCE.md` step 7 (after `patches.sh save`):
+Suggested SOP additions in `maintenance.md` step 7 (after `patches.sh save`):
 
 ```bash
 bash scripts/audit-cross-layer.sh > /tmp/audit-current.md

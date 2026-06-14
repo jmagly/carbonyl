@@ -9,6 +9,10 @@ const pkg = JSON.parse(
 const version = process.env.RELEASE_MODE
   ? pkg.version
   : `${pkg.version}-next.${process.env.VERSION_ID}`;
+const docFiles = [
+  ["readme.md", "readme.md"],
+  ["LICENSE", "LICENSE"],
+];
 const manifest = {
   version,
   license: "BSD-3-Clause",
@@ -30,8 +34,8 @@ async function buildMain() {
   await fs.mkdir(root, { recursive: true });
   await Promise.all([
     Promise.all(
-      ["readme.md", "license.md"].map((file) =>
-        fs.cp(path.join(dirname, "..", file), path.join(root, file))
+      docFiles.map(([source, target]) =>
+        fs.cp(path.join(dirname, "..", source), path.join(root, target))
       )
     ),
     fs.writeFile(
@@ -101,8 +105,8 @@ async function buildPlatform([os, npmOs, llvmOs], [cpu, npmCpu, llvmCpu]) {
   await fs.mkdir(root, { recursive: true });
   await Promise.all([
     Promise.all(
-      ["readme.md", "license.md"].map((file) =>
-        fs.cp(path.join(dirname, "..", file), path.join(root, file))
+      docFiles.map(([source, target]) =>
+        fs.cp(path.join(dirname, "..", source), path.join(root, target))
       )
     ),
     fs.cp(

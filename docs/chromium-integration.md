@@ -10,9 +10,9 @@
 - FFI contract between Rust (`libcarbonyl.so`) and Chromium (`carbonyl::Bridge`, `carbonyl::Renderer`)
 - Build-system additions (`args.gn`, Carbonyl-specific `BUILD.gn`)
 
-**Why it exists**: Issue #37 surfaced a DSF-plumbing bug that spans three patches, two injected source files, and one FFI contract — reconstructing "why is this like this" required reading five separate files with no map between them. The m120→m135→m147 upgrade path (captured in `MAINTENANCE.md`) is also evidence of how expensive patch drift is without written-down invariants. This catalog is the map.
+**Why it exists**: Issue #37 surfaced a DSF-plumbing bug that spans three patches, two injected source files, and one FFI contract — reconstructing "why is this like this" required reading five separate files with no map between them. The m120→m135→m147 upgrade path (captured in `maintenance.md`) is also evidence of how expensive patch drift is without written-down invariants. This catalog is the map.
 
-**Not in scope**: How to sync / build / rebase. That's in `MAINTENANCE.md` and `docs/chromium-upgrade-plan.md`.
+**Not in scope**: How to sync / build / rebase. That's in `maintenance.md` and `chromium-upgrade-plan.md`.
 
 ---
 
@@ -247,7 +247,7 @@ After this patch, the resolved style is effectively uniform across the document:
 
 ### Version-compat fixes (0015–0024)
 
-*Audit tracked in #42.* Placeholder — not yet audited. See [MAINTENANCE.md](../MAINTENANCE.md#chromium-version) for the rebase history (M111 → M120 → M132 → M135 → M140 → M147 → M148) that produced these fixes; several may now be fold-in candidates.
+*Audit tracked in #42.* Placeholder — not yet audited. See [maintenance.md](maintenance.md#chromium-version) for the rebase history (M111 → M120 → M132 → M135 → M140 → M147 → M148) that produced these fixes; several may now be fold-in candidates.
 
 ---
 

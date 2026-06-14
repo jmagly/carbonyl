@@ -16,9 +16,10 @@
 pip install carbonyl-agent && carbonyl-agent install
 ```
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg?style=flat-square)](LICENSE)
 [![Chromium M147](https://img.shields.io/badge/chromium-M147.0.7727.94-4285F4?style=flat-square&logo=googlechrome&logoColor=white)](https://chromium.googlesource.com/chromium/src/+/refs/tags/147.0.7727.94)
 [![Runtime](https://img.shields.io/badge/runtime-releases-green?style=flat-square)](https://github.com/jmagly/carbonyl/releases)
+[![Built With AIWG](https://aiwg.io/assets/badges/built-with-aiwg-dark.png)](https://aiwg.io)
 
 [**Get Started**](#-get-started) · [**Fork Status**](#active-fork--continued-maintenance) · [**Build from Source**](#building-from-source) · [**Comparisons**](#comparisons) · [**Blog**](https://fathy.fr/carbonyl)
 
@@ -284,14 +285,14 @@ Produces:
 ./scripts/run.sh Default https://wikipedia.org
 ```
 
-See [MAINTENANCE.md](MAINTENANCE.md) for detailed upgrade procedures, patch rebasing guidance, and the rebase SOP used to move M111 → M147.
+See [maintenance.md](docs/maintenance.md) for detailed upgrade procedures, patch rebasing guidance, and the rebase SOP used to move M111 → M147.
 
 ---
 
 ## Documentation
 
-- [MAINTENANCE.md](MAINTENANCE.md) — upgrade procedure, patch reference commits, GN args notes
-- [changelog.md](changelog.md) — full rebase history (M111 → M147)
+- [maintenance.md](docs/maintenance.md) — upgrade procedure, patch reference commits, GN args notes
+- [changelog.md](docs/changelog.md) — full rebase history (M111 → M147)
 - [AIWG.md](AIWG.md) — AIWG framework integration
 - [docs/architecture.md](docs/architecture.md) — cross-layer architecture notes
 - [docs/rust-chromium-boundary.md](docs/rust-chromium-boundary.md) — Rust/C++ layer map, FFI boundary overview, rebuild recipes by change type, verification patterns
@@ -317,7 +318,7 @@ Most meaningful changes to the Python automation path belong in [`carbonyl-agent
 
 ## License
 
-**MIT License** — see [LICENSE](LICENSE).
+**BSD-3-Clause License** — see [LICENSE](LICENSE).
 
 Carbonyl includes Chromium, which is BSD-licensed. See `chromium/src/LICENSE` after a checkout for upstream terms.
 

@@ -277,9 +277,9 @@ jobs:
 
       - name: Resolve release notes
         run: |
-          # Convention: RELEASE-<tag>.md at repo root. Fall back to a
+          # Convention: docs/releases/RELEASE-<tag>.md. Fall back to a
           # generic note if missing.
-          NOTES_FILE="${GITHUB_WORKSPACE}/.repo-clone/RELEASE-${TAG}.md"
+          NOTES_FILE="${GITHUB_WORKSPACE}/.repo-clone/docs/releases/RELEASE-${TAG}.md"
           BODY_FILE="${GITHUB_WORKSPACE}/.release-body.md"
           if [ -f "${NOTES_FILE}" ]; then
             cp "${NOTES_FILE}" "${BODY_FILE}"
@@ -289,10 +289,10 @@ jobs:
               printf '# Carbonyl %s\n\n' "${VERSION}"
               printf 'Pre-built Chromium runtime for Carbonyl, ozone variants: %s.\n\n' "${OZONE_VARIANTS}"
               printf 'Runtime hash: `%s`\n\n' "${HASH}"
-              printf 'See https://git.integrolabs.net/%s/blob/%s/changelog.md\n' "${GITHUB_REPOSITORY}" "${TAG}"
+              printf 'See https://git.integrolabs.net/%s/blob/%s/docs/changelog.md\n' "${GITHUB_REPOSITORY}" "${TAG}"
               printf 'for the change log entry.\n'
             } > "${BODY_FILE}"
-            echo "[release] no RELEASE-${TAG}.md found; using generic body"
+            echo "[release] no docs/releases/RELEASE-${TAG}.md found; using generic body"
           fi
           echo "BODY_FILE=${BODY_FILE}" >> "$GITHUB_ENV"
 

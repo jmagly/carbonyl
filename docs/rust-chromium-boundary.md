@@ -4,7 +4,7 @@ Where code lives, how the two sides communicate, and what to rebuild when you ch
 
 Related:
 - [chromium-integration.md](chromium-integration.md) — detailed catalog of every Carbonyl-specific modification to Chromium (patches, injected sources, FFI entries). This doc is the map; that one is the reference.
-- [MAINTENANCE.md](../MAINTENANCE.md) — Chromium version upgrade procedure (infrequent but expensive).
+- [maintenance.md](maintenance.md) — Chromium version upgrade procedure (infrequent but expensive).
 - [development-guide.md](development-guide.md) — general contributor onboarding (prereqs, repo layout, dev workflow).
 
 ---
@@ -173,7 +173,7 @@ Same as above: `ninja -C chromium/src/out/Default headless:headless_shell`. Incr
 
 ### Chromium version bump (the slow case — hours)
 
-See [MAINTENANCE.md § Chromium version](../MAINTENANCE.md#chromium-version). Full sync + patch rebase + clean build is a multi-hour operation, worth scheduling explicitly.
+See [maintenance.md § Chromium version](maintenance.md#chromium-version). Full sync + patch rebase + clean build is a multi-hour operation, worth scheduling explicitly.
 
 ### Going from a stale build tree to current (the surprise-slow case)
 
