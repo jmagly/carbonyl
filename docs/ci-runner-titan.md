@@ -92,6 +92,35 @@ ls /srv/carbonyl/chromium/depot_tools/ | head   # expect autoninja, gclient, gn,
 cd /srv/carbonyl && git log --oneline -3   # should show recent carbonyl commits
 ```
 
+### 4a. Repeatable x86_64 preflight
+
+Before runtime or release work, run the host preflight from a current Carbonyl checkout:
+
+```bash
+scripts/titan-x64-preflight.sh
+```
+
+The preflight is read-only with respect to `/srv/carbonyl/chromium/src`: it does not run `gclient sync`, apply patches, reset worktrees, prune files, or start a Chromium build. It verifies:
+
+- titan is an x86_64 Linux host.
+- the pinned `git.integrolabs.net/roctinam/carbonyl-builder` image is inspectable locally and reports `linux/amd64`.
+- `scripts/platform-triple.sh amd64 linux` and `scripts/runtime-hash.sh` resolve.
+- `/srv/carbonyl/chromium/src` exists.
+- `chromium_upstream`, `skia_upstream`, and `webrtc_upstream` from `scripts/patches.sh` are reachable in the persistent Chromium checkout.
+- Chromium, Skia, and WebRTC do not have stale `.git/*.lock` files.
+- `/srv/carbonyl` and `/tmp` have the configured free-space margins.
+- the pinned Rust toolchain is present and `cargo check --target x86_64-unknown-linux-gnu` passes.
+
+Useful overrides:
+
+```bash
+HOST_ROOT=/srv/carbonyl scripts/titan-x64-preflight.sh
+scripts/titan-x64-preflight.sh --min-host-free-gb 300 --min-tmp-free-gb 20
+scripts/titan-x64-preflight.sh --builder-image git.integrolabs.net/roctinam/carbonyl-builder:sha-7458695
+```
+
+The command prints `[pass]`, `[warn]`, and `[fail]` lines plus a final summary. It exits non-zero if required checks fail, including missing Docker/builder image, missing baseline commits, stale git locks, low disk, or a failed Rust target check.
+
 ### 5. Gitea registry login (for workflows that pull the builder image)
 
 ```bash

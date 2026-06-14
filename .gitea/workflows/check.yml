@@ -22,6 +22,8 @@ on:
       - 'build.rs'
       - 'rust-toolchain.toml'
       - 'build/Dockerfile.builder'
+      - 'scripts/titan-x64-preflight.sh'
+      - 'docs/ci-runner-titan.md'
       - '.gitea/workflows/check.yml'
   pull_request:
     branches: [main]
@@ -32,6 +34,8 @@ on:
       - 'build.rs'
       - 'rust-toolchain.toml'
       - 'build/Dockerfile.builder'
+      - 'scripts/titan-x64-preflight.sh'
+      - 'docs/ci-runner-titan.md'
       - '.gitea/workflows/check.yml'
   workflow_dispatch:
     inputs:
@@ -100,6 +104,11 @@ jobs:
             git fetch --depth 1 origin "${GITHUB_SHA}"
           fi
           git checkout "${GITHUB_SHA:-HEAD}"
+
+      - name: Titan host preflight
+        run: |
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          BUILDER_IMAGE="${BUILDER_IMAGE}" scripts/titan-x64-preflight.sh
 
       - name: Verify pinned toolchain (in container)
         run: |
