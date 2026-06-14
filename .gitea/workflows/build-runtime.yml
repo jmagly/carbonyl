@@ -536,6 +536,12 @@ jobs:
         if: matrix.ozone == 'headless'
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          TRIPLE="${{ env.TRIPLE }}"
+          if [ -z "${TRIPLE}" ]; then
+            TRIPLE="$(bash "${HOST_CARBONYL_DIR}/scripts/platform-triple.sh" "${CPU}")"
+          fi
+          BIN_DIR="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}"
+          BINARY="${BIN_DIR}/carbonyl"
           case "${CPU}" in
             amd64|x86_64)  target_cpu="x86_64" ;;
             arm64|aarch64) target_cpu="aarch64" ;;
@@ -547,7 +553,7 @@ jobs:
             exit 0
           fi
           cd "${HOST_CARBONYL_DIR}"
-          CARBONYL_BIN="${BIN_DIR}/carbonyl" \
+          CARBONYL_BIN="${BINARY}" \
           LD_LIBRARY_PATH="${BIN_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
           CAPTURE_SECONDS=2 \
             bash scripts/test-cdp.sh
