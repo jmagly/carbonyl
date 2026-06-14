@@ -68,14 +68,14 @@ Secondary constraint: the Chromium build is heavy (~150GB source, ~40GB build ar
 | `build-builder.yml` | Dockerfile.builder change; manual | titan, bare host (Docker only) | Build and push the builder image. Decoupled from runtime builds. |
 | `check.yml` | push, PR | titan, inside builder container | cargo fmt + clippy + lib test. Fast feedback on Rust changes. |
 | `build-runtime.yml` | runtime-affecting source changes; manual | titan, inside builder container (with bind-mounted Chromium src) | Full Chromium build, runtime hash, tarball upload to Gitea runtime release. Fans out over headless and x11. |
-| `release.yml` | `v*` tag push; manual | titan, inside builder container | On tag, pull matching runtime tarballs by hash, package, create Gitea + GitHub releases with notes. |
+| `release.yml` | `v*` tag push; manual | titan, inside builder container | On tag, pull matching Linux and macOS runtime tarballs by hash, package, create Gitea + GitHub releases with notes. |
 | `mirror.yml` | push to main, `v*` tag push | titan, bare host (git only) | Sync origin → github remote. Tags + main. |
 
 ## Key design decisions
 
 - **Builder image is the only thing that requires root on the host.** Everything else is container-in-container-less (we don't nest docker, we just bind-mount source). That simplifies `runs-on: titan` while respecting the "no host toolchain" rule.
 - **Chromium source checkout lives on the host, not in the container.** 150 GB doesn't fit in an image. Bind-mounted read-write at build time; builder container holds only the toolchain.
-- **Runtime tarballs are keyed by `runtime-<hash>`**, computed from `.gclient` + patches + bridge files (see `scripts/runtime-hash.sh`). Consumer-side `build-local.sh` pulls the matching one. This already works; CI just needs to publish on the right trigger.
+- **Runtime tarballs are keyed by `runtime-<hash>`**, computed from `.gclient` + patches + bridge files (see `scripts/runtime-hash.sh`). Consumer-side `build-local.sh` pulls the matching one. Linux runtimes are produced by `build-runtime.yml`; the macOS Apple Silicon runtime is produced on mutsu and published onto the same headless `runtime-<hash>` release as `aarch64-apple-darwin.tgz`.
 - **Release artifacts are source-level tags (`v0.x.y`) separate from runtime tags (`runtime-<hash>`).** Source tag points at code + docs; runtime tag points at pre-built binaries. One `v0.x.y` release may reference multiple `runtime-<hash>` assets if re-built for different architectures.
 - **GitHub mirror is one-way** (origin → github, never the reverse). Tag pushes replicate. This matches the "push to origin first" convention in top-level `CLAUDE.md`.
 - **Host workspace sync is ownership-normalized before rsync.** `build-runtime.yml`

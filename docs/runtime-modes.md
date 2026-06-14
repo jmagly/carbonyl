@@ -328,16 +328,20 @@ own asset on the same Gitea + GitHub release:
 |---|---|
 | Headless | `carbonyl-<version>-<triple>.tgz` (+ `.sha256`) |
 | x11 | `carbonyl-<version>-x11-<triple>.tgz` (+ `.sha256`) |
+| macOS Apple Silicon | `carbonyl-<version>-aarch64-apple-darwin.tgz` (+ `.sha256`) |
 
 The workflow is idempotent — re-running on an existing tag refreshes
 assets without duplicating release entries. To publish only one
 variant, dispatch `release.yml` manually with
-`ozone_platform=headless` or `ozone_platform=x11`.
+`ozone_platform=headless` or `ozone_platform=x11`. macOS staging is
+controlled separately by `include_macos` and defaults to `true`.
 
 Hard guard: `release.yml` never rebuilds Chromium. It requires that
 both `runtime-<hash>` and `runtime-x11-<hash>` Gitea releases already
-exist for the tagged commit (built by `build-runtime.yml`); missing
-either fails the release with an actionable error.
+exist for the tagged commit (built by `build-runtime.yml`). When
+`include_macos=true`, it also requires
+`runtime-<hash>/aarch64-apple-darwin.tgz`, produced by the mutsu SSH
+driver. Missing inputs fail the release with an actionable error.
 
 ## Container-level deployment
 

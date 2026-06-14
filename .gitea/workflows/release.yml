@@ -206,14 +206,17 @@ jobs:
           # scripts/runtime-push.sh arm64 (run on mutsu — docs/ci-runner-mutsu.md).
           runtime_tag="runtime-${HASH}"
           API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
-          assets="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" \
-            | jq -r '.assets[].name' 2>/dev/null || true)"
-          if echo "${assets}" | grep -qx "aarch64-apple-darwin.tgz"; then
-            echo "[release] macOS runtime asset present on ${runtime_tag}"
+          asset_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" \
+            | jq -r '.assets[] | select(.name == "aarch64-apple-darwin.tgz")' 2>/dev/null || true)"
+          if [ -n "${asset_json}" ]; then
+            asset_size="$(echo "${asset_json}" | jq -r '.size')"
+            asset_url="$(echo "${asset_json}" | jq -r '.browser_download_url // empty')"
+            echo "[release] macOS runtime asset present on ${runtime_tag}: aarch64-apple-darwin.tgz (${asset_size} bytes)"
+            [ -n "${asset_url}" ] && echo "[release] macOS runtime asset url: ${asset_url}"
           else
             echo "ERROR: macOS runtime 'aarch64-apple-darwin.tgz' not found on '${runtime_tag}'." >&2
-            echo "       Build it on mutsu (scripts/build-macos.sh) and publish for this hash:" >&2
-            echo "         CARBONYL_OZONE_TAG=headless bash scripts/runtime-push.sh arm64" >&2
+            echo "       Build and publish it on mutsu for this hash:" >&2
+            echo "         GITEA_TOKEN=<token> bash scripts/mutsu-build-macos.sh --jobs 2 --publish" >&2
             echo "       OR re-run this workflow with include_macos=false for a Linux-only release." >&2
             exit 1
           fi
@@ -266,6 +269,7 @@ jobs:
           url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/aarch64-apple-darwin.tgz"
           tmp="${STAGE}/.dl-macos.tgz"
           curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${tmp}" "${url}"
+          tar -tzf "${tmp}" >/dev/null
           mv "${tmp}" "${STAGE}/${asset_name}"
           ( cd "${STAGE}" && sha256sum "${asset_name}" > "${asset_name}.sha256" )
           echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
