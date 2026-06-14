@@ -209,6 +209,35 @@ export class CarbonylBackend implements BrowserBackend {
 
 `cdpEndpoint` is the Chrome DevTools Protocol WebSocket URL. Playwright can attach to it directly via `browser.connectOverCDP(wsEndpoint)`.
 
+### Direct CDP launch
+
+Carbonyl also accepts Chromium's standard remote-debugging switches directly:
+
+```bash
+carbonyl --remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 https://example.com
+```
+
+The endpoint is available from Chromium's normal discovery API:
+
+```bash
+curl http://127.0.0.1:9222/json/version
+curl http://127.0.0.1:9222/json/list
+```
+
+Playwright can connect to the HTTP endpoint:
+
+```typescript
+import { chromium } from 'playwright';
+
+const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
+const [page] = browser.contexts()[0].pages();
+await page.goto('https://example.com');
+console.log(await page.title());
+await browser.close();
+```
+
+The terminal renderer and CDP endpoint run at the same time. CI verifies this with `scripts/test-cdp.sh`, which exercises `Page`, `Runtime`, `Accessibility`, `Network`, and `DOM` over CDP while asserting the terminal stream still renders the fixture page.
+
 ---
 
 ## gRPC Client (Go)

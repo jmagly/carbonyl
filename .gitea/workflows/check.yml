@@ -23,7 +23,9 @@ on:
       - 'rust-toolchain.toml'
       - 'build/Dockerfile.builder'
       - 'scripts/titan-x64-preflight.sh'
+      - 'scripts/test-cdp.sh'
       - 'docs/ci-runner-titan.md'
+      - 'docs/integration-guide.md'
       - '.gitea/workflows/check.yml'
   pull_request:
     branches: [main]
@@ -35,7 +37,9 @@ on:
       - 'rust-toolchain.toml'
       - 'build/Dockerfile.builder'
       - 'scripts/titan-x64-preflight.sh'
+      - 'scripts/test-cdp.sh'
       - 'docs/ci-runner-titan.md'
+      - 'docs/integration-guide.md'
       - '.gitea/workflows/check.yml'
   workflow_dispatch:
     inputs:
@@ -109,6 +113,11 @@ jobs:
         run: |
           cd "${GITHUB_WORKSPACE}/.repo-clone"
           BUILDER_IMAGE="${BUILDER_IMAGE}" scripts/titan-x64-preflight.sh
+
+      - name: Shell smoke syntax
+        run: |
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          bash -n scripts/test-cdp.sh
 
       - name: Verify pinned toolchain (in container)
         run: |

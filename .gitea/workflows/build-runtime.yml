@@ -532,6 +532,26 @@ jobs:
             echo "[smoke] cross-arch arch-check OK: carbonyl ${OZONE}/${TRIPLE}"
           fi
 
+      - name: Run CDP validation (headless native only)
+        if: matrix.ozone == 'headless'
+        run: |
+          CPU="${{ github.event.inputs.arch || 'amd64' }}"
+          case "${CPU}" in
+            amd64|x86_64)  target_cpu="x86_64" ;;
+            arm64|aarch64) target_cpu="aarch64" ;;
+            *) echo "ERROR: unknown arch '${CPU}'" >&2; exit 1 ;;
+          esac
+          host_cpu="$(uname -m)"
+          if [ "${target_cpu}" != "${host_cpu}" ]; then
+            echo "[cdp] cross-arch build (target=${target_cpu}, host=${host_cpu}) - CDP exec smoke skipped"
+            exit 0
+          fi
+          cd "${HOST_CARBONYL_DIR}"
+          CARBONYL_BIN="${BIN_DIR}/carbonyl" \
+          LD_LIBRARY_PATH="${BIN_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+          CAPTURE_SECONDS=2 \
+            bash scripts/test-cdp.sh
+
       - name: Restore args.gn to canonical state
         # So the next CI run sees the canonical (headless) args.gn, not our
         # temporary x11 override.
