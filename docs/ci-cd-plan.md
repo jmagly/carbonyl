@@ -17,7 +17,7 @@ Secondary constraint: the Chromium build is heavy (~150GB source, ~40GB build ar
 | Builder Dockerfile | `build/Dockerfile.builder` | Published by `build-builder.yml`; consumers pin `.gitea/builder-image-pin`. |
 | Builder image publish | `.gitea/workflows/build-builder.yml` | Decoupled from runtime builds. Publishes `latest` + `sha-<short>` to `git.integrolabs.net/roctinam/carbonyl-builder`. |
 | Runtime packaging | `scripts/build.sh`, `runtime-push.sh`, `runtime-pull.sh`, `runtime-hash.sh` | `build-runtime.yml` publishes both `headless` and `x11` amd64 runtimes on relevant source changes and manual dispatch. |
-| Release publishing | `.gitea/workflows/release.yml` | Tag-driven `v*` release workflow; never rebuilds Chromium, only repackages already-published runtime releases for the tag's runtime hash. |
+| Release publishing | `.gitea/workflows/release.yml` | Tag-driven `v*` release workflow; never rebuilds Chromium, only repackages already-published runtime releases for the tag's runtime hash. Linux amd64 is always included; Linux arm64 is opt-in and validated once #116 publishes `aarch64-unknown-linux-gnu.tgz`. |
 | GitHub mirror | `.gitea/workflows/mirror.yml` | One-way origin → GitHub sync for `main` and `v*` tags. Uses explicit remote SHA force-with-lease for branch updates. |
 | Runner labels in use | `titan` | Single runner. No label segmentation for light vs heavy jobs. |
 
@@ -75,7 +75,7 @@ Secondary constraint: the Chromium build is heavy (~150GB source, ~40GB build ar
 
 - **Builder image is the only thing that requires root on the host.** Everything else is container-in-container-less (we don't nest docker, we just bind-mount source). That simplifies `runs-on: titan` while respecting the "no host toolchain" rule.
 - **Chromium source checkout lives on the host, not in the container.** 150 GB doesn't fit in an image. Bind-mounted read-write at build time; builder container holds only the toolchain.
-- **Runtime tarballs are keyed by `runtime-<hash>`**, computed from `.gclient` + patches + bridge files (see `scripts/runtime-hash.sh`). Consumer-side `build-local.sh` pulls the matching one. Linux runtimes are produced by `build-runtime.yml`; the macOS Apple Silicon runtime is produced on mutsu and published onto the same headless `runtime-<hash>` release as `aarch64-apple-darwin.tgz`.
+- **Runtime tarballs are keyed by `runtime-<hash>`**, computed from `.gclient` + patches + bridge files (see `scripts/runtime-hash.sh`). Consumer-side `build-local.sh` pulls the matching one. Linux amd64 runtimes are produced by `build-runtime.yml`; the macOS Apple Silicon runtime is produced on mutsu and published onto the same headless `runtime-<hash>` release as `aarch64-apple-darwin.tgz`. Linux arm64 is dispatched from mutsu via `scripts/mutsu-build-linux-arm64.sh` and publishes `aarch64-unknown-linux-gnu.tgz` for #116.
 - **Release artifacts are source-level tags (`v0.x.y`) separate from runtime tags (`runtime-<hash>`).** Source tag points at code + docs; runtime tag points at pre-built binaries. One `v0.x.y` release may reference multiple `runtime-<hash>` assets if re-built for different architectures.
 - **GitHub mirror is one-way** (origin → github, never the reverse). Tag pushes replicate. This matches the "push to origin first" convention in top-level `CLAUDE.md`.
 - **Host workspace sync is ownership-normalized before rsync.** `build-runtime.yml`

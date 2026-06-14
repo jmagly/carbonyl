@@ -113,8 +113,8 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148
    # linux/amd64 (run on the build host after docker-build.sh)
    GITEA_TOKEN=<token> bash scripts/runtime-push.sh
 
-   # linux/arm64 (if cross-compiled or built on arm64)
-   GITEA_TOKEN=<token> bash scripts/runtime-push.sh arm64
+   # linux/arm64 (built in the mutsu Colima profile)
+   GITEA_TOKEN=<token> bash scripts/mutsu-build-linux-arm64.sh --publish
 
    # macos/amd64 and macos/arm64 (run on a Mac after docker-build.sh)
    GITEA_TOKEN=<token> bash scripts/runtime-push.sh
@@ -124,6 +124,11 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148
    The upload token must have release-write scope on `roctinam/carbonyl`.
    If the tarball exceeds a server-side upload limit, adjust the limit in the
    hosting platform's configuration.
+
+   For release cuts, `release.yml` validates every requested runtime asset
+   before staging. Set `include_linux_arm64=true` only after
+   `runtime-<hash>/aarch64-unknown-linux-gnu.tgz` exists for the tag's runtime
+   hash.
 
 ### Patch reference commits
 

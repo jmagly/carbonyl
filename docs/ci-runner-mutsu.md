@@ -1,4 +1,4 @@
-# macOS build host: mutsu (aarch64-apple-darwin)
+# mutsu build host: macOS arm64 and Linux arm64 dispatch
 
 Carbonyl's macOS ARM runtime (`aarch64-apple-darwin`) is built on **mutsu**, an
 Apple Silicon Mac. Unlike titan (see [ci-runner-titan.md](ci-runner-titan.md)),
@@ -11,7 +11,12 @@ toggle; #113 / #117). The **build trigger** is SSH-dispatched from an
 authorized host using `scripts/mutsu-build-macos.sh`; mutsu itself still does
 not run a Gitea Actions runner.
 
-Tracks: roctinam/carbonyl #109 (parent #67).
+The same host can also dispatch the Linux ARM64 runtime
+(`aarch64-unknown-linux-gnu`) through a dedicated Colima profile and separate
+checkout. That path is tracked by #116 and feeds the release triple matrix in
+#108.
+
+Tracks: roctinam/carbonyl #109, #116 (parent #67).
 
 ## Host facts
 
@@ -21,7 +26,8 @@ Tracks: roctinam/carbonyl #109 (parent #67).
 | Toolchain | Apple clang (**Command Line Tools only — no full Xcode.app**) |
 | SDK | current macOS SDK under `/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk` |
 | Build volume | `/Volumes/build` — the boot volume `/` is too small for a Chromium checkout (~150 GB); **always build under `/Volumes/build`** |
-| Workspace | `/Volumes/build/carbonyl` |
+| macOS workspace | `/Volumes/build/carbonyl` |
+| Linux arm64 workspace | `/Volumes/build/carbonyl-linux-arm64` |
 
 ## One-time setup
 
@@ -108,6 +114,70 @@ GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
 
 The asset lands on the `runtime-<hash>` release (same hash scheme as Linux).
 Verify with `scripts/runtime-pull.sh arm64 macos`.
+
+## Linux ARM64 build + publish (#116)
+
+Linux ARM64 is built in an aarch64 Linux Colima VM on mutsu. The driver builds
+a local arm64 `carbonyl-builder:<commit>-arm64` image from
+`build/Dockerfile.builder` because the registry-pinned builder image is
+currently amd64-only. Set `MUTSU_BUILDER_IMAGE` only when an arm64 registry
+image is available. The driver intentionally uses a separate checkout and
+profile so Linux gclient/build state cannot interfere with the macOS runtime
+tree.
+
+From an authorized SSH driver host:
+
+```bash
+bash scripts/mutsu-build-linux-arm64.sh \
+  --ssh-config /home/roctinam/.ssh/config \
+  --jobs 2
+```
+
+Default remote resources:
+
+| | |
+|---|---|
+| SSH host | `mutsu-agent` |
+| Colima profile | `carbonyl-linux-arm64` |
+| Colima home | `/Volumes/build/.colima` |
+| Checkout | `/Volumes/build/carbonyl-linux-arm64` |
+| Mount | `/Volumes/build:w` |
+| CPUs / memory / disk | `8` CPUs, `12` GiB RAM, `500` GiB disk |
+
+Publishing uses the same runtime tag as Linux amd64:
+
+```bash
+GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
+  bash scripts/mutsu-build-linux-arm64.sh \
+    --ssh-config /home/roctinam/.ssh/config \
+    --jobs 2 \
+    --publish
+```
+
+The default build is headless and publishes to `runtime-<hash>`. To publish the
+x11 Ozone variant required by the default release workflow, run the same driver
+with `--ozone x11`; that publishes to `runtime-x11-<hash>`:
+
+```bash
+GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
+  bash scripts/mutsu-build-linux-arm64.sh \
+    --ssh-config /home/roctinam/.ssh/config \
+    --ozone x11 \
+    --jobs 2 \
+    --publish
+```
+
+Expected output:
+
+- `build/pre-built/aarch64-unknown-linux-gnu/`
+- `build/pre-built/aarch64-unknown-linux-gnu.tgz`
+- Gitea release asset `runtime-<hash>/aarch64-unknown-linux-gnu.tgz`
+
+The release workflow does not include Linux arm64 by default until this asset is
+known to exist for the tag's runtime hash. Re-run `release.yml` with
+`include_linux_arm64=true`; the workflow validates
+`aarch64-unknown-linux-gnu.tgz` before staging and fails loudly if the asset is
+missing.
 
 ## Notes
 

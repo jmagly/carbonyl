@@ -50,6 +50,14 @@ on:
         options:
           - 'true'
           - 'false'
+      include_linux_arm64:
+        description: 'Include the aarch64-unknown-linux-gnu runtime; fails loudly if its runtime asset is missing'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
   CARGO_TERM_COLOR: always
@@ -62,7 +70,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Resolve tag, version, ozone variants, builder image
+      - name: Resolve tag, version, target platforms, builder image
         run: |
           # ref_name is "v0.2.0-alpha.2" on tag push; input.tag for manual.
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
@@ -85,8 +93,18 @@ jobs:
           # macOS (aarch64-apple-darwin) inclusion — default on (#113).
           # macOS is headless-only and its tarball lives on the shared
           # runtime-<hash> release alongside the Linux x86_64 tarball.
-          # arm64-linux is a separate triple, tracked under #108/#116.
           INCLUDE_MACOS="${{ github.event.inputs.include_macos || 'true' }}"
+
+          # Linux triples. x86_64 is always published. aarch64 Linux is
+          # opt-in until #116 has published the runtime asset; when requested
+          # the verification/download gates below require the asset and fail
+          # loudly rather than silently dropping the architecture (#108).
+          INCLUDE_LINUX_ARM64="${{ github.event.inputs.include_linux_arm64 || 'false' }}"
+          case "${INCLUDE_LINUX_ARM64}" in
+            true)  LINUX_TRIPLES="x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu" ;;
+            false) LINUX_TRIPLES="x86_64-unknown-linux-gnu" ;;
+            *) echo "ERROR: unknown include_linux_arm64 '${INCLUDE_LINUX_ARM64}'" >&2; exit 1 ;;
+          esac
 
           # Builder image resolution — same order as check.yml /
           # build-runtime.yml: dispatch input → .gitea/builder-image-pin
@@ -111,9 +129,11 @@ jobs:
           echo "VERSION=${VERSION}"               >> "$GITHUB_ENV"
           echo "OZONE_INPUT=${OZONE_INPUT}"       >> "$GITHUB_ENV"
           echo "OZONE_VARIANTS=${OZONE_VARIANTS}" >> "$GITHUB_ENV"
+          echo "LINUX_TRIPLES=${LINUX_TRIPLES}"   >> "$GITHUB_ENV"
           echo "BUILDER_IMAGE=${IMAGE}"           >> "$GITHUB_ENV"
           echo "INCLUDE_MACOS=${INCLUDE_MACOS}"   >> "$GITHUB_ENV"
-          echo "[release] tag=${TAG} version=${VERSION} variants=[${OZONE_VARIANTS}] include_macos=${INCLUDE_MACOS}"
+          echo "INCLUDE_LINUX_ARM64=${INCLUDE_LINUX_ARM64}" >> "$GITHUB_ENV"
+          echo "[release] tag=${TAG} version=${VERSION} variants=[${OZONE_VARIANTS}] linux_triples=[${LINUX_TRIPLES}] include_macos=${INCLUDE_MACOS}"
 
       - name: Validate token presence
         run: |
@@ -155,16 +175,7 @@ jobs:
           echo "HASH=${HASH}" >> "$GITHUB_ENV"
           echo "[release] runtime hash: ${HASH}"
 
-      - name: Resolve Linux target architecture
-        run: |
-          # Linux triple for the ozone-variant loop below. macOS
-          # (aarch64-apple-darwin) is staged separately (#113). The
-          # aarch64-unknown-linux-gnu Linux triple is still pending a
-          # published runtime (#116) before it joins this matrix (#108).
-          TRIPLE="x86_64-unknown-linux-gnu"
-          echo "TRIPLE=${TRIPLE}" >> "$GITHUB_ENV"
-
-      - name: Verify all requested runtime releases exist (no Chromium rebuild here!)
+      - name: Verify all requested Linux runtime assets exist (no Chromium rebuild here!)
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
@@ -176,20 +187,32 @@ jobs:
             else
               runtime_tag="runtime-${ozone}-${HASH}"
             fi
-            if curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" > /dev/null; then
-              echo "[release] runtime release '${runtime_tag}' present"
-            else
+            release_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" 2>/dev/null || true)"
+            if [ -z "${release_json}" ]; then
               echo "ERROR: runtime release '${runtime_tag}' not found." >&2
               echo "       Build it first: trigger build-runtime.yml with" >&2
               echo "       ozone_platform=${ozone} on the tagged commit." >&2
               missing=1
+              continue
             fi
+            echo "[release] runtime release '${runtime_tag}' present"
+            for triple in ${LINUX_TRIPLES}; do
+              asset="${triple}.tgz"
+              if printf '%s' "${release_json}" | jq -e --arg name "${asset}" '.assets[] | select(.name == $name)' >/dev/null; then
+                echo "[release] runtime asset '${runtime_tag}/${asset}' present"
+              else
+                echo "ERROR: runtime asset '${asset}' not found on '${runtime_tag}'." >&2
+                echo "       Build and publish it first, then re-run this workflow." >&2
+                echo "       For Linux arm64 (#116): publish aarch64-unknown-linux-gnu.tgz before setting include_linux_arm64=true." >&2
+                missing=1
+              fi
+            done
           done
           if [ "$missing" -ne 0 ]; then
             echo "" >&2
             echo "       Releasing without all requested variants would silently" >&2
-            echo "       drift artefacts. Run build-runtime.yml for the missing" >&2
-            echo "       variant(s), then re-run this workflow." >&2
+            echo "       drift artefacts. Publish the missing runtime asset(s)," >&2
+            echo "       then re-run this workflow." >&2
             exit 1
           fi
 
@@ -221,7 +244,7 @@ jobs:
             exit 1
           fi
 
-      - name: Download and repackage runtime tarballs (per variant)
+      - name: Download and repackage Linux runtime tarballs (per variant and triple)
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
@@ -231,23 +254,30 @@ jobs:
           for ozone in ${OZONE_VARIANTS}; do
             if [ "$ozone" = "headless" ]; then
               runtime_tag="runtime-${HASH}"
-              # Preserve the historical headless naming convention from
-              # v0.2.0-alpha.1 release notes (no ozone tag in filename).
-              asset_name="carbonyl-${VERSION}-${TRIPLE}.tgz"
             else
               runtime_tag="runtime-${ozone}-${HASH}"
-              asset_name="carbonyl-${VERSION}-${ozone}-${TRIPLE}.tgz"
             fi
 
-            url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/${TRIPLE}.tgz"
-            tmp="${STAGE}/.dl-${ozone}.tgz"
-            curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${tmp}" "${url}"
-            mv "${tmp}" "${STAGE}/${asset_name}"
+            for triple in ${LINUX_TRIPLES}; do
+              if [ "$ozone" = "headless" ]; then
+                # Preserve the historical headless naming convention from
+                # v0.2.0-alpha.1 release notes (no ozone tag in filename).
+                asset_name="carbonyl-${VERSION}-${triple}.tgz"
+              else
+                asset_name="carbonyl-${VERSION}-${ozone}-${triple}.tgz"
+              fi
 
-            # sha256 alongside each tarball; carbonyl-agent install
-            # already uses these to verify downloads.
-            ( cd "${STAGE}" && sha256sum "${asset_name}" > "${asset_name}.sha256" )
-            echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
+              url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/${triple}.tgz"
+              tmp="${STAGE}/.dl-${ozone}-${triple}.tgz"
+              curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${tmp}" "${url}"
+              tar -tzf "${tmp}" >/dev/null
+              mv "${tmp}" "${STAGE}/${asset_name}"
+
+              # sha256 alongside each tarball; carbonyl-agent install
+              # already uses these to verify downloads.
+              ( cd "${STAGE}" && sha256sum "${asset_name}" > "${asset_name}.sha256" )
+              echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
+            done
           done
 
           ls -lh "${STAGE}"
@@ -427,3 +457,5 @@ jobs:
           echo "    Gitea:  https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
           echo "    GitHub: https://github.com/jmagly/carbonyl/releases/tag/${TAG}"
           echo "    Variants: ${OZONE_VARIANTS}"
+          echo "    Linux triples: ${LINUX_TRIPLES}"
+          echo "    macOS arm64: ${INCLUDE_MACOS}"
