@@ -73,25 +73,66 @@ The installer downloads a verified-by-SHA256 runtime tarball from the release pa
 
 ### Run Carbonyl directly
 
-```bash
-# From Docker (maintained fork image — current runtime)
-docker run --rm -ti ghcr.io/jmagly/carbonyl https://youtube.com
+#### Docker (recommended)
 
+Maintained `linux/amd64` images are published to
+[`ghcr.io/jmagly/carbonyl`](https://github.com/jmagly/carbonyl/pkgs/container/carbonyl)
+on every `v*` release, built from the verified runtime tarballs (no compile).
+
+```bash
+docker run --rm -ti ghcr.io/jmagly/carbonyl https://example.com
+```
+
+| Tag | Contents |
+|-----|----------|
+| `ghcr.io/jmagly/carbonyl:latest` | headless runtime, newest release |
+| `ghcr.io/jmagly/carbonyl:<version>` | headless, pinned (e.g. `0.2.0-alpha.9`) |
+| `ghcr.io/jmagly/carbonyl:<version>-x11` | x11 ozone, pinned (automation / trusted input) |
+
+The image runs non-root under `tini` via [`build/docker-entrypoint.sh`](build/docker-entrypoint.sh)
+with container-safe defaults (`--no-sandbox`, `--disable-dev-shm-usage`,
+`--disable-gpu`). Arguments after the image name are forwarded to the carbonyl
+CLI. Current runtimes apply an internal 1.5× zoom, so the entrypoint defaults to
+`--zoom=67` (≈100%); override with `-e CARBONYL_ZOOM=50` or `--zoom=50` after the
+image name.
+
+```bash
+# Interactive terminal browsing (needs a TTY)
+docker run --rm -ti ghcr.io/jmagly/carbonyl:latest https://example.com
+
+# Version / help (no URL)
+docker run --rm ghcr.io/jmagly/carbonyl:latest --version
+
+# Persist cookies / profile
+docker volume create carbonyl-profile
+docker run --rm -ti -v carbonyl-profile:/home/carbonyl \
+  ghcr.io/jmagly/carbonyl:latest https://app.example.com
+
+# x11 variant (needs a host/sidecar X server + uinput)
+docker run --rm -ti -e DISPLAY=:99 --device=/dev/uinput --group-add input \
+  ghcr.io/jmagly/carbonyl:<version>-x11 --ozone-platform=x11 https://example.com
+```
+
+| Flag | Why |
+|------|-----|
+| `--rm` | Remove the container on exit |
+| `-ti` | Interactive terminal browsing (omit for `--version`/non-TTY use) |
+| `-v name:/home/carbonyl` | Persist profile / cookies |
+| `-e CARBONYL_ZOOM=N` | Override zoom (lower = zoom out) |
+| `-e DISPLAY=:99 --device=/dev/uinput` | x11 ozone / trusted input |
+
+#### Other ways
+
+```bash
 # Upstream image (M111-era, dated but works)
 docker run --rm -ti fathyb/carbonyl https://youtube.com
 
-# Or via npm (upstream package — M111-era)
-npm install --global carbonyl
-carbonyl https://github.com
+# npm (upstream package — M111-era)
+npm install --global carbonyl && carbonyl https://github.com
 
-# Or download a pre-built runtime from release assets (M147, current)
-# See: https://github.com/jmagly/carbonyl/releases
+# Pre-built runtime tarball from release assets (M147, current)
+# https://github.com/jmagly/carbonyl/releases
 ```
-
-The `ghcr.io/jmagly/carbonyl` image is `linux/amd64`, published per release
-(`:latest` tracks the newest). It runs as a non-root user with `--no-sandbox`
-and `--disable-dev-shm-usage`; mount a volume at `/home/carbonyl` to persist the
-browser profile.
 
 ### Install a native package
 

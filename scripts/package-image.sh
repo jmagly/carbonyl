@@ -9,18 +9,22 @@
 #
 # Usage:
 #   bash scripts/package-image.sh --payload DIR --version 0.2.0-alpha.9 \
-#        [--arch amd64] [--image ghcr.io/jmagly/carbonyl] \
-#        [--out build/image-work] [--push] [--no-latest]
+#        [--arch amd64] [--variant headless|x11] [--tag-suffix -x11] \
+#        [--image ghcr.io/jmagly/carbonyl] [--out build/image-work] \
+#        [--push] [--no-latest]
 #
 #   --payload DIR   Extracted runtime payload (the x86_64-unknown-linux-gnu
 #                   directory: carbonyl, libcarbonyl.so, icudtl.dat, …). Required.
 #   --version V     Semantic version, e.g. 0.2.0-alpha.9. Required.
 #   --arch A        amd64 (default). arm64 is reserved for after #116.
+#   --variant V     Ozone variant of the payload: headless (default) or x11.
+#                   Passed through to package-linux.sh (x11 → carbonyl-x11 .deb).
+#   --tag-suffix S  Appended to the version tag, e.g. -x11 → :<version>-x11.
 #   --image NAME    Image repository (default ghcr.io/jmagly/carbonyl).
 #   --out DIR       Scratch dir for the .deb + build context (default a mktemp).
-#   --push          docker login + push :<version> and :latest. Requires
+#   --push          docker login + push :<version><suffix> and :latest. Requires
 #                   GHCR_TOKEN in the environment; GHCR_USER defaults to jmagly.
-#   --no-latest     Tag/push only :<version>, not :latest.
+#   --no-latest     Tag/push only :<version><suffix>, not :latest (use for x11).
 #
 # Push auth (only read when --push):
 #   GHCR_USER   ghcr username / namespace owner (default: jmagly)
@@ -36,6 +40,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 image="ghcr.io/jmagly/carbonyl"
 arch="amd64"
+variant="headless"
+tag_suffix=""
 payload=""
 version=""
 out=""
@@ -50,13 +56,17 @@ while [ $# -gt 0 ]; do
     --version=*) version="${1#--version=}"; shift ;;
     --arch) arch="$2"; shift 2 ;;
     --arch=*) arch="${1#--arch=}"; shift ;;
+    --variant) variant="$2"; shift 2 ;;
+    --variant=*) variant="${1#--variant=}"; shift ;;
+    --tag-suffix) tag_suffix="$2"; shift 2 ;;
+    --tag-suffix=*) tag_suffix="${1#--tag-suffix=}"; shift ;;
     --image) image="$2"; shift 2 ;;
     --image=*) image="${1#--image=}"; shift ;;
     --out) out="$2"; shift 2 ;;
     --out=*) out="${1#--out=}"; shift ;;
     --push) push=1; shift ;;
     --no-latest) want_latest=0; shift ;;
-    -h|--help) sed -n '2,38p' "$0" | sed 's/^# \?//'; exit 0 ;;
+    -h|--help) sed -n '2,42p' "$0" | sed 's/^# \?//'; exit 0 ;;
     *) echo "ERROR: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -93,28 +103,31 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[image] building .deb from payload via package-linux.sh"
+echo "[image] building .deb from payload via package-linux.sh (variant: $variant)"
 bash "$REPO_ROOT/scripts/package-linux.sh" \
-  --payload "$payload" --version "$version" --arch "$arch" \
+  --payload "$payload" --version "$version" --arch "$arch" --variant "$variant" \
   --formats deb --out "$debdir"
 
 deb="$(find "$debdir" -maxdepth 1 -type f -name '*.deb' | head -1)"
 [ -n "$deb" ] || { echo "ERROR: package-linux.sh produced no .deb in $debdir" >&2; exit 1; }
 echo "[image] using $(basename "$deb") ($(du -h "$deb" | cut -f1))"
 
-# Assemble the build context: exactly the Dockerfile + the .deb.
+# Assemble the build context: exactly the Dockerfile + .deb + entrypoint.
 cp "$REPO_ROOT/build/Dockerfile.runtime" "$ctx/Dockerfile"
+cp "$REPO_ROOT/build/docker-entrypoint.sh" "$ctx/docker-entrypoint.sh"
 cp "$deb" "$ctx/carbonyl.deb"
 
-tag_version="${image}:${version}"
+tag_version="${image}:${version}${tag_suffix}"
 build_args=(--platform "$docker_platform" --tag "$tag_version")
 [ "$want_latest" -eq 1 ] && build_args+=(--tag "${image}:latest")
 
 echo "[image] docker build ${tag_version}$([ "$want_latest" -eq 1 ] && echo " + :latest")"
 docker build "${build_args[@]}" "$ctx"
 
-echo "[image] smoke: carbonyl --version inside the image"
+echo "[image] smoke: carbonyl --version (raw binary, libs load)"
 docker run --rm --entrypoint /usr/bin/carbonyl "$tag_version" --version
+echo "[image] smoke: default entrypoint (tini → docker-entrypoint.sh → --zoom path)"
+docker run --rm "$tag_version" --version
 
 if [ "$push" -eq 1 ]; then
   : "${GHCR_USER:=jmagly}"
