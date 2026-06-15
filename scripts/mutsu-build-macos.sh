@@ -109,6 +109,18 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+# Route all build scratch onto the external volume that holds the checkout.
+# mutsu's boot disk is small and can run 100% full; a sibling of the checkout
+# keeps gclient, cargo, and ninja/clang temp off it. The scratch dir is a
+# SIBLING of the checkout (not inside it), so it never dirties the worktree
+# clean-check above. build-macos.sh applies the same anchor for the
+# direct-invocation path.
+scratch="$(cd "$remote_dir/.." && pwd)/.carbonyl-scratch"
+export TMPDIR="$scratch/tmp"
+export CARGO_HOME="${CARGO_HOME:-$scratch/cargo}"
+mkdir -p "$TMPDIR" "$CARGO_HOME"
+echo "[mutsu] build scratch on external volume: $scratch (TMPDIR, CARGO_HOME)"
+
 echo "[mutsu] updating $branch"
 git fetch origin "$branch"
 git checkout "$branch"

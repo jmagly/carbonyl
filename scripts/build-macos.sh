@@ -28,6 +28,21 @@ cd "$CARBONYL_ROOT"
 source scripts/env.sh
 set +e   # we manage failures explicitly below
 
+# Build scratch (cargo cache + temp) on the same volume as the checkout, but
+# OUTSIDE the worktree. Rationale: on the mutsu Mac mini the boot volume is
+# small and can sit at 100% full, while the Chromium checkout lives on the
+# large external volume (/Volumes/build). cargo's default CARGO_HOME (~/.cargo)
+# and the default TMPDIR (/var/folders on the boot disk) would otherwise write
+# to the full boot disk and fail with ENOSPC mid-build. A sibling of
+# CARBONYL_ROOT keeps that scratch on the external volume without dirtying the
+# git worktree. Override with CARGO_HOME / CARBONYL_TMPDIR to opt out.
+CARBONYL_SCRATCH="$(cd "$CARBONYL_ROOT/.." && pwd)/.carbonyl-scratch"
+export CARGO_HOME="${CARGO_HOME:-$CARBONYL_SCRATCH/cargo}"
+export TMPDIR="${CARBONYL_TMPDIR:-$CARBONYL_SCRATCH/tmp}"
+mkdir -p "$CARGO_HOME" "$TMPDIR" || { echo "ERROR: cannot create build scratch under $CARBONYL_SCRATCH" >&2; exit 1; }
+echo "[build-macos] CARGO_HOME=$CARGO_HOME"
+echo "[build-macos] TMPDIR=$TMPDIR"
+
 ozone="headless"
 jobs=""
 while [ $# -gt 0 ]; do
