@@ -1,17 +1,19 @@
-# publish-image.yml — Publish the Carbonyl runtime container image to GHCR.
+# publish-image.yml — Publish Carbonyl runtime container images to GHCR.
 #
-# On a v* tag (or manual dispatch), builds ghcr.io/jmagly/carbonyl:<version>
-# (+ :latest) for linux/amd64 from the hash-keyed runtime payload that
-# build-runtime.yml already published, and pushes it to GitHub Container
-# Registry. The image installs the same native .deb release.yml publishes
-# (#129), so its runtime libraries match the validated install package.
+# On a v* tag (or manual dispatch), builds ghcr.io/jmagly/carbonyl images for
+# linux/amd64 from the hash-keyed runtime tarballs build-runtime.yml published,
+# and pushes them to GitHub Container Registry. Two variants:
+#   headless → :<version>  (+ :latest)
+#   x11      → :<version>-x11   (best-effort; skipped if the x11 runtime is absent)
+#
+# Each image installs the same native .deb release.yml publishes (#129) and adds
+# ca-certificates + tini + a container entrypoint (terminal env + --zoom
+# normalization; entrypoint approach adapted from jmagly/carbonyl#1 by @eSlider).
 #
 # DELIBERATELY SEPARATE from release.yml: a GHCR publish failure (or a missing
 # GHCR_TOKEN) must never block or fail a release. If GHCR_TOKEN is absent this
-# workflow no-ops with a warning.
-#
-# NEVER rebuilds Chromium — it only consumes the published runtime tarball,
-# same hard constraint as release.yml.
+# workflow no-ops with a warning. NEVER rebuilds Chromium — consumes published
+# runtime tarballs only.
 #
 # Triggers:
 #   - push of a `v*` tag → automatic
@@ -32,12 +34,21 @@ on:
       tag:
         description: 'Existing v* tag to publish the image for (no leading refs/tags/)'
         required: true
+      variants:
+        description: 'Ozone variant(s) to publish: both | headless | x11'
+        required: false
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - headless
+          - x11
       builder_image_tag:
         description: 'carbonyl-builder image tag (sha-<7>, latest, or empty for the repo pin)'
         required: false
         default: ''
       push_latest:
-        description: 'Also move the :latest tag to this version'
+        description: 'Also move the :latest tag to this version (headless only)'
         required: false
         default: 'true'
         type: choice
@@ -53,7 +64,7 @@ jobs:
   publish-image:
     name: Publish ${{ github.event.inputs.tag || github.ref_name }} → GHCR
     runs-on: titan
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: GHCR token gate (no-op if absent — never block releases)
@@ -68,17 +79,23 @@ jobs:
             echo "SKIP=0" >> "$GITHUB_ENV"
           fi
 
-      - name: Resolve tag, version, builder image
+      - name: Resolve tag, version, variants, builder image
         if: env.SKIP != '1'
         run: |
           TAG="${{ github.event.inputs.tag || github.ref_name }}"
           [ -n "$TAG" ] || { echo "ERROR: no tag resolved" >&2; exit 1; }
           VERSION="${TAG#v}"
 
-          # Builder image resolution — same order as release.yml: dispatch
-          # input → .gitea/builder-image-pin → :latest fallback (#66). The
-          # builder image is used only to run scripts/runtime-hash.sh in the
-          # same environment build-runtime.yml used.
+          VARIANTS_INPUT="${{ github.event.inputs.variants || 'both' }}"
+          case "${VARIANTS_INPUT}" in
+            both)         VARIANTS="headless x11" ;;
+            headless|x11) VARIANTS="${VARIANTS_INPUT}" ;;
+            *) echo "ERROR: unknown variants '${VARIANTS_INPUT}'" >&2; exit 1 ;;
+          esac
+
+          # Builder image resolution — same order as release.yml: dispatch input
+          # → .gitea/builder-image-pin → :latest fallback (#66). Used only to run
+          # scripts/runtime-hash.sh in the same environment build-runtime.yml used.
           BUILDER_TAG_INPUT="${{ github.event.inputs.builder_image_tag }}"
           if [ -n "$BUILDER_TAG_INPUT" ]; then
             BUILDER_TAG="$BUILDER_TAG_INPUT"; bsrc="dispatch input"
@@ -96,11 +113,12 @@ jobs:
 
           PUSH_LATEST="${{ github.event.inputs.push_latest || 'true' }}"
 
-          echo "TAG=${TAG}"               >> "$GITHUB_ENV"
-          echo "VERSION=${VERSION}"       >> "$GITHUB_ENV"
-          echo "BUILDER_IMAGE=${IMAGE}"   >> "$GITHUB_ENV"
+          echo "TAG=${TAG}"                 >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}"         >> "$GITHUB_ENV"
+          echo "VARIANTS=${VARIANTS}"       >> "$GITHUB_ENV"
+          echo "BUILDER_IMAGE=${IMAGE}"     >> "$GITHUB_ENV"
           echo "PUSH_LATEST=${PUSH_LATEST}" >> "$GITHUB_ENV"
-          echo "[image] tag=${TAG} version=${VERSION} builder=${IMAGE} (from: $bsrc) push_latest=${PUSH_LATEST}"
+          echo "[image] tag=${TAG} version=${VERSION} variants=[${VARIANTS}] builder=${IMAGE} (from: $bsrc) push_latest=${PUSH_LATEST}"
 
       - name: Validate Gitea token presence
         if: env.SKIP != '1'
@@ -139,48 +157,17 @@ jobs:
           echo "HASH=${HASH}" >> "$GITHUB_ENV"
           echo "[image] runtime hash: ${HASH}"
 
-      - name: Download headless amd64 runtime payload
-        if: env.SKIP != '1'
-        env:
-          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
-        run: |
-          # Headless ozone, x86_64 — the default container runtime. arm64 follows
-          # the arm64-linux runtime (#116); macOS is not a container target.
-          runtime_tag="runtime-${HASH}"
-          triple="x86_64-unknown-linux-gnu"
-          API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
-
-          release_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" 2>/dev/null || true)"
-          if [ -z "${release_json}" ]; then
-            echo "ERROR: runtime release '${runtime_tag}' not found — build it via build-runtime.yml first." >&2
-            exit 1
-          fi
-          if ! printf '%s' "${release_json}" | jq -e --arg n "${triple}.tgz" '.assets[] | select(.name == $n)' >/dev/null; then
-            echo "ERROR: runtime asset '${triple}.tgz' not found on '${runtime_tag}'." >&2
-            exit 1
-          fi
-
-          WORK="${GITHUB_WORKSPACE}/.image-work"
-          rm -rf "${WORK}" && mkdir -p "${WORK}/payload"
-          url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/${triple}.tgz"
-          curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${WORK}/runtime.tgz" "${url}"
-          tar xzf "${WORK}/runtime.tgz" -C "${WORK}/payload"
-          payload_dir="$(find "${WORK}/payload" -maxdepth 1 -type d -name "${triple}" | head -1)"
-          [ -n "${payload_dir}" ] || { echo "ERROR: payload dir not found inside ${triple}.tgz" >&2; exit 1; }
-          echo "PAYLOAD_DIR=${payload_dir}" >> "$GITHUB_ENV"
-          echo "WORK=${WORK}" >> "$GITHUB_ENV"
-          echo "[image] payload: ${payload_dir}"
-
       - name: Resolve packaging tooling (a tag may predate the image scripts)
         if: env.SKIP != '1'
         run: |
           # Normal releases carry scripts/package-image.sh + build/Dockerfile.runtime
-          # in the tagged tree. Tags created before this feature landed (e.g. the
-          # first alpha.9 publish) do not — fall back to the default-branch tooling.
-          # The runtime PAYLOAD still comes from the tag's hash, so the image is
-          # correct; only the version-agnostic build scripts differ in origin.
+          # + build/docker-entrypoint.sh in the tagged tree. Tags created before this
+          # feature landed (e.g. the first alpha.9 publish) do not — fall back to the
+          # default-branch tooling. The runtime PAYLOAD still comes from the tag's
+          # hash, so images are correct; only the version-agnostic build scripts differ.
           if [ -f "${GITHUB_WORKSPACE}/.repo-clone/scripts/package-image.sh" ] && \
-             [ -f "${GITHUB_WORKSPACE}/.repo-clone/build/Dockerfile.runtime" ]; then
+             [ -f "${GITHUB_WORKSPACE}/.repo-clone/build/Dockerfile.runtime" ] && \
+             [ -f "${GITHUB_WORKSPACE}/.repo-clone/build/docker-entrypoint.sh" ]; then
             echo "TOOLING_DIR=${GITHUB_WORKSPACE}/.repo-clone" >> "$GITHUB_ENV"
             echo "[image] packaging tooling from tag ${TAG}"
           else
@@ -192,20 +179,68 @@ jobs:
             echo "TOOLING_DIR=${GITHUB_WORKSPACE}/.tooling-clone" >> "$GITHUB_ENV"
           fi
 
-      - name: Build and push image to GHCR
+      - name: Build and push images to GHCR (per variant)
         if: env.SKIP != '1'
         env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: |
-          latest_flag=""
-          [ "${PUSH_LATEST}" = "true" ] || latest_flag="--no-latest"
-          bash "${TOOLING_DIR}/scripts/package-image.sh" \
-            --payload "${PAYLOAD_DIR}" \
-            --version "${VERSION}" \
-            --arch amd64 \
-            --image "${IMAGE_NAME}" \
-            --out "${WORK}/imgwork" \
-            --push ${latest_flag}
+          set -euo pipefail
+          triple="x86_64-unknown-linux-gnu"
+          API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
+          WORK="${GITHUB_WORKSPACE}/.image-work"
+          rm -rf "${WORK}" && mkdir -p "${WORK}"
+          published=0
+
+          for variant in ${VARIANTS}; do
+            if [ "$variant" = "headless" ]; then
+              runtime_tag="runtime-${HASH}"; tag_suffix=""
+              [ "${PUSH_LATEST}" = "true" ] && latest_flag="" || latest_flag="--no-latest"
+            else
+              runtime_tag="runtime-${variant}-${HASH}"; tag_suffix="-${variant}"
+              latest_flag="--no-latest"
+            fi
+
+            # Locate the runtime release + asset.
+            release_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" 2>/dev/null || true)"
+            asset_ok=0
+            if [ -n "${release_json}" ] && \
+               printf '%s' "${release_json}" | jq -e --arg n "${triple}.tgz" '.assets[] | select(.name == $n)' >/dev/null 2>&1; then
+              asset_ok=1
+            fi
+            if [ "$asset_ok" -ne 1 ]; then
+              if [ "$variant" = "headless" ]; then
+                echo "ERROR: headless runtime asset '${triple}.tgz' not found on '${runtime_tag}' — build it via build-runtime.yml first." >&2
+                exit 1
+              fi
+              echo "::warning::${variant} runtime '${runtime_tag}/${triple}.tgz' absent; skipping the ${variant} image for this run."
+              continue
+            fi
+
+            # Download + extract this variant's payload.
+            vwork="${WORK}/${variant}"
+            mkdir -p "${vwork}/payload"
+            url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/${triple}.tgz"
+            curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${vwork}/runtime.tgz" "${url}"
+            tar xzf "${vwork}/runtime.tgz" -C "${vwork}/payload"
+            payload_dir="$(find "${vwork}/payload" -maxdepth 1 -type d -name "${triple}" | head -1)"
+            [ -n "${payload_dir}" ] || { echo "ERROR: payload dir not found inside ${runtime_tag}/${triple}.tgz" >&2; exit 1; }
+
+            echo "[image] building ${variant} → ${IMAGE_NAME}:${VERSION}${tag_suffix}"
+            bash "${TOOLING_DIR}/scripts/package-image.sh" \
+              --payload "${payload_dir}" \
+              --version "${VERSION}" \
+              --arch amd64 \
+              --variant "${variant}" \
+              --tag-suffix "${tag_suffix}" \
+              --image "${IMAGE_NAME}" \
+              --out "${vwork}/imgwork" \
+              --push ${latest_flag}
+            published=$((published+1))
+          done
+
+          [ "$published" -ge 1 ] || { echo "ERROR: no images published" >&2; exit 1; }
+          echo "[image] published ${published} image(s)"
 
       - name: Cleanup
         if: always()
@@ -221,8 +256,9 @@ jobs:
             echo "==> Container image publish SKIPPED (GHCR_TOKEN not set)."
             exit 0
           fi
-          echo "==> Container image published"
+          echo "==> Container image(s) published"
           echo "    ${IMAGE_NAME}:${VERSION}$([ "${PUSH_LATEST}" = "true" ] && echo " + ${IMAGE_NAME}:latest")"
+          case " ${VARIANTS} " in *" x11 "*) echo "    ${IMAGE_NAME}:${VERSION}-x11 (if the x11 runtime was present)";; esac
           echo "    Pull: docker run --rm -ti ${IMAGE_NAME}:${VERSION} https://example.com"
           echo "    Note: first publish creates a PRIVATE package — set it public in"
           echo "          github.com/users/jmagly/packages for anonymous docker pull."

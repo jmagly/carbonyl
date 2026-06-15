@@ -4,7 +4,7 @@
 - **Date:** 2026-06-14
 - **Issue:** roctinam/carbonyl#132
 - **Supersedes:** none
-- **Related:** #129 (native install packages, ADR-003), #116 (arm64-linux runtime), #52/#53 (release + mirror)
+- **Related:** #129 (native install packages, ADR-003), #116 (arm64-linux runtime), #52/#53 (release + mirror), [jmagly/carbonyl#1](https://github.com/jmagly/carbonyl/pull/1) (community PR — entrypoint / zoom / tini / x11 adapted from @eSlider)
 
 ## Context
 
@@ -59,12 +59,20 @@ build and validate a `.deb` for the headless `x86_64` runtime on titan (#129).
 
 ## Decision
 
-1. **Registry / name:** `ghcr.io/jmagly/carbonyl`, tags `:<version>` + `:latest`.
-2. **Platform:** `linux/amd64`, headless ozone. arm64 follows the arm64-linux
-   runtime (#116) as a second platform + `docker manifest`.
-3. **Image contents:** `ubuntu:24.04` + the published `.deb` (one dependency
-   source of truth, ADR-003); non-root `carbonyl` user; entrypoint
-   `carbonyl --no-sandbox --disable-dev-shm-usage --user-data-dir=…`.
+1. **Registry / name:** `ghcr.io/jmagly/carbonyl`.
+2. **Platforms / variants:** `linux/amd64`. **headless** → `:<version>` (+ `:latest`)
+   and **x11** → `:<version>-x11` (best-effort — skipped if the x11 runtime is
+   absent, never fails the run). arm64 follows the arm64-linux runtime (#116).
+3. **Image contents:** `ubuntu:24.04` + the published `.deb` (dependency source of
+   truth, ADR-003) + **`ca-certificates`** (TLS roots — required for HTTPS) +
+   **`tini`** (PID 1 signal/zombie handling). A small `build/docker-entrypoint.sh`
+   sets container-safe terminal env (`TERM`/`COLORTERM`/`LANG`), disables dbus,
+   sets `CARBONYL_ENV_SHELL_MODE`, adds `--disable-gpu`, and normalizes `--zoom`
+   (default `67` to cancel the pre-#100 1.5× internal zoom → ~100% effective).
+   Non-root `carbonyl` user; `tini` as PID 1 with `STOPSIGNAL SIGINT`. The
+   terminal/zoom/tini hardening is adapted from
+   [jmagly/carbonyl#1](https://github.com/jmagly/carbonyl/pull/1) (@eSlider),
+   re-pointed at the `.deb` launcher.
 4. **Build path:** `build/Dockerfile.runtime` + `scripts/package-image.sh`,
    reused locally and by CI.
 5. **Publish:** `.gitea/workflows/publish-image.yml` on `v*` tag /
@@ -76,11 +84,15 @@ build and validate a `.deb` for the headless `x86_64` runtime on titan (#129).
 ## Consequences
 
 - **Positive:** maintained `docker run --rm -ti ghcr.io/jmagly/carbonyl <url>`;
-  container libraries match the validated `.deb`; publish is isolated from
-  releases; one script path local and in CI.
+  container libraries match the validated `.deb`; correct HTTPS (ca-certificates)
+  and ~100% terminal rendering (zoom/`TERM`); clean signal handling (tini);
+  headless + x11 variants; publish isolated from releases; one script path local
+  and in CI.
 - **Negative / accepted:** a new `write:packages` secret to provision and
   rotate; the first published package is private until an operator makes it
-  public; image is `amd64`-only until #116.
-- **Follow-ups:** arm64 / multi-arch manifest once #116 lands; optional Gitea
-  container-registry mirror; image signing / attestation (cosign), deferred
-  consistent with `docs/ci-secrets.md`.
+  public; image is `amd64`-only until #116; the `--zoom=67` default is tied to
+  the pre-#100 1.5× multiplier and must move to `100` once runtimes drop it.
+- **Follow-ups:** arm64 / multi-arch manifest once #116 lands; build-layer
+  caching (registry/gha) for faster rebuilds; optional Gitea container-registry
+  mirror; image signing / attestation (cosign), deferred consistent with
+  `docs/ci-secrets.md`.
