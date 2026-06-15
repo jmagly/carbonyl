@@ -202,6 +202,8 @@ need docker
 repo_url="${MUTSU_REPO_URL:-git@git.integrolabs.net:roctinam/carbonyl.git}"
 builder_image="${MUTSU_BUILDER_IMAGE:-}"
 builder_source="override"
+seed_cache_dir="${MUTSU_SEED_CACHE_DIR:-$(dirname "$remote_dir")/carbonyl-linux-arm64-cache}"
+seed_bundle="${seed_cache_dir}/chromium-src.bundle"
 mkdir -p "$colima_home"
 export COLIMA_HOME="$colima_home"
 
@@ -275,6 +277,15 @@ docker version >/dev/null
 echo "[mutsu-linux] preparing VM-native build dir ${vm_build_dir}"
 colima ssh --profile "$profile" -- sudo mkdir -p "$vm_build_dir" </dev/null
 
+if [ -d "${remote_dir}/chromium/src/.git" ] && git -C "${remote_dir}/chromium/src" rev-parse --verify HEAD >/dev/null 2>&1; then
+  echo "[mutsu-linux] preparing Chromium seed bundle ${seed_bundle}"
+  mkdir -p "$seed_cache_dir"
+  git -C "${remote_dir}/chromium/src" bundle create "${seed_bundle}.tmp" --all
+  mv "${seed_bundle}.tmp" "$seed_bundle"
+else
+  echo "[mutsu-linux] no usable host Chromium checkout found for seed bundle"
+fi
+
 if [ "$builder_source" = "local" ]; then
   echo "[mutsu-linux] building local arm64 builder image"
   docker build \
@@ -296,6 +307,7 @@ container_root="/workspace"
 docker_run=(
   docker run --rm
   -v "${remote_dir}:${container_root}"
+  -v "${seed_cache_dir}:/seed:ro"
   -v "${vm_build_dir}:/build"
   -w "${container_root}"
   -e CARBONYL_ROOT="${container_root}"
@@ -331,10 +343,9 @@ if [ "$skip_sync" != "true" ]; then
         rm -rf "${CHROMIUM_SRC}"
       fi
       mkdir -p "$(dirname "${CHROMIUM_SRC}")"
-      seed_src="${CARBONYL_ROOT}/chromium/src"
-      if [ -d "${seed_src}/.git" ] && git -C "${seed_src}" rev-parse --verify HEAD >/dev/null 2>&1; then
-        echo "[sync-chromium] seeding Chromium src from ${seed_src}"
-        cp -a "${seed_src}" "${CHROMIUM_SRC}"
+      if [ -f /seed/chromium-src.bundle ]; then
+        echo "[sync-chromium] cloning Chromium src from seed bundle"
+        git clone --no-checkout /seed/chromium-src.bundle "${CHROMIUM_SRC}"
       else
         echo "[sync-chromium] cloning Chromium src checkout"
         git clone --no-checkout https://chromium.googlesource.com/chromium/src.git "${CHROMIUM_SRC}"
