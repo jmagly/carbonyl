@@ -1,0 +1,23 @@
+Carbonyl for macOS is currently UNSIGNED (no Apple Developer ID).
+
+macOS Gatekeeper will block it on first launch ("unidentified developer" or
+"Apple could not verify this app is free of malware"). To allow it:
+
+  Option A — System Settings:
+    1. Double-click the .pkg. When macOS blocks it, open
+       System Settings > Privacy & Security.
+    2. Scroll to the message about "carbonyl" and click "Open Anyway",
+       then re-open the .pkg.
+
+  Option B — Terminal (clears the download quarantine flag):
+       xattr -d com.apple.quarantine ~/Downloads/carbonyl-*.pkg
+    then double-click the .pkg again.
+
+After installation, carbonyl is at /usr/local/bin/carbonyl. Run e.g.:
+
+       carbonyl https://example.com
+
+(Ensure /usr/local/bin is on your PATH.)
+
+A signed + notarized installer will replace this once an Apple Developer ID is
+available (see ADR-003 and issue #129).

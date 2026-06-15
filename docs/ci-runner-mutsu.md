@@ -123,6 +123,31 @@ GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
 The asset lands on the `runtime-<hash>` release (same hash scheme as Linux).
 Verify with `scripts/runtime-pull.sh arm64 macos`.
 
+## macOS install package (.pkg / .dmg) — #129
+
+The unsigned macOS installer is **version-stamped**, so it is built at release
+time (after a `v*` tag exists) rather than at runtime-build time. Only mutsu can
+run `pkgbuild`/`hdiutil`, so this is SSH-driven like the runtime build. (Linux
+`.deb`/`.rpm`/`.AppImage` are produced automatically in `release.yml` on titan.)
+
+From an authorized admin host, after `release.yml` has created the release:
+
+```bash
+GITEA_TOKEN="$(cat ~/.config/gitea/token)" \
+GH_MIRROR_TOKEN="$(cat ~/.config/github/mirror-token)" \
+  bash scripts/mutsu-package-macos.sh --version 0.2.0-alpha.9 --host mutsu-agent
+```
+
+The driver fast-forwards `main` on mutsu, ensures the macOS runtime payload for
+the tag's hash is present (pulling it via `runtime-pull.sh arm64 macos` if not),
+runs `scripts/package-macos.sh` with **scratch + output on `/Volumes/build`**
+(the boot disk is small and can run full — same reason as the build scratch
+above), streams the artifacts back, and uploads
+`carbonyl-<version>-macos-arm64.{pkg,dmg}` (+ `.sha256`) to the versioned Gitea
+release and the GitHub mirror. Omit `GH_MIRROR_TOKEN` (or pass `--gitea-only`)
+to skip the GitHub upload. The installer is unsigned (no Apple Developer ID);
+see `packaging/macos/GATEKEEPER.txt` and ADR-003.
+
 ## Linux ARM64 build + publish (#116)
 
 Linux ARM64 is built in an aarch64 Linux Colima VM on mutsu. The driver builds

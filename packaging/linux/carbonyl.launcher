@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# /usr/bin/carbonyl launcher for the .deb / .rpm packages.
+# The runtime lives in /usr/lib/carbonyl with an $ORIGIN rpath, so it already
+# resolves its bundled libraries; LD_LIBRARY_PATH is set belt-and-suspenders
+# for loaders/configs that ignore rpath.
+set -euo pipefail
+libdir="/usr/lib/carbonyl"
+export LD_LIBRARY_PATH="${libdir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+exec "${libdir}/carbonyl" "$@"

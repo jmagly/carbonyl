@@ -1,0 +1,8 @@
+#!/bin/bash
+# pkg postinstall — expose carbonyl on PATH via a /usr/local/bin symlink.
+# The payload installs to /usr/local/carbonyl; the binary's @executable_path
+# install names resolve its sibling dylibs, so a symlink is sufficient.
+set -e
+mkdir -p /usr/local/bin
+ln -sf /usr/local/carbonyl/carbonyl /usr/local/bin/carbonyl
+exit 0

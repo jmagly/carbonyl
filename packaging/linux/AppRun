@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# AppImage entrypoint. $APPDIR is set by the AppImage runtime; fall back to the
+# script's own directory when run from an extracted AppDir.
+set -euo pipefail
+HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
+libdir="${HERE}/usr/lib/carbonyl"
+export LD_LIBRARY_PATH="${libdir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+exec "${libdir}/carbonyl" "$@"
