@@ -14,27 +14,22 @@ a PR to either remove the reference or document the new secret here.
 
 | Secret | Identity | Type | Scope (minimum) | Used by | Rotation |
 |---|---|---|---|---|---|
-| `BUILD_REPO_TOKEN` | bot account `roctibot` on `git.integrolabs.net` | Gitea PAT | `write:package`, `write:release`, `read:package` on `roctinam/carbonyl` | `build-builder.yml`, `build-runtime.yml`, `check.yml`, `release.yml` (#52), `publish-image.yml` (#132) | 90 days |
+| `BUILD_REPO_TOKEN` | bot account `roctibot` on `git.integrolabs.net` | Gitea PAT | `write:package`, `write:release`, `read:package` on `roctinam/carbonyl` | `build-builder.yml`, `build-runtime.yml`, `check.yml`, `release.yml` (#52), `publish-image.yml` (#132), `build-runtime-arm64.yml` (#116) | 90 days |
 | `GH_MIRROR_TOKEN` | bot account `jmagly-mirror` on `github.com` | GitHub fine-grained PAT | `contents: write`, `metadata: read` on `jmagly/carbonyl` only | `mirror.yml` (#53), `release.yml` mirror step (#52) | 90 days |
 | `GHCR_TOKEN` | user `jmagly` on `github.com` | GitHub classic PAT | `write:packages`, `read:packages` on the `ghcr.io/jmagly` namespace | `publish-image.yml` (#132) | 90 days |
-| `RUNTIME_PUBLISH_TOKEN` | **user `roctinam`** on `git.integrolabs.net` (human, not a bot — see note) | Gitea PAT | `write:release`, `read:package` on `roctinam/carbonyl` | `build-runtime-arm64.yml` (#116) — publish step only | 90 days |
+| `MUTSU_SSH_KEY` | the `mutsu_automation` SSH key, authorized for `manitcor@mutsu` (`10.0.42.41`) | SSH private key (ed25519) | SSH login to mutsu only | `build-runtime-arm64.yml` (#116) | per fleet SSH-key policy |
 
-> **`RUNTIME_PUBLISH_TOKEN` — status: NOT YET PROVISIONED (2026-06-15).** Until it
-> is created and added as a repo Actions secret, `build-runtime-arm64.yml` with
-> `publish=true` fails loudly by design; `publish=false` and `preflight_only=true`
-> need no token and work today.
->
-> This token is intentionally a **`roctinam` human PAT**, an exception to the
-> "Bot identity, not human" scope principle below, for two reasons: (1) the mutsu
-> driver (`scripts/mutsu-build-linux-arm64.sh`) does `docker login -u roctinam`
-> and `runtime-push.sh` uploads the release asset as the token's user — a bot
-> token would fail the login and mis-attribute the asset; (2) the delivery-identity
-> policy requires all deliveries (commits, tags, release assets, tracker writes) to
-> be attributed to the GPG-signed configured user `roctinam`, never the `roctibot`
-> bot. Do **not** substitute `BUILD_REPO_TOKEN` (that one is `roctibot`).
-> Reconciling the broader "bot identity" principle with the delivery-identity
-> policy is tracked upstream in `roctinam/aiwg#1601` (config-schema support for a
-> declared committer + signing + forge tracker-actor).
+> **Artifact publishing uses `BUILD_REPO_TOKEN`, like every other runtime/release
+> upload.** The arm64 runtime publish (`runtime-push.sh arm64`) attaches the
+> tarball to the same `runtime-<hash>` release as the x86_64 and macOS tarballs,
+> with the same token. CI **artifact publishing** (release assets, Docker images)
+> uses the standard CI service tokens; the deliver-as-`roctinam` policy applies to
+> **authored** deliveries (GPG-signed commits/tags, interactive tracker writes —
+> issues/PRs/comments), not artifact uploads. (An earlier revision of this doc
+> introduced a separate `RUNTIME_PUBLISH_TOKEN` for the arm64 publish — that was
+> unnecessary friction and has been removed; the arm64 path's `docker login -u
+> roctinam` branch isn't even reached, since its builder image is built locally in
+> the VM rather than pulled.)
 
 `github.actor` (auto-injected by Gitea Actions) is the username used
 for `docker login` against the Gitea registry. It is not a secret —
@@ -141,27 +136,28 @@ Within hours:
 
 ## mutsu SSH access (not a Gitea secret)
 
-The arm64 Linux runtime build (`build-runtime-arm64.yml`, #116) and the macOS
-arm64 runtime build are **SSH-dispatched to mutsu** from the `titan` runner —
-mutsu cannot host a Gitea Actions runner (macOS `act_runner` RPC limitation; see
-`docs/ci-runner-mutsu.md`). The SSH credential for mutsu is therefore **not a
-Gitea Actions secret**: it lives on the runner host's filesystem in the runner
-user's `~/.ssh`, and the job inherits it because `act_runner` runs the job as
-that host user.
+The arm64 Linux runtime build (`build-runtime-arm64.yml`, #116) is
+**SSH-dispatched to mutsu** from the `titan` runner — mutsu cannot host a Gitea
+Actions runner (macOS `act_runner` RPC limitation; see `docs/ci-runner-mutsu.md`).
+The SSH credential is the **`MUTSU_SSH_KEY` repo Actions secret** — the
+`mutsu_automation` private key, authorized for `manitcor@mutsu`. We do **not**
+rely on the runner host's `~/.ssh`: the runner job environment does not resolve
+the `mutsu-agent` DNS alias, so the workflow writes the secret to a job-local
+keyfile and builds an SSH config that targets mutsu by **IP** (`10.0.42.41`,
+user `manitcor`) with `StrictHostKeyChecking accept-new`. The keyfile + config
+live under `$GITHUB_WORKSPACE/.ssh-mutsu` (mode 600) and are wiped in the job's
+`always()` cleanup step.
 
-Required on the `titan` runner host (provisioned operationally, out of band):
+| Item | Value |
+|---|---|
+| Secret | `MUTSU_SSH_KEY` — the `mutsu_automation` private key |
+| Host / user | `10.0.42.41` / `manitcor` |
+| Host-key policy | `accept-new` (trust-on-first-connect; controlled fleet host) |
+| Override | the workflow's `ssh_config` input points at an existing on-runner config for ad-hoc/debug runs |
 
-| Item | Value | Notes |
-|---|---|---|
-| Private key | `~/.ssh/agentic_ed25519` (or as referenced by the host config) | ed25519; the key authorized on `mutsu` for the build user |
-| SSH config entry | `Host mutsu-agent` → `HostName 10.0.42.41`, `User manitcor`, `IdentityFile ~/.ssh/agentic_ed25519` | `build-runtime-arm64.yml` passes `--ssh-config "$HOME/.ssh/config"`; override with the workflow's `ssh_config` input if it lives elsewhere |
-| Host key | in the runner user's `known_hosts` | the driver uses `ssh -o BatchMode=yes`; the host key must already be trusted (no interactive prompt) |
-
-This is intentionally **runner-host material, not a rot-managed Gitea secret** —
-it cannot be injected per-run because the build is a long-lived SSH session, and
-it is shared with the macOS arm64 build. If the runner host is rebuilt or the
-mutsu key rotates, re-provision `~/.ssh` on the runner. The workflow's
-`preflight_only=true` mode verifies reachability without starting a build.
+The workflow's `preflight_only=true` mode verifies the SSH path (and mutsu
+readiness) without starting a build. Rotating `mutsu_automation` = update the
+`MUTSU_SSH_KEY` secret; no runner-host change needed.
 
 ## Out of scope
 
