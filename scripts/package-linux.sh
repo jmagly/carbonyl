@@ -242,12 +242,89 @@ YAML
   want rpm && { echo "[pkg] building .rpm"; "$NFPM" package --config "$cfg" --packager rpm --target "$out/"; }
 fi
 
+# Bundle the full shared-library closure so the AppImage runs on a bare host
+# (#138). The runtime payload ships only carbonyl's own .so's; every Chromium
+# dependency (nspr/nss/dbus/expat/gbm/X11/...) and the dlopen'd extras
+# (fontconfig/freetype, glib, xkbcommon) otherwise resolve from the host, which
+# breaks the AppImage's single-file portability promise (the deb/rpm declare
+# them; an AppImage cannot). We copy the transitive ldd closure of the binary
+# plus the dlopen'd roots, excluding only the glibc/loader family and host GL
+# dispatch. The build host MUST have the runtime deps installed — CI builds the
+# AppImage in a deps-provisioned image (release.yml).
+bundle_appimage_deps() { # <appdir>
+  local appdir="$1" libdir="$1/usr/lib/carbonyl"
+  # glibc/loader family + host GL dispatch MUST come from the host. Carbonyl
+  # renders with the bundled SwiftShader (software GL), so libgbm/libdrm/libX11/
+  # libxcb stay bundled for portability; only the core loader libs are excluded.
+  local exclude='^(ld-linux.*|libc|libdl|libpthread|librt|libm|libmvec|libresolv|libcrypt|libutil|libnsl|libBrokenLocale|libthread_db|libanl|libGLdispatch|libGLX|libOpenGL|libGL)\.so'
+  # dlopen'd at runtime → absent from ldd; seed them explicitly (#136, #138).
+  # NSS dlopens its PKCS#11 modules (softokn/freebl/nssckbi/nssdbm) by name at
+  # runtime, so they never appear in ldd — without them NSS init aborts FATAL
+  # ("libsoftokn3.so: cannot open shared object file") and HTTPS never loads.
+  local seeds=(libfontconfig.so.1 libfreetype.so.6 \
+               libglib-2.0.so.0 libgobject-2.0.so.0 libgio-2.0.so.0 \
+               libxkbcommon.so.0 \
+               libsoftokn3.so libfreebl3.so libfreeblpriv3.so \
+               libnssckbi.so libnssdbm3.so libssl3.so)
+  echo "[pkg] bundling AppImage library closure"
+  local -a roots=("$libdir/carbonyl")
+  local f s p
+  for f in "$libdir"/*.so*; do [ -e "$f" ] && roots+=("$f"); done
+  for s in "${seeds[@]}"; do
+    p="$(ldconfig -p | awk -v n="$s" '$1==n {print $NF; exit}')"
+    if [ -n "$p" ] && [ -e "$p" ]; then
+      cp -Ln "$p" "$libdir/$s" 2>/dev/null || true
+      roots+=("$p")
+    else
+      echo "[pkg] WARN: dlopen seed not found on build host: $s (AppImage may be incomplete)" >&2
+    fi
+  done
+  # Union the transitive ldd closure of every root; copy non-excluded externals.
+  local base lib
+  for f in "${roots[@]}"; do
+    ldd "$f" 2>/dev/null | awk '/=> \// {print $3}'
+  done | sort -u | while read -r lib; do
+    [ -e "$lib" ] || continue
+    base="$(basename "$lib")"
+    echo "$base" | grep -Eq "$exclude" && continue
+    [ -e "$libdir/$base" ] && continue
+    cp -Ln "$lib" "$libdir/$base" 2>/dev/null || true
+  done
+  # Bundle fonts + a relocatable fontconfig config so glyphs render with no host
+  # fontconfig (liberation fonts come from fonts-liberation on the build host).
+  local fontsrc="" d
+  for d in /usr/share/fonts/truetype/liberation \
+           /usr/share/fonts/liberation \
+           /usr/share/fonts/liberation-fonts; do
+    [ -d "$d" ] && { fontsrc="$d"; break; }
+  done
+  mkdir -p "$appdir/usr/share/fonts/truetype" "$appdir/etc/fonts"
+  if [ -n "$fontsrc" ]; then
+    cp -a "$fontsrc" "$appdir/usr/share/fonts/truetype/liberation"
+  else
+    echo "[pkg] WARN: liberation fonts not found on build host (AppImage will rely on host fonts)" >&2
+  fi
+  cat >"$appdir/etc/fonts/fonts.conf" <<'FCEOF'
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<!-- Self-contained fontconfig for the Carbonyl AppImage (#138). The dir is
+     resolved relative to this config file (../../usr/share/fonts) so the bundle
+     works from any extracted location with no host fontconfig. -->
+<fontconfig>
+  <dir prefix="relative">../../usr/share/fonts</dir>
+  <cachedir>/tmp/carbonyl-fontconfig-cache</cachedir>
+  <config></config>
+</fontconfig>
+FCEOF
+}
+
 # ── AppImage ────────────────────────────────────────────────────────────────
 if want appimage; then
   resolve_appimagetool
   APPDIR="$STAGE/Carbonyl.AppDir"
   mkdir -p "$APPDIR/usr/lib/carbonyl"
   cp -a "$payload/." "$APPDIR/usr/lib/carbonyl/"
+  bundle_appimage_deps "$APPDIR"
   install -m 0755 "$CARBONYL_ROOT/packaging/linux/AppRun" "$APPDIR/AppRun"
   install -m 0644 "$CARBONYL_ROOT/packaging/linux/carbonyl.desktop" "$APPDIR/carbonyl.desktop"
   if [ -n "$png_icon" ]; then

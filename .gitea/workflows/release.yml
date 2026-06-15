@@ -330,13 +330,21 @@ jobs:
           echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
           ls -lh "${STAGE}"
 
-      - name: Build Linux native install packages — deb/rpm/AppImage (#129)
+      - name: Build Linux native install packages — deb/rpm/AppImage (#129, #138)
         run: |
-          # Native installers for the x86_64 headless runtime, built on titan from
-          # the staged headless tarball and dropped into STAGE so the Gitea upload
-          # + GitHub mirror loops below carry them (with .sha256). macOS .pkg/.dmg
-          # are produced separately on mutsu (scripts/mutsu-package-macos.sh) since
-          # only macOS can run pkgbuild. See ADR-003.
+          # Native installers for the x86_64 headless runtime, dropped into STAGE
+          # so the Gitea upload + GitHub mirror loops below carry them (with
+          # .sha256). macOS .pkg/.dmg are produced separately on mutsu
+          # (scripts/mutsu-package-macos.sh) since only macOS runs pkgbuild. ADR-003.
+          #
+          # Built INSIDE an ubuntu:24.04 container (#138): the AppImage bundles its
+          # full shared-library closure for a bare host, and the closure walk can
+          # only copy libraries that are actually installed. Building in a clean,
+          # deps-provisioned container makes the AppImage reproducible and
+          # independent of whatever happens to be installed on the titan host.
+          # Sequence: build deb+rpm (no deps needed) → apt-install the deb to
+          # provision the validated runtime closure (NSS/fontconfig/glib/... + the
+          # NSS PKCS#11 modules NSS dlopens) → build the AppImage with libs present.
           set -euo pipefail
           hl_tgz="${STAGE}/carbonyl-${VERSION}-x86_64-unknown-linux-gnu.tgz"
           if [ ! -f "$hl_tgz" ]; then
@@ -348,9 +356,31 @@ jobs:
           tar xzf "$hl_tgz" -C "$work/payload"
           payload_dir="$(find "$work/payload" -maxdepth 1 -type d -name 'x86_64-unknown-linux-gnu' | head -1)"
           [ -n "$payload_dir" ] || { echo "ERROR: payload dir not found inside $hl_tgz" >&2; exit 1; }
-          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/package-linux.sh" \
-            --payload "$payload_dir" --version "${VERSION}" --arch amd64 \
-            --formats deb,rpm,appimage --out "$work/out"
+          rel_payload="${payload_dir#"${GITHUB_WORKSPACE}/"}"
+          uid="$(id -u)"; gid="$(id -g)"
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/ws" \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e VERSION="${VERSION}" \
+            -e REL_PAYLOAD="${rel_payload}" \
+            -e HOST_UID="${uid}" -e HOST_GID="${gid}" \
+            ubuntu:24.04 bash -euo pipefail -c '
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends \
+                curl ca-certificates file squashfs-tools desktop-file-utils zsync >/dev/null
+              cd /ws/.repo-clone
+              # deb + rpm first (nfpm needs no runtime deps installed)
+              bash scripts/package-linux.sh \
+                --payload "/ws/${REL_PAYLOAD}" --version "${VERSION}" --arch amd64 \
+                --formats deb,rpm --out /ws/.pkg-linux/out
+              # provision the validated runtime closure by installing the deb,
+              # then build the self-contained AppImage against the present libs
+              apt-get install -y -qq --no-install-recommends /ws/.pkg-linux/out/carbonyl_*_amd64.deb >/dev/null 2>&1
+              bash scripts/package-linux.sh \
+                --payload "/ws/${REL_PAYLOAD}" --version "${VERSION}" --arch amd64 \
+                --formats appimage --out /ws/.pkg-linux/out
+              chown -R "${HOST_UID}:${HOST_GID}" /ws/.pkg-linux
+            '
           shopt -s nullglob
           staged=0
           for f in "$work/out"/*.deb "$work/out"/*.rpm "$work/out"/*.AppImage; do
@@ -361,8 +391,27 @@ jobs:
             staged=$((staged+1))
           done
           [ "$staged" -ge 1 ] || { echo "ERROR: no Linux packages produced" >&2; exit 1; }
-          rm -rf "$work"
           ls -lh "${STAGE}"
+
+      - name: Render-smoke Linux packages — fail on missing runtime dep (#138)
+        run: |
+          # Install each package into a clean container matching its target distro
+          # and render a real page with `carbonyl --dump-text`. A package whose
+          # declared (.deb/.rpm) or bundled (.AppImage) dependency set is incomplete
+          # fails HERE — in CI — instead of at the user's terminal. The AppImage is
+          # checked on a BARE ubuntu (only ca-certificates), proving self-containment.
+          set -euo pipefail
+          out="${GITHUB_WORKSPACE}/.pkg-linux/out"
+          deb="$(ls "$out"/*.deb 2>/dev/null | head -1 || true)"
+          rpm="$(ls "$out"/*.rpm 2>/dev/null | head -1 || true)"
+          appimage="$(ls "$out"/*.AppImage 2>/dev/null | head -1 || true)"
+          args=()
+          [ -n "$deb" ]      && args+=(--deb "$deb")
+          [ -n "$rpm" ]      && args+=(--rpm "$rpm")
+          [ -n "$appimage" ] && args+=(--appimage "$appimage")
+          [ "${#args[@]}" -ge 2 ] || { echo "ERROR: expected deb+rpm+appimage to smoke" >&2; exit 1; }
+          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/smoke-packages.sh" "${args[@]}"
+          rm -rf "${GITHUB_WORKSPACE}/.pkg-linux"
 
       - name: Resolve release notes
         run: |

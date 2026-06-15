@@ -5,4 +5,11 @@ set -euo pipefail
 HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 libdir="${HERE}/usr/lib/carbonyl"
 export LD_LIBRARY_PATH="${libdir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+# Use the bundled fontconfig + fonts (#138) so text renders on a bare host with
+# no system fontconfig. The config resolves its font dir relative to itself and
+# caches under /tmp, so the bundle is fully self-contained.
+if [ -f "${HERE}/etc/fonts/fonts.conf" ]; then
+  export FONTCONFIG_FILE="${HERE}/etc/fonts/fonts.conf"
+  export FONTCONFIG_PATH="${HERE}/etc/fonts"
+fi
 exec "${libdir}/carbonyl" "$@"
