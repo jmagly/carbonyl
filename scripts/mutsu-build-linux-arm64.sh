@@ -331,8 +331,14 @@ if [ "$skip_sync" != "true" ]; then
         rm -rf "${CHROMIUM_SRC}"
       fi
       mkdir -p "$(dirname "${CHROMIUM_SRC}")"
-      echo "[sync-chromium] cloning Chromium src checkout"
-      git clone --no-checkout https://chromium.googlesource.com/chromium/src.git "${CHROMIUM_SRC}"
+      seed_src="${CARBONYL_ROOT}/chromium/src"
+      if [ -d "${seed_src}/.git" ] && git -C "${seed_src}" rev-parse --verify HEAD >/dev/null 2>&1; then
+        echo "[sync-chromium] seeding Chromium src from ${seed_src}"
+        cp -a "${seed_src}" "${CHROMIUM_SRC}"
+      else
+        echo "[sync-chromium] cloning Chromium src checkout"
+        git clone --no-checkout https://chromium.googlesource.com/chromium/src.git "${CHROMIUM_SRC}"
+      fi
     fi
 
     CURRENT_HEAD="$(git -C "${CHROMIUM_SRC}" rev-parse HEAD 2>/dev/null || true)"
