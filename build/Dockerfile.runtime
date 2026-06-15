@@ -1,0 +1,56 @@
+# Dockerfile.runtime — Carbonyl runtime container image (#132, ADR-004)
+#
+# This is NOT the CI builder image (that is build/Dockerfile.builder). This is
+# the END-USER image published to ghcr.io/jmagly/carbonyl — `docker run` it to
+# browse the web in a terminal.
+#
+# It installs the SAME native .deb that release.yml publishes (#129). apt
+# resolves the curated runtime dependencies, so the image's library set is
+# byte-for-byte the set we validate in the .deb install smoke — one source of
+# truth for runtime deps (scripts/package-linux.sh), maximal validation reuse.
+#
+# Build context is assembled by scripts/package-image.sh and contains exactly:
+#   Dockerfile      (this file)
+#   carbonyl.deb    (built from the runtime payload by package-linux.sh)
+#
+# Base: ubuntu:24.04 — matches the distro the .deb depends list was validated
+# against (libasound2t64, etc.). linux/amd64 only for now; arm64 follows the
+# arm64-linux runtime (#116).
+
+FROM ubuntu:24.04
+
+LABEL org.opencontainers.image.title="carbonyl" \
+      org.opencontainers.image.description="Chromium-based browser that renders into terminal text" \
+      org.opencontainers.image.source="https://github.com/jmagly/carbonyl" \
+      org.opencontainers.image.licenses="BSD-3-Clause"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Non-root runtime user. Carbonyl needs no root privileges; --no-sandbox is
+# used because the container has no user-namespace sandbox, not because it runs
+# as root.
+RUN groupadd -r carbonyl && \
+    useradd -r -g carbonyl -m -d /home/carbonyl carbonyl
+
+# Install the published .deb. apt-get (>= 1.1) resolves a local .deb's Depends
+# when the path contains a slash. `carbonyl --version` is a build-time smoke:
+# if any runtime library is missing it fails the build here, not at the user's
+# terminal.
+COPY carbonyl.deb /tmp/carbonyl.deb
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends /tmp/carbonyl.deb && \
+    rm -rf /var/lib/apt/lists/* /tmp/carbonyl.deb && \
+    /usr/bin/carbonyl --version
+
+USER carbonyl
+ENV HOME=/home/carbonyl
+WORKDIR /home/carbonyl
+
+# Browser profile + cache live here; mount a volume to persist cookies/history.
+VOLUME /home/carbonyl
+
+# --no-sandbox: no namespace sandbox inside the container.
+# --disable-dev-shm-usage: containers default to a tiny /dev/shm; this routes
+#   Chromium's shared-memory allocations to a temp dir instead of crashing.
+ENTRYPOINT ["/usr/bin/carbonyl", "--no-sandbox", "--disable-dev-shm-usage", "--user-data-dir=/home/carbonyl/profile"]
+CMD ["https://example.com"]
