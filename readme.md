@@ -85,6 +85,20 @@ carbonyl https://github.com
 # See: https://github.com/jmagly/carbonyl/releases
 ```
 
+### Install a native package
+
+Releases also ship native install packages — `.deb` / `.rpm` / `.AppImage`
+(Linux x86_64) and an unsigned `.pkg` / `.dmg` (macOS arm64):
+
+```bash
+sudo apt install ./carbonyl_<version>_amd64.deb        # Debian / Ubuntu
+sudo dnf install ./carbonyl-<version>-1.x86_64.rpm     # Fedora / RHEL
+./carbonyl-<version>-x86_64.AppImage https://github.com # any Linux, no install
+```
+
+Full instructions (incl. the macOS Gatekeeper step for the unsigned installer):
+[docs/install.md](docs/install.md).
+
 ### Runtime modes
 
 One binary, three deployment shapes:

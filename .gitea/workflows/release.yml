@@ -330,6 +330,40 @@ jobs:
           echo "[release] staged ${asset_name} ($(du -h "${STAGE}/${asset_name}" | cut -f1))"
           ls -lh "${STAGE}"
 
+      - name: Build Linux native install packages — deb/rpm/AppImage (#129)
+        run: |
+          # Native installers for the x86_64 headless runtime, built on titan from
+          # the staged headless tarball and dropped into STAGE so the Gitea upload
+          # + GitHub mirror loops below carry them (with .sha256). macOS .pkg/.dmg
+          # are produced separately on mutsu (scripts/mutsu-package-macos.sh) since
+          # only macOS can run pkgbuild. See ADR-003.
+          set -euo pipefail
+          hl_tgz="${STAGE}/carbonyl-${VERSION}-x86_64-unknown-linux-gnu.tgz"
+          if [ ! -f "$hl_tgz" ]; then
+            echo "ERROR: headless x86_64 tarball not staged ($hl_tgz); cannot build Linux packages" >&2
+            exit 1
+          fi
+          work="${GITHUB_WORKSPACE}/.pkg-linux"
+          rm -rf "$work" && mkdir -p "$work/payload" "$work/out"
+          tar xzf "$hl_tgz" -C "$work/payload"
+          payload_dir="$(find "$work/payload" -maxdepth 1 -type d -name 'x86_64-unknown-linux-gnu' | head -1)"
+          [ -n "$payload_dir" ] || { echo "ERROR: payload dir not found inside $hl_tgz" >&2; exit 1; }
+          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/package-linux.sh" \
+            --payload "$payload_dir" --version "${VERSION}" --arch amd64 \
+            --formats deb,rpm,appimage --out "$work/out"
+          shopt -s nullglob
+          staged=0
+          for f in "$work/out"/*.deb "$work/out"/*.rpm "$work/out"/*.AppImage; do
+            name="$(basename "$f")"
+            cp "$f" "${STAGE}/${name}"
+            ( cd "${STAGE}" && sha256sum "${name}" > "${name}.sha256" )
+            echo "[release] staged native package ${name} ($(du -h "${STAGE}/${name}" | cut -f1))"
+            staged=$((staged+1))
+          done
+          [ "$staged" -ge 1 ] || { echo "ERROR: no Linux packages produced" >&2; exit 1; }
+          rm -rf "$work"
+          ls -lh "${STAGE}"
+
       - name: Resolve release notes
         run: |
           # Convention: docs/releases/RELEASE-<tag>.md. Fall back to a

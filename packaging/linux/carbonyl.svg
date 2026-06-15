@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PLACEHOLDER icon for Carbonyl native packages (#129). Replace with the
+     real project logo when available. A dark rounded tile with a terminal
+     prompt and a green "C" (carbon / terminal). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="44" ry="44" fill="#16181d"/>
+  <rect x="8" y="8" width="240" height="240" rx="44" ry="44" fill="none" stroke="#2b2f37" stroke-width="4"/>
+  <text x="128" y="170" font-family="monospace" font-size="150" font-weight="700"
+        text-anchor="middle" fill="#39d353">C</text>
+  <text x="40" y="210" font-family="monospace" font-size="34" font-weight="700" fill="#5a6472">&gt;_</text>
+</svg>

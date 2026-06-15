@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Carbonyl
+GenericName=Web Browser
+Comment=Chromium running in your terminal
+Exec=carbonyl %u
+Icon=carbonyl
+Terminal=true
+Categories=Network;WebBrowser;ConsoleOnly;
+MimeType=text/html;x-scheme-handler/http;x-scheme-handler/https;
+Keywords=browser;web;chromium;terminal;
