@@ -213,7 +213,7 @@ if [ "$preflight" = "true" ]; then
   echo "vm_build_dir=${vm_build_dir}"
   colima list 2>/dev/null || true
   if colima status --profile "$profile" >/dev/null 2>&1; then
-    colima ssh --profile "$profile" -- bash -lc "df -h / /mnt/lima-colima-${profile} 2>/dev/null || true; test -d '$vm_build_dir' && du -sh '$vm_build_dir' 2>/dev/null || true"
+    colima ssh --profile "$profile" -- bash -lc "df -h / /mnt/lima-colima-${profile} 2>/dev/null || true; test -d '$vm_build_dir' && du -sh '$vm_build_dir' 2>/dev/null || true" </dev/null
   fi
   docker context ls 2>/dev/null || true
   if [ -d "$remote_dir/.git" ]; then
@@ -273,7 +273,7 @@ export DOCKER_HOST="unix://${COLIMA_HOME}/${profile}/docker.sock"
 docker version >/dev/null
 
 echo "[mutsu-linux] preparing VM-native build dir ${vm_build_dir}"
-colima ssh --profile "$profile" -- sudo mkdir -p "$vm_build_dir"
+colima ssh --profile "$profile" -- sudo mkdir -p "$vm_build_dir" </dev/null
 
 if [ "$builder_source" = "local" ]; then
   echo "[mutsu-linux] building local arm64 builder image"
