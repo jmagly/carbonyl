@@ -154,12 +154,12 @@ see `packaging/macos/GATEKEEPER.txt` and ADR-003.
 > from the Gitea Actions UI (or `tea`) — it runs on the always-on `titan` runner
 > and SSH-drives the script below, so the multi-hour build is monitored by CI and
 > survives an operator-workstation reboot. Inputs: `ozone_platform`
-> (headless|x11|both), `publish` (needs the `RUNTIME_PUBLISH_TOKEN` roctinam
-> secret — see `docs/ci-secrets.md`), `preflight_only`, `ninja_jobs`, `skip_sync`.
-> The titan runner reaches mutsu via the runner host's `~/.ssh` (key +
-> `mutsu-agent` Host entry); that SSH material is **not** a Gitea secret — see
-> "mutsu SSH access" in `docs/ci-secrets.md`. The manual driver below stays valid
-> for ad-hoc/debug runs from an authorized host.
+> (headless|x11|both), `publish` (uses `BUILD_REPO_TOKEN`, like every other
+> runtime publish), `preflight_only`, `ninja_jobs`, `skip_sync`. It reaches mutsu
+> by building a job-local SSH config from the **`MUTSU_SSH_KEY`** secret (the
+> `mutsu_automation` key) targeting `10.0.42.41` — see "mutsu SSH access" in
+> `docs/ci-secrets.md`. The manual driver below stays valid for ad-hoc/debug runs
+> from an authorized host.
 
 Linux ARM64 is built in an aarch64 Linux Colima VM on mutsu. The driver builds
 a local arm64 `carbonyl-builder:<commit>-arm64` image from

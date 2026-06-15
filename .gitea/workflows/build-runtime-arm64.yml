@@ -11,20 +11,18 @@
 #     monitored runner; it survives an operator workstation reboot, which a
 #     hand-run SSH session does not. mutsu does the actual compute over SSH.
 #
-# SSH to mutsu: the titan runner host carries the mutsu SSH key in its own
-# ~/.ssh (key + a `mutsu-agent` Host entry) — provisioned operationally, NOT a
-# Gitea Actions secret. The job inherits it because act_runner runs the job as
-# that host user. See docs/ci-secrets.md ("mutsu SSH access") and
-# docs/ci-runner-mutsu.md. If the runner's ssh config lives elsewhere, override
-# with the `ssh_config` input.
+# SSH to mutsu: the job builds a job-local SSH config from the `MUTSU_SSH_KEY`
+# Actions secret (the mutsu_automation private key) and connects to mutsu by IP
+# (10.0.42.41, user manitcor) — the runner job environment does not resolve the
+# `mutsu-agent` DNS alias. See docs/ci-secrets.md ("mutsu SSH access"). For an
+# ad-hoc/debug run against an SSH config already on the runner, pass the
+# `ssh_config` input.
 #
 # Publish: `runtime-push.sh arm64` uploads the runtime asset to the shared
-# `runtime-<hash>` (or `runtime-x11-<hash>`) release. The mutsu driver logs in to
-# the registry as GITEA_USER (roctinam) and pushes with GITEA_TOKEN, so the
-# publish token MUST be a roctinam-owned token — provisioned as the dedicated
-# `RUNTIME_PUBLISH_TOKEN` secret, NOT BUILD_REPO_TOKEN (that one is the bot
-# `roctibot`, which would fail the `docker login -u roctinam` step and
-# mis-attribute the asset). Delivery-identity policy. See docs/ci-secrets.md.
+# `runtime-<hash>` (or `runtime-x11-<hash>`) release — the same publish path and
+# token (BUILD_REPO_TOKEN) build-runtime.yml uses for the x86_64 tarballs. CI
+# artifact publishing uses the standard CI token; the deliver-as-roctinam policy
+# applies to authored git/tracker deliveries, not artifact uploads.
 #
 # Manual dispatch only: this is a multi-hour native Chromium build. It never
 # fires on push. Once it publishes the asset, release.yml --include_linux_arm64=true
@@ -73,7 +71,7 @@ on:
           - 'false'
           - 'true'
       ssh_config:
-        description: 'SSH config file on the runner that resolves mutsu-agent (default: the runner user ~/.ssh/config)'
+        description: 'Override: path to an SSH config already on the runner (default: build one from the MUTSU_SSH_KEY secret)'
         required: false
         default: ''
 
@@ -103,16 +101,39 @@ jobs:
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
 
-      - name: Resolve SSH config + ozone variant list
+      - name: Set up mutsu SSH (from MUTSU_SSH_KEY) + resolve ozone variants
+        env:
+          # The mutsu_automation private key, stored as a repo Actions secret.
+          MUTSU_SSH_KEY: ${{ secrets.MUTSU_SSH_KEY }}
         run: |
           set -euo pipefail
-          SSH_CONFIG="${{ github.event.inputs.ssh_config }}"
-          [ -n "$SSH_CONFIG" ] || SSH_CONFIG="${HOME}/.ssh/config"
-          if [ ! -f "$SSH_CONFIG" ]; then
-            echo "ERROR: SSH config '$SSH_CONFIG' not found on the runner." >&2
-            echo "  The titan runner must carry the mutsu SSH key + a 'mutsu-agent' Host entry." >&2
-            echo "  See docs/ci-secrets.md (mutsu SSH access) and docs/ci-runner-mutsu.md." >&2
-            exit 1
+          OVERRIDE="${{ github.event.inputs.ssh_config }}"
+          if [ -n "$OVERRIDE" ]; then
+            # Ad-hoc/debug override: use an SSH config already present on the runner.
+            [ -f "$OVERRIDE" ] || { echo "ERROR: ssh_config override '$OVERRIDE' not found" >&2; exit 1; }
+            SSH_CONFIG="$OVERRIDE"
+          else
+            # Default: build a job-local SSH config from the MUTSU_SSH_KEY secret.
+            # The runner job environment does NOT resolve the 'mutsu-agent' alias
+            # (DNS), so we map it to mutsu's IP here and supply the key explicitly.
+            [ -n "${MUTSU_SSH_KEY:-}" ] || { echo "ERROR: MUTSU_SSH_KEY secret is empty; see docs/ci-secrets.md" >&2; exit 1; }
+            SSH_DIR="${GITHUB_WORKSPACE}/.ssh-mutsu"
+            rm -rf "$SSH_DIR"; mkdir -p "$SSH_DIR"; chmod 700 "$SSH_DIR"
+            ( umask 077; printf '%s\n' "$MUTSU_SSH_KEY" > "$SSH_DIR/id_mutsu" )
+            chmod 600 "$SSH_DIR/id_mutsu"
+            : > "$SSH_DIR/known_hosts"; chmod 600 "$SSH_DIR/known_hosts"
+            {
+              echo "Host mutsu-agent"
+              echo "  HostName 10.0.42.41"
+              echo "  User manitcor"
+              echo "  IdentityFile ${SSH_DIR}/id_mutsu"
+              echo "  IdentitiesOnly yes"
+              echo "  UserKnownHostsFile ${SSH_DIR}/known_hosts"
+              echo "  StrictHostKeyChecking accept-new"
+              echo "  BatchMode yes"
+            } > "$SSH_DIR/config"
+            chmod 600 "$SSH_DIR/config"
+            SSH_CONFIG="$SSH_DIR/config"
           fi
           echo "SSH_CONFIG=${SSH_CONFIG}" >> "$GITHUB_ENV"
 
@@ -136,16 +157,15 @@ jobs:
       - name: Build (+ optionally publish) arm64 runtime per variant
         if: ${{ github.event.inputs.preflight_only != 'true' }}
         env:
-          # Publish (runtime-push.sh) uploads the release asset as this token's
-          # user, and the mutsu driver `docker login -u roctinam`s with it, so it
-          # MUST be a roctinam-owned token (delivery-identity policy). This is a
-          # DIFFERENT secret from BUILD_REPO_TOKEN — that one is the bot account
-          # `roctibot` (see docs/ci-secrets.md), which would both fail the
-          # `-u roctinam` login and mis-attribute the asset. RUNTIME_PUBLISH_TOKEN
-          # must be provisioned (roctinam PAT, write:release) before publish=true
-          # works; until then the guard below fails the run loudly. Only consumed
-          # when publish=true; build-only runs need no token.
-          GITEA_TOKEN: ${{ secrets.RUNTIME_PUBLISH_TOKEN }}
+          # `runtime-push.sh arm64` uploads the runtime asset to the runtime-<hash>
+          # release — the same publish path (and same token) build-runtime.yml uses
+          # for the x86_64 tarballs. CI artifact publishing uses the standard CI
+          # token; it is not an authored "delivery" so it does not need a human
+          # (roctinam) identity. The driver's `docker login -u roctinam` branch is
+          # NOT reached on arm64 (the builder image is built locally in the VM, not
+          # pulled), so there's no user/token mismatch. Only consumed when
+          # publish=true; build-only and preflight runs need no token.
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           set -euo pipefail
           PUBLISH="${{ github.event.inputs.publish || 'false' }}"
@@ -160,9 +180,7 @@ jobs:
           [ "$SKIP_SYNC" = "true" ] && skip_flag=(--skip-sync)
 
           if [ "$PUBLISH" = "true" ] && [ -z "${GITEA_TOKEN:-}" ]; then
-            echo "ERROR: publish=true but RUNTIME_PUBLISH_TOKEN is not set." >&2
-            echo "  It must be a roctinam-owned Gitea PAT (write:release) — NOT BUILD_REPO_TOKEN" >&2
-            echo "  (which is the bot roctibot). See docs/ci-secrets.md (RUNTIME_PUBLISH_TOKEN)." >&2
+            echo "ERROR: publish=true but BUILD_REPO_TOKEN is empty; see docs/ci-secrets.md" >&2
             exit 1
           fi
 
@@ -177,4 +195,4 @@ jobs:
 
       - name: Cleanup
         if: ${{ always() }}
-        run: rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+        run: rm -rf "${GITHUB_WORKSPACE}/.repo-clone" "${GITHUB_WORKSPACE}/.ssh-mutsu" 2>/dev/null || true
