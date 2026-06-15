@@ -42,20 +42,15 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       /tmp/carbonyl.deb \
       ca-certificates \
-      tini \
-      # Runtime libs the binary dlopen()s (so absent from ldd → not in the .deb
-      # Depends, #129): fontconfig + a font for glyph rendering, EGL/GL, glib,
-      # xkbcommon. Matches the proven set from jmagly/carbonyl#1 (@eSlider) and
-      # silences "Fontconfig error: Cannot load default config file".
-      libfontconfig1 \
-      fonts-liberation \
-      libegl1 \
-      libgl1 \
-      libglib2.0-0t64 \
-      libxkbcommon0 && \
+      tini && \
     rm -rf /var/lib/apt/lists/* /tmp/carbonyl.deb && \
     chmod +x /usr/local/bin/docker-entrypoint.sh && \
     /usr/bin/carbonyl --version
+
+# The .deb's Depends now pull the runtime libraries carbonyl dlopen()s
+# (libfontconfig1 + fonts, EGL/GL, glib, xkbcommon — #136), so the image only
+# adds container extras above (ca-certificates for HTTPS, tini for PID 1). The
+# .deb remains the single source of truth for the browser's library set.
 
 USER carbonyl
 WORKDIR /home/carbonyl

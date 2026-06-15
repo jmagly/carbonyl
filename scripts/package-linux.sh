@@ -181,6 +181,15 @@ overrides:
       - "libdrm2"
       - "libexpat1"
       - "libgbm1"
+      # dlopen'd at runtime, so absent from ldd (#136): fontconfig + a font for
+      # glyphs, EGL/GL, glib, xkbcommon. Without these: "Fontconfig error" and
+      # degraded rendering. glib uses the t64 name on Ubuntu 24.04+.
+      - "libfontconfig1"
+      - "fonts-liberation"
+      - "libegl1"
+      - "libgl1"
+      - "libglib2.0-0t64 | libglib2.0-0"
+      - "libxkbcommon0"
       - "libgcrypt20"
       - "libgpg-error0"
       - "liblz4-1"
@@ -206,6 +215,14 @@ overrides:
       - "libdrm"
       - "expat"
       - "mesa-libgbm"
+      # dlopen'd at runtime, so absent from ldd (#136): fontconfig + a font for
+      # glyphs, EGL/GL (libglvnd), glib, xkbcommon.
+      - "fontconfig"
+      - "liberation-fonts"
+      - "libglvnd-egl"
+      - "libglvnd-glx"
+      - "glib2"
+      - "libxkbcommon"
       - "libgcrypt"
       - "libgpg-error"
       - "lz4-libs"
