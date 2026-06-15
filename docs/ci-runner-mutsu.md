@@ -150,6 +150,17 @@ see `packaging/macos/GATEKEEPER.txt` and ADR-003.
 
 ## Linux ARM64 build + publish (#116)
 
+> **Preferred trigger: the `build-runtime-arm64.yml` CI workflow.** Dispatch it
+> from the Gitea Actions UI (or `tea`) — it runs on the always-on `titan` runner
+> and SSH-drives the script below, so the multi-hour build is monitored by CI and
+> survives an operator-workstation reboot. Inputs: `ozone_platform`
+> (headless|x11|both), `publish` (needs the `RUNTIME_PUBLISH_TOKEN` roctinam
+> secret — see `docs/ci-secrets.md`), `preflight_only`, `ninja_jobs`, `skip_sync`.
+> The titan runner reaches mutsu via the runner host's `~/.ssh` (key +
+> `mutsu-agent` Host entry); that SSH material is **not** a Gitea secret — see
+> "mutsu SSH access" in `docs/ci-secrets.md`. The manual driver below stays valid
+> for ad-hoc/debug runs from an authorized host.
+
 Linux ARM64 is built in an aarch64 Linux Colima VM on mutsu. The driver builds
 a local arm64 `carbonyl-builder:<commit>-arm64` image from
 `build/Dockerfile.builder` because the registry-pinned builder image is
