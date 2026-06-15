@@ -4,6 +4,7 @@
 #   - Chromium patches / GN toolchain (ninja, gn, clang, python3, depot_tools)
 #   - Rust toolchain (rustup, cargo)
 #   - Runtime packaging (tar, strip, curl, jq)
+#   - Native install packaging (nfpm for .deb/.rpm, appimagetool for .AppImage; #129)
 #
 # The Chromium source checkout (~30 GB) is NOT baked into this image.
 # It lives at a fixed path on the build runner host (e.g. /srv/chromium/src)
@@ -74,6 +75,35 @@ RUN curl -sSf https://sh.rustup.rs | sh -s -- -y \
     echo '[target.aarch64-unknown-linux-gnu]' >> /usr/local/cargo/config.toml && \
     echo 'linker = "aarch64-linux-gnu-gcc"' >> /usr/local/cargo/config.toml && \
     rustc --version && cargo --version && clippy-driver --version
+
+# ── Native install packaging tools (#129, ADR-003) ─────────────────────────────
+# nfpm builds .deb/.rpm; appimagetool builds .AppImage. Both pinned by
+# version + sha256 (keep in lockstep with scripts/package-linux.sh). appimagetool
+# is extracted at build time so it runs without FUSE inside CI containers.
+ARG NFPM_VERSION=2.41.3
+ARG NFPM_SHA256=22aa6d3bc2ec239d62d3d190bcb036a47f2b24e0c3c6edfccebb6a55fbb2078e
+ARG APPIMAGETOOL_VERSION=1.9.1
+ARG APPIMAGETOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+RUN apt-get update && apt-get install -y \
+        desktop-file-utils squashfs-tools file \
+    && rm -rf /var/lib/apt/lists/* \
+    # nfpm (deb + rpm)
+    && curl -fL -o /tmp/nfpm.tgz \
+        "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" \
+    && echo "${NFPM_SHA256}  /tmp/nfpm.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/nfpm.tgz -C /usr/local/bin nfpm \
+    && rm /tmp/nfpm.tgz \
+    && nfpm --version \
+    # appimagetool (extract so no FUSE is needed at runtime)
+    && curl -fL -o /tmp/appimagetool.AppImage \
+        "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-x86_64.AppImage" \
+    && echo "${APPIMAGETOOL_SHA256}  /tmp/appimagetool.AppImage" | sha256sum -c - \
+    && chmod +x /tmp/appimagetool.AppImage \
+    && ( cd /opt && /tmp/appimagetool.AppImage --appimage-extract >/dev/null ) \
+    && mv /opt/squashfs-root /opt/appimagetool \
+    && ln -s /opt/appimagetool/AppRun /usr/local/bin/appimagetool \
+    && rm /tmp/appimagetool.AppImage \
+    && ( ARCH=x86_64 appimagetool --version || echo "appimagetool installed" )
 
 # ── Git safe.directory + CI identity ──────────────────────────────────────────
 # The build bind-mounts /chromium/src (and the workspace) into the container
