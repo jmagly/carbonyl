@@ -43,7 +43,7 @@ on:
         required: false
         default: ''
       include_macos:
-        description: 'Include the aarch64-apple-darwin (macOS) runtime; fails loudly if its runtime asset is missing'
+        description: 'Include the aarch64-apple-darwin (macOS) runtime. workflow_dispatch fails loudly if the asset is missing; tag-push auto-skips with a warning.'
         required: false
         default: 'true'
         type: choice
@@ -93,6 +93,12 @@ jobs:
           # macOS (aarch64-apple-darwin) inclusion — default on (#113).
           # macOS is headless-only and its tarball lives on the shared
           # runtime-<hash> release alongside the Linux x86_64 tarball.
+          # Missing-asset handling differs by trigger (see the verify step
+          # below): a tag-push auto-skips macOS with a warning so routine
+          # releases never fail on the not-yet-built arm runtime (#116),
+          # while an explicit workflow_dispatch with include_macos=true
+          # still fails loudly so a deliberate macOS cut can't silently
+          # drop the architecture.
           INCLUDE_MACOS="${{ github.event.inputs.include_macos || 'true' }}"
 
           # Linux triples. x86_64 is always published. aarch64 Linux is
@@ -219,6 +225,7 @@ jobs:
       - name: Verify macOS runtime asset exists (#113)
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           if [ "${INCLUDE_MACOS}" != "true" ]; then
             echo "[release] include_macos=false — skipping macOS runtime"
@@ -236,13 +243,31 @@ jobs:
             asset_url="$(echo "${asset_json}" | jq -r '.browser_download_url // empty')"
             echo "[release] macOS runtime asset present on ${runtime_tag}: aarch64-apple-darwin.tgz (${asset_size} bytes)"
             [ -n "${asset_url}" ] && echo "[release] macOS runtime asset url: ${asset_url}"
-          else
+            exit 0
+          fi
+
+          # Asset absent. Two paths (#113, #116):
+          #   - workflow_dispatch with include_macos=true is an explicit
+          #     operator opt-in: fail loudly so a deliberate macOS cut never
+          #     silently drops the architecture.
+          #   - a v* tag push always defaults include_macos=true but the arm
+          #     macOS runtime isn't built for every hash yet (pending
+          #     dedicated hardware, #116). Don't fail the routine release —
+          #     warn, drop macOS from this run, and let the Linux assets
+          #     publish. Downstream staging keys off INCLUDE_MACOS, so
+          #     flipping it to false here skips the macOS stage step.
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
             echo "ERROR: macOS runtime 'aarch64-apple-darwin.tgz' not found on '${runtime_tag}'." >&2
+            echo "       You requested include_macos=true explicitly." >&2
             echo "       Build and publish it on mutsu for this hash:" >&2
             echo "         GITEA_TOKEN=<token> bash scripts/mutsu-build-macos.sh --jobs 2 --publish" >&2
             echo "       OR re-run this workflow with include_macos=false for a Linux-only release." >&2
             exit 1
           fi
+          echo "::warning::macOS runtime 'aarch64-apple-darwin.tgz' absent on ${runtime_tag}; auto-skipping macOS for this tag-push release (arm macOS runtime pending, #116)."
+          echo "[release] To include macOS: build it on mutsu, then re-run via" >&2
+          echo "[release] workflow_dispatch with include_macos=true (which fails loudly if still absent)." >&2
+          echo "INCLUDE_MACOS=false" >> "$GITHUB_ENV"
 
       - name: Download and repackage Linux runtime tarballs (per variant and triple)
         env:
