@@ -256,8 +256,16 @@ if [ -z "$builder_image" ]; then
 fi
 echo "[mutsu-linux] builder image: ${builder_image} (${builder_source})"
 
-if ! colima status --profile "$profile" >/dev/null 2>&1; then
-  echo "[mutsu-linux] starting Colima profile ${profile}"
+# Pin the docker connection to this profile's socket (overrides whatever the
+# active `docker context` is in this non-interactive SSH shell), then ensure the
+# daemon is actually reachable. We key off real reachability (`docker version`),
+# NOT `colima status` — the two can disagree: the lima VM can be "running" while
+# the host-side socket forward at ${COLIMA_HOME}/${profile}/docker.sock is dead,
+# in which case `colima start` no-ops ("already running, ignoring") and never
+# rebuilds the forward. The escalation to `colima restart` rebuilds it.
+export DOCKER_HOST="unix://${COLIMA_HOME}/${profile}/docker.sock"
+
+colima_start() {
   colima start --profile "$profile" \
     --arch aarch64 \
     --runtime docker \
@@ -265,11 +273,29 @@ if ! colima status --profile "$profile" >/dev/null 2>&1; then
     --memory "$memory" \
     --disk "$disk" \
     --mount "/Volumes/build:w"
+}
+
+docker_ready() { docker version >/dev/null 2>&1; }
+
+if docker_ready; then
+  echo "[mutsu-linux] Colima profile ${profile} already up; docker daemon reachable"
 else
-  echo "[mutsu-linux] Colima profile ${profile} already running"
+  echo "[mutsu-linux] docker daemon not reachable at ${DOCKER_HOST}; (re)starting Colima profile ${profile}"
+  colima_start || true
+  if ! docker_ready; then
+    # `colima start` reported the VM already running but the socket forward is
+    # still dead — force a restart to rebuild it.
+    echo "[mutsu-linux] still unreachable after start; restarting Colima profile ${profile}"
+    colima restart --profile "$profile" || colima_start || true
+  fi
+  # Bounded wait for the socket forward to come up (covers a full VM restart).
+  for _ in $(seq 1 60); do
+    docker_ready && break
+    sleep 2
+  done
 fi
 
-export DOCKER_HOST="unix://${COLIMA_HOME}/${profile}/docker.sock"
+# Fail loudly if the daemon is still unreachable.
 docker version >/dev/null
 
 echo "[mutsu-linux] preparing VM-native build dir ${vm_build_dir}"
