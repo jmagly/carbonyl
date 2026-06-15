@@ -581,6 +581,23 @@ jobs:
           # don't collide on hash if content happens to match.
           CARBONYL_OZONE_TAG="${OZONE}" bash scripts/runtime-push.sh "${CPU}"
 
+      - name: Prune stale runtime releases (keep only the latest)
+        # Enforce "only keep the latest runtime cut": after publishing, delete
+        # every runtime-* release+tag except the current hash's headless + x11
+        # pair, leaving the full v* release cuts untouched. Gated to:
+        #   - headless only: single run (no matrix race); the keep-set names the
+        #     x11 tag, so the parallel x11 publish is never pruned.
+        #   - push events only: on push, HEAD is the latest commit, so pruning to
+        #     the just-built hash is always safe. Manual workflow_dispatch (which
+        #     may target an older ref) is left alone — run scripts/runtime-prune.sh
+        #     by hand if needed.
+        if: ${{ matrix.ozone == 'headless' && github.event_name == 'push' }}
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          cd "${HOST_CARBONYL_DIR}"
+          bash scripts/runtime-prune.sh
+
       - name: Upload tarball as workflow artifact
         uses: actions/upload-artifact@v3
         with:
