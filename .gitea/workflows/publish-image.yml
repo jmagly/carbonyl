@@ -171,6 +171,27 @@ jobs:
           echo "WORK=${WORK}" >> "$GITHUB_ENV"
           echo "[image] payload: ${payload_dir}"
 
+      - name: Resolve packaging tooling (a tag may predate the image scripts)
+        if: env.SKIP != '1'
+        run: |
+          # Normal releases carry scripts/package-image.sh + build/Dockerfile.runtime
+          # in the tagged tree. Tags created before this feature landed (e.g. the
+          # first alpha.9 publish) do not — fall back to the default-branch tooling.
+          # The runtime PAYLOAD still comes from the tag's hash, so the image is
+          # correct; only the version-agnostic build scripts differ in origin.
+          if [ -f "${GITHUB_WORKSPACE}/.repo-clone/scripts/package-image.sh" ] && \
+             [ -f "${GITHUB_WORKSPACE}/.repo-clone/build/Dockerfile.runtime" ]; then
+            echo "TOOLING_DIR=${GITHUB_WORKSPACE}/.repo-clone" >> "$GITHUB_ENV"
+            echo "[image] packaging tooling from tag ${TAG}"
+          else
+            echo "::warning::tag ${TAG} predates the container packaging scripts; using default-branch tooling (runtime payload still keyed to the tag's hash ${HASH})."
+            rm -rf "${GITHUB_WORKSPACE}/.tooling-clone" 2>/dev/null || true
+            git clone --depth 1 \
+              "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+              "${GITHUB_WORKSPACE}/.tooling-clone"
+            echo "TOOLING_DIR=${GITHUB_WORKSPACE}/.tooling-clone" >> "$GITHUB_ENV"
+          fi
+
       - name: Build and push image to GHCR
         if: env.SKIP != '1'
         env:
@@ -178,7 +199,7 @@ jobs:
         run: |
           latest_flag=""
           [ "${PUSH_LATEST}" = "true" ] || latest_flag="--no-latest"
-          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/package-image.sh" \
+          bash "${TOOLING_DIR}/scripts/package-image.sh" \
             --payload "${PAYLOAD_DIR}" \
             --version "${VERSION}" \
             --arch amd64 \
@@ -190,6 +211,7 @@ jobs:
         if: always()
         run: |
           rm -rf "${GITHUB_WORKSPACE}/.repo-clone" \
+                 "${GITHUB_WORKSPACE}/.tooling-clone" \
                  "${GITHUB_WORKSPACE}/.image-work" 2>/dev/null || true
 
       - name: Summary
