@@ -25,7 +25,7 @@ Tracks: roctinam/carbonyl #109, #116 (parent #67).
 | OS | macOS 26.x (Darwin 25.x), Apple Silicon |
 | Toolchain | Apple clang (**Command Line Tools only — no full Xcode.app**) |
 | SDK | current macOS SDK under `/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk` |
-| Build volume | `/Volumes/build` — the boot volume `/` is too small for a Chromium checkout (~150 GB); **always build under `/Volumes/build`** |
+| Build volume | `/Volumes/build` — the boot volume `/` is too small for a Chromium checkout (~150 GB) and can sit at ~100% full; **always build under `/Volumes/build`**. The build scripts anchor cargo cache + temp to `/Volumes/build/.carbonyl-scratch` so nothing scratch-heavy lands on the boot disk (see "external build scratch" below). |
 | macOS workspace | `/Volumes/build/carbonyl` |
 | Linux arm64 workspace | `/Volumes/build/carbonyl-linux-arm64` |
 
@@ -88,6 +88,14 @@ runtime so the operator does not have to:
 - **conservative parallelism** — on a 16 GiB Mac mini, the default is `-j2`.
   Passing `--jobs 2` is the documented explicit setting for predictable
   unattended builds.
+- **external build scratch** — `CARGO_HOME` and `TMPDIR` are anchored to
+  `<external-volume>/.carbonyl-scratch` (a sibling of the checkout, e.g.
+  `/Volumes/build/.carbonyl-scratch`). mutsu's boot volume is small and can run
+  100% full; cargo's default `~/.cargo` cache and the default `/var/folders`
+  `TMPDIR` would otherwise write to the boot disk and fail the build with
+  ENOSPC. The scratch dir is a sibling of the checkout (not inside it), so it
+  never trips the driver's clean-worktree check. Override with `CARGO_HOME` /
+  `CARBONYL_TMPDIR`.
 
 Output:
 
