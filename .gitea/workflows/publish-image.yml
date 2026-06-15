@@ -1,0 +1,206 @@
+# publish-image.yml — Publish the Carbonyl runtime container image to GHCR.
+#
+# On a v* tag (or manual dispatch), builds ghcr.io/jmagly/carbonyl:<version>
+# (+ :latest) for linux/amd64 from the hash-keyed runtime payload that
+# build-runtime.yml already published, and pushes it to GitHub Container
+# Registry. The image installs the same native .deb release.yml publishes
+# (#129), so its runtime libraries match the validated install package.
+#
+# DELIBERATELY SEPARATE from release.yml: a GHCR publish failure (or a missing
+# GHCR_TOKEN) must never block or fail a release. If GHCR_TOKEN is absent this
+# workflow no-ops with a warning.
+#
+# NEVER rebuilds Chromium — it only consumes the published runtime tarball,
+# same hard constraint as release.yml.
+#
+# Triggers:
+#   - push of a `v*` tag → automatic
+#   - workflow_dispatch with `tag` input → manual re-run / fix-up
+#
+# Refs: roctinam/carbonyl#132 (ADR-004)
+# Secrets: BUILD_REPO_TOKEN (Gitea: pull builder image + download runtime),
+#          GHCR_TOKEN (GitHub PAT, write:packages on ghcr.io/jmagly). See
+#          docs/ci-secrets.md.
+
+name: Publish container image
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing v* tag to publish the image for (no leading refs/tags/)'
+        required: true
+      builder_image_tag:
+        description: 'carbonyl-builder image tag (sha-<7>, latest, or empty for the repo pin)'
+        required: false
+        default: ''
+      push_latest:
+        description: 'Also move the :latest tag to this version'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  IMAGE_NAME: ghcr.io/jmagly/carbonyl
+  GHCR_USER: jmagly
+
+jobs:
+  publish-image:
+    name: Publish ${{ github.event.inputs.tag || github.ref_name }} → GHCR
+    runs-on: titan
+    timeout-minutes: 30
+
+    steps:
+      - name: GHCR token gate (no-op if absent — never block releases)
+        run: |
+          if [ -z "${{ secrets.GHCR_TOKEN }}" ]; then
+            echo "::warning::GHCR_TOKEN secret not set — skipping container image publish."
+            echo "  Provision a GitHub PAT for the jmagly namespace with write:packages,"
+            echo "  add it as the GHCR_TOKEN repo secret, then re-run this workflow."
+            echo "  See docs/ci-secrets.md."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          else
+            echo "SKIP=0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Resolve tag, version, builder image
+        if: env.SKIP != '1'
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          [ -n "$TAG" ] || { echo "ERROR: no tag resolved" >&2; exit 1; }
+          VERSION="${TAG#v}"
+
+          # Builder image resolution — same order as release.yml: dispatch
+          # input → .gitea/builder-image-pin → :latest fallback (#66). The
+          # builder image is used only to run scripts/runtime-hash.sh in the
+          # same environment build-runtime.yml used.
+          BUILDER_TAG_INPUT="${{ github.event.inputs.builder_image_tag }}"
+          if [ -n "$BUILDER_TAG_INPUT" ]; then
+            BUILDER_TAG="$BUILDER_TAG_INPUT"; bsrc="dispatch input"
+          else
+            PIN_URL="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/raw/.gitea/builder-image-pin?ref=${GITHUB_SHA:-main}"
+            BUILDER_TAG="$(curl -sf -H "Authorization: token ${{ github.token }}" "$PIN_URL" 2>/dev/null | head -1 | tr -d '[:space:]' || true)"
+            if [ -n "$BUILDER_TAG" ]; then
+              bsrc=".gitea/builder-image-pin"
+            else
+              BUILDER_TAG="latest"; bsrc="fallback (pin file missing)"
+              echo "[image] WARNING: no .gitea/builder-image-pin; using :latest" >&2
+            fi
+          fi
+          IMAGE="git.integrolabs.net/roctinam/carbonyl-builder:${BUILDER_TAG}"
+
+          PUSH_LATEST="${{ github.event.inputs.push_latest || 'true' }}"
+
+          echo "TAG=${TAG}"               >> "$GITHUB_ENV"
+          echo "VERSION=${VERSION}"       >> "$GITHUB_ENV"
+          echo "BUILDER_IMAGE=${IMAGE}"   >> "$GITHUB_ENV"
+          echo "PUSH_LATEST=${PUSH_LATEST}" >> "$GITHUB_ENV"
+          echo "[image] tag=${TAG} version=${VERSION} builder=${IMAGE} (from: $bsrc) push_latest=${PUSH_LATEST}"
+
+      - name: Validate Gitea token presence
+        if: env.SKIP != '1'
+        run: |
+          if [ -z "${{ secrets.BUILD_REPO_TOKEN }}" ]; then
+            echo "ERROR: BUILD_REPO_TOKEN not set; see docs/ci-secrets.md" >&2; exit 1
+          fi
+
+      - name: Log in to Gitea container registry
+        if: env.SKIP != '1'
+        run: |
+          echo "${{ secrets.BUILD_REPO_TOKEN }}" | \
+            docker login git.integrolabs.net -u "${{ github.actor }}" --password-stdin
+
+      - name: Pull builder image
+        if: env.SKIP != '1'
+        run: docker pull "${BUILDER_IMAGE}"
+
+      - name: Checkout repo at the tag
+        if: env.SKIP != '1'
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${TAG}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Compute runtime hash for the tagged commit
+        if: env.SKIP != '1'
+        run: |
+          HASH="$(docker run --rm \
+            -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            bash scripts/runtime-hash.sh)"
+          [ -n "$HASH" ] || { echo "ERROR: runtime-hash.sh returned empty" >&2; exit 1; }
+          echo "HASH=${HASH}" >> "$GITHUB_ENV"
+          echo "[image] runtime hash: ${HASH}"
+
+      - name: Download headless amd64 runtime payload
+        if: env.SKIP != '1'
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          # Headless ozone, x86_64 — the default container runtime. arm64 follows
+          # the arm64-linux runtime (#116); macOS is not a container target.
+          runtime_tag="runtime-${HASH}"
+          triple="x86_64-unknown-linux-gnu"
+          API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
+
+          release_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" 2>/dev/null || true)"
+          if [ -z "${release_json}" ]; then
+            echo "ERROR: runtime release '${runtime_tag}' not found — build it via build-runtime.yml first." >&2
+            exit 1
+          fi
+          if ! printf '%s' "${release_json}" | jq -e --arg n "${triple}.tgz" '.assets[] | select(.name == $n)' >/dev/null; then
+            echo "ERROR: runtime asset '${triple}.tgz' not found on '${runtime_tag}'." >&2
+            exit 1
+          fi
+
+          WORK="${GITHUB_WORKSPACE}/.image-work"
+          rm -rf "${WORK}" && mkdir -p "${WORK}/payload"
+          url="https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/download/${runtime_tag}/${triple}.tgz"
+          curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${WORK}/runtime.tgz" "${url}"
+          tar xzf "${WORK}/runtime.tgz" -C "${WORK}/payload"
+          payload_dir="$(find "${WORK}/payload" -maxdepth 1 -type d -name "${triple}" | head -1)"
+          [ -n "${payload_dir}" ] || { echo "ERROR: payload dir not found inside ${triple}.tgz" >&2; exit 1; }
+          echo "PAYLOAD_DIR=${payload_dir}" >> "$GITHUB_ENV"
+          echo "WORK=${WORK}" >> "$GITHUB_ENV"
+          echo "[image] payload: ${payload_dir}"
+
+      - name: Build and push image to GHCR
+        if: env.SKIP != '1'
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          latest_flag=""
+          [ "${PUSH_LATEST}" = "true" ] || latest_flag="--no-latest"
+          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/package-image.sh" \
+            --payload "${PAYLOAD_DIR}" \
+            --version "${VERSION}" \
+            --arch amd64 \
+            --image "${IMAGE_NAME}" \
+            --out "${WORK}/imgwork" \
+            --push ${latest_flag}
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" \
+                 "${GITHUB_WORKSPACE}/.image-work" 2>/dev/null || true
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${SKIP:-0}" = "1" ]; then
+            echo "==> Container image publish SKIPPED (GHCR_TOKEN not set)."
+            exit 0
+          fi
+          echo "==> Container image published"
+          echo "    ${IMAGE_NAME}:${VERSION}$([ "${PUSH_LATEST}" = "true" ] && echo " + ${IMAGE_NAME}:latest")"
+          echo "    Pull: docker run --rm -ti ${IMAGE_NAME}:${VERSION} https://example.com"
+          echo "    Note: first publish creates a PRIVATE package — set it public in"
+          echo "          github.com/users/jmagly/packages for anonymous docker pull."

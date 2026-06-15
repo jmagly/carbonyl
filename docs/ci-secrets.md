@@ -14,13 +14,23 @@ a PR to either remove the reference or document the new secret here.
 
 | Secret | Identity | Type | Scope (minimum) | Used by | Rotation |
 |---|---|---|---|---|---|
-| `BUILD_REPO_TOKEN` | bot account `roctibot` on `git.integrolabs.net` | Gitea PAT | `write:package`, `write:release`, `read:package` on `roctinam/carbonyl` | `build-builder.yml`, `build-runtime.yml`, `check.yml`, `release.yml` (#52) | 90 days |
+| `BUILD_REPO_TOKEN` | bot account `roctibot` on `git.integrolabs.net` | Gitea PAT | `write:package`, `write:release`, `read:package` on `roctinam/carbonyl` | `build-builder.yml`, `build-runtime.yml`, `check.yml`, `release.yml` (#52), `publish-image.yml` (#132) | 90 days |
 | `GH_MIRROR_TOKEN` | bot account `jmagly-mirror` on `github.com` | GitHub fine-grained PAT | `contents: write`, `metadata: read` on `jmagly/carbonyl` only | `mirror.yml` (#53), `release.yml` mirror step (#52) | 90 days |
+| `GHCR_TOKEN` | user `jmagly` on `github.com` | GitHub classic PAT | `write:packages`, `read:packages` on the `ghcr.io/jmagly` namespace | `publish-image.yml` (#132) | 90 days |
 
 `github.actor` (auto-injected by Gitea Actions) is the username used
 for `docker login` against the Gitea registry. It is not a secret —
 the auth comes from `BUILD_REPO_TOKEN` paired with the actor name. No
 separate `GITEA_REGISTRY_USER` secret is needed.
+
+`GHCR_TOKEN` is deliberately a **`jmagly` user** PAT, not the
+`jmagly-mirror` bot: `ghcr.io/jmagly` is a *user* namespace, and only
+the namespace owner's token can create/push packages there. ghcr push
+needs `write:packages`, which a classic PAT grants reliably (fine-grained
+PAT support for GHCR is still limited). The `publish-image.yml` login user
+is the literal `jmagly` (workflow env `GHCR_USER`), not `github.actor`.
+First push creates a **private** package — make it public at
+`https://github.com/users/jmagly/packages` for anonymous `docker pull`.
 
 ## Scope principles
 

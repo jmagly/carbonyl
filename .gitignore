@@ -13,7 +13,10 @@ __pycache__/
 /.ccache
 /.git_cache
 /.vscode
-/build
+/build/*
+# Build-environment + image Dockerfiles are source, not build output.
+!/build/Dockerfile.builder
+!/build/Dockerfile.runtime
 /chromium/*
 !/chromium/.gclient
 !/chromium/depot_tools

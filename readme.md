@@ -74,7 +74,10 @@ The installer downloads a verified-by-SHA256 runtime tarball from the release pa
 ### Run Carbonyl directly
 
 ```bash
-# From Docker (upstream image — M111-era, dated but works)
+# From Docker (maintained fork image — current runtime)
+docker run --rm -ti ghcr.io/jmagly/carbonyl https://youtube.com
+
+# Upstream image (M111-era, dated but works)
 docker run --rm -ti fathyb/carbonyl https://youtube.com
 
 # Or via npm (upstream package — M111-era)
@@ -84,6 +87,11 @@ carbonyl https://github.com
 # Or download a pre-built runtime from release assets (M147, current)
 # See: https://github.com/jmagly/carbonyl/releases
 ```
+
+The `ghcr.io/jmagly/carbonyl` image is `linux/amd64`, published per release
+(`:latest` tracks the newest). It runs as a non-root user with `--no-sandbox`
+and `--disable-dev-shm-usage`; mount a volume at `/home/carbonyl` to persist the
+browser profile.
 
 ### Install a native package
 
