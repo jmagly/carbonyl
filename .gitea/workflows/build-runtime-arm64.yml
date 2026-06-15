@@ -1,0 +1,180 @@
+# build-runtime-arm64.yml — CI-dispatched aarch64-unknown-linux-gnu runtime build (#116).
+#
+# Why this exists separately from build-runtime.yml:
+#   - build-runtime.yml runs on titan (x86_64) and builds amd64 there.
+#   - titan CANNOT build arm64 Linux, and **mutsu is not a Gitea Actions runner**
+#     (docs/ci-runner-mutsu.md — macOS act_runner has an RPC issue), so there is
+#     no `runs-on: mutsu`. The arm64 Linux runtime builds natively on mutsu in an
+#     aarch64 Colima Linux VM, dispatched over SSH.
+#   - This workflow runs on the titan runner and SSH-drives the existing
+#     scripts/mutsu-build-linux-arm64.sh. titan is the dedicated, always-on,
+#     monitored runner; it survives an operator workstation reboot, which a
+#     hand-run SSH session does not. mutsu does the actual compute over SSH.
+#
+# SSH to mutsu: the titan runner host carries the mutsu SSH key in its own
+# ~/.ssh (key + a `mutsu-agent` Host entry) — provisioned operationally, NOT a
+# Gitea Actions secret. The job inherits it because act_runner runs the job as
+# that host user. See docs/ci-secrets.md ("mutsu SSH access") and
+# docs/ci-runner-mutsu.md. If the runner's ssh config lives elsewhere, override
+# with the `ssh_config` input.
+#
+# Publish: `runtime-push.sh arm64` uploads the runtime asset to the shared
+# `runtime-<hash>` (or `runtime-x11-<hash>`) release. The mutsu driver logs in to
+# the registry as GITEA_USER (roctinam) and pushes with GITEA_TOKEN, so the
+# publish token MUST be a roctinam-owned token — provisioned as the dedicated
+# `RUNTIME_PUBLISH_TOKEN` secret, NOT BUILD_REPO_TOKEN (that one is the bot
+# `roctibot`, which would fail the `docker login -u roctinam` step and
+# mis-attribute the asset). Delivery-identity policy. See docs/ci-secrets.md.
+#
+# Manual dispatch only: this is a multi-hour native Chromium build. It never
+# fires on push. Once it publishes the asset, release.yml --include_linux_arm64=true
+# (#108) consumes it.
+
+name: Build Runtime (arm64 / mutsu)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ozone_platform:
+        description: 'Ozone variant(s) to build on mutsu'
+        required: false
+        default: 'headless'
+        type: choice
+        options:
+          - headless
+          - x11
+          - both
+      publish:
+        description: 'Publish the runtime asset(s) to the runtime-<hash> release (needs a roctinam BUILD_REPO_TOKEN)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      preflight_only:
+        description: 'Only check mutsu readiness (tooling, Colima profile, checkout) and stop'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      ninja_jobs:
+        description: 'ninja -j parallelism passed to the build (empty = builder default)'
+        required: false
+        default: ''
+      skip_sync:
+        description: 'Skip Chromium gclient sync on mutsu (faster re-build; still resets + applies patches)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      ssh_config:
+        description: 'SSH config file on the runner that resolves mutsu-agent (default: the runner user ~/.ssh/config)'
+        required: false
+        default: ''
+
+env:
+  CARGO_TERM_COLOR: always
+
+# One arm64 mutsu build at a time: the driver uses a single Colima profile and a
+# single /Volumes/build/carbonyl-linux-arm64 checkout, so concurrent runs (and the
+# two ozone variants) would clash on that shared remote state. Do NOT cancel an
+# in-flight build — let it finish; queue the next.
+concurrency:
+  group: build-runtime-arm64-mutsu
+  cancel-in-progress: false
+
+jobs:
+  build-runtime-arm64:
+    name: Build aarch64-unknown-linux-gnu on mutsu (${{ github.event.inputs.ozone_platform || 'headless' }})
+    runs-on: titan
+    timeout-minutes: 600
+
+    steps:
+      - name: Checkout repo at the dispatched ref
+        run: |
+          set -euo pipefail
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${{ github.ref_name }}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Resolve SSH config + ozone variant list
+        run: |
+          set -euo pipefail
+          SSH_CONFIG="${{ github.event.inputs.ssh_config }}"
+          [ -n "$SSH_CONFIG" ] || SSH_CONFIG="${HOME}/.ssh/config"
+          if [ ! -f "$SSH_CONFIG" ]; then
+            echo "ERROR: SSH config '$SSH_CONFIG' not found on the runner." >&2
+            echo "  The titan runner must carry the mutsu SSH key + a 'mutsu-agent' Host entry." >&2
+            echo "  See docs/ci-secrets.md (mutsu SSH access) and docs/ci-runner-mutsu.md." >&2
+            exit 1
+          fi
+          echo "SSH_CONFIG=${SSH_CONFIG}" >> "$GITHUB_ENV"
+
+          OZ="${{ github.event.inputs.ozone_platform || 'headless' }}"
+          case "$OZ" in
+            headless) VARIANTS="headless" ;;
+            x11)      VARIANTS="x11" ;;
+            both)     VARIANTS="headless x11" ;;
+            *) echo "ERROR: unknown ozone_platform '$OZ'" >&2; exit 1 ;;
+          esac
+          echo "VARIANTS=${VARIANTS}" >> "$GITHUB_ENV"
+          echo "[arm64-build] ssh_config=${SSH_CONFIG} variants=[${VARIANTS}] publish=${{ github.event.inputs.publish || 'false' }}"
+
+      - name: Preflight mutsu readiness
+        run: |
+          set -euo pipefail
+          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/mutsu-build-linux-arm64.sh" \
+            --ssh-config "${SSH_CONFIG}" \
+            --preflight
+
+      - name: Build (+ optionally publish) arm64 runtime per variant
+        if: ${{ github.event.inputs.preflight_only != 'true' }}
+        env:
+          # Publish (runtime-push.sh) uploads the release asset as this token's
+          # user, and the mutsu driver `docker login -u roctinam`s with it, so it
+          # MUST be a roctinam-owned token (delivery-identity policy). This is a
+          # DIFFERENT secret from BUILD_REPO_TOKEN — that one is the bot account
+          # `roctibot` (see docs/ci-secrets.md), which would both fail the
+          # `-u roctinam` login and mis-attribute the asset. RUNTIME_PUBLISH_TOKEN
+          # must be provisioned (roctinam PAT, write:release) before publish=true
+          # works; until then the guard below fails the run loudly. Only consumed
+          # when publish=true; build-only runs need no token.
+          GITEA_TOKEN: ${{ secrets.RUNTIME_PUBLISH_TOKEN }}
+        run: |
+          set -euo pipefail
+          PUBLISH="${{ github.event.inputs.publish || 'false' }}"
+          JOBS="${{ github.event.inputs.ninja_jobs }}"
+          SKIP_SYNC="${{ github.event.inputs.skip_sync || 'false' }}"
+
+          publish_flag=()
+          [ "$PUBLISH" = "true" ] && publish_flag=(--publish)
+          jobs_flag=()
+          [ -n "$JOBS" ] && jobs_flag=(--jobs "$JOBS")
+          skip_flag=()
+          [ "$SKIP_SYNC" = "true" ] && skip_flag=(--skip-sync)
+
+          if [ "$PUBLISH" = "true" ] && [ -z "${GITEA_TOKEN:-}" ]; then
+            echo "ERROR: publish=true but RUNTIME_PUBLISH_TOKEN is not set." >&2
+            echo "  It must be a roctinam-owned Gitea PAT (write:release) — NOT BUILD_REPO_TOKEN" >&2
+            echo "  (which is the bot roctibot). See docs/ci-secrets.md (RUNTIME_PUBLISH_TOKEN)." >&2
+            exit 1
+          fi
+
+          for variant in ${VARIANTS}; do
+            echo "::group::build arm64 runtime — ozone=${variant} publish=${PUBLISH}"
+            bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/mutsu-build-linux-arm64.sh" \
+              --ssh-config "${SSH_CONFIG}" \
+              --ozone "${variant}" \
+              "${jobs_flag[@]}" "${skip_flag[@]}" "${publish_flag[@]}"
+            echo "::endgroup::"
+          done
+
+      - name: Cleanup
+        if: ${{ always() }}
+        run: rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
