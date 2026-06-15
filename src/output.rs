@@ -2,6 +2,7 @@
 // mod quantizer;
 mod cell;
 mod frame_sync;
+mod framebuffer;
 mod painter;
 mod quad;
 mod render_thread;
@@ -11,6 +12,7 @@ mod xterm;
 
 pub use cell::*;
 pub use frame_sync::*;
+pub use framebuffer::*;
 pub use painter::*;
 pub use quad::*;
 pub use render_thread::*;

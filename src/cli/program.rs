@@ -29,7 +29,20 @@ impl CommandLineProgram {
         let cmd = CommandLine::parse();
 
         match cmd.program {
-            CommandLineProgram::Main => return Some(cmd),
+            CommandLineProgram::Main => {
+                // #125 cycle 1: the framebuffer backend module has landed but is
+                // not yet wired into the live render path. Recognize the flag and
+                // say so explicitly rather than silently falling back, so the
+                // failure mode is actionable (see docs/framebuffer-backend.md).
+                if let Some(path) = &cmd.framebuffer {
+                    eprintln!(
+                        "carbonyl: --framebuffer ({path}) is recognized but the framebuffer \
+                         backend is not yet active in this build (#125); using the terminal \
+                         renderer. See docs/framebuffer-backend.md."
+                    );
+                }
+                return Some(cmd);
+            }
             CommandLineProgram::Help => {
                 println!("{}", include_str!("usage.txt"))
             }

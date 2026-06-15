@@ -23,6 +23,12 @@ pub struct CommandLine {
     /// legibility on large terminals (e.g. 360x100) where a single row
     /// is ~10-12px tall and the chrome smears. Set via `--chrome-rows=N`.
     pub chrome_rows: u32,
+    /// Optional Linux framebuffer device for direct-to-`/dev/fb0` output (#125).
+    /// `Some(path)` selects the framebuffer backend (full pixel resolution on a
+    /// local TTY, no X11/Wayland); `None` keeps the default terminal renderer.
+    /// Set via `--framebuffer[=PATH]` or `CARBONYL_FRAMEBUFFER[=PATH]`; an empty
+    /// or missing value defaults to `/dev/fb0`.
+    pub framebuffer: Option<String>,
 }
 
 pub enum EnvVar {
@@ -56,6 +62,7 @@ impl CommandLine {
         let mut shell_mode = false;
         let mut viewport: Option<(u32, u32)> = None;
         let mut chrome_rows: u32 = 1;
+        let mut framebuffer: Option<String> = None;
         let mut program = CommandLineProgram::Main;
         // --dump-text scaffolding — collected during the loop and folded into
         // `program` after, so it composes with `--help` / `--version` /
@@ -114,6 +121,7 @@ impl CommandLine {
                         }
                     }
                 }
+                "--framebuffer" => framebuffer = Some(framebuffer_path(value.copied())),
 
                 "--dump-text" => {
                     dump_text_requested = true;
@@ -159,6 +167,12 @@ impl CommandLine {
                         chrome_rows = rows;
                     }
                 }
+            }
+        }
+
+        if framebuffer.is_none() {
+            if let Ok(value) = env::var("CARBONYL_FRAMEBUFFER") {
+                framebuffer = Some(framebuffer_path(Some(value.as_str())));
             }
         }
 
@@ -222,7 +236,17 @@ impl CommandLine {
             shell_mode,
             viewport,
             chrome_rows,
+            framebuffer,
         }
+    }
+}
+
+/// Resolve the framebuffer device path from an optional `=VALUE`. An empty or
+/// missing value defaults to `/dev/fb0`.
+fn framebuffer_path(value: Option<&str>) -> String {
+    match value {
+        Some(v) if !v.is_empty() => v.to_string(),
+        _ => "/dev/fb0".to_string(),
     }
 }
 
@@ -255,12 +279,27 @@ mod tests {
 
     #[test]
     fn dump_text_mode_aliases() {
-        assert_eq!(parse_dump_text_mode("innertext"), Some(DumpTextMode::InnerText));
-        assert_eq!(parse_dump_text_mode("INNER-TEXT"), Some(DumpTextMode::InnerText));
-        assert_eq!(parse_dump_text_mode("accessibility"), Some(DumpTextMode::Accessibility));
-        assert_eq!(parse_dump_text_mode("a11y"), Some(DumpTextMode::Accessibility));
+        assert_eq!(
+            parse_dump_text_mode("innertext"),
+            Some(DumpTextMode::InnerText)
+        );
+        assert_eq!(
+            parse_dump_text_mode("INNER-TEXT"),
+            Some(DumpTextMode::InnerText)
+        );
+        assert_eq!(
+            parse_dump_text_mode("accessibility"),
+            Some(DumpTextMode::Accessibility)
+        );
+        assert_eq!(
+            parse_dump_text_mode("a11y"),
+            Some(DumpTextMode::Accessibility)
+        );
         assert_eq!(parse_dump_text_mode("raw-dom"), Some(DumpTextMode::RawDom));
-        assert_eq!(parse_dump_text_mode("OuterHTML"), Some(DumpTextMode::RawDom));
+        assert_eq!(
+            parse_dump_text_mode("OuterHTML"),
+            Some(DumpTextMode::RawDom)
+        );
         assert_eq!(parse_dump_text_mode("nope"), None);
     }
 
@@ -270,5 +309,12 @@ mod tests {
         assert_eq!(parse_viewport("1280X800"), Some((1280, 800)));
         assert_eq!(parse_viewport("0x800"), None);
         assert_eq!(parse_viewport("abcxdef"), None);
+    }
+
+    #[test]
+    fn framebuffer_path_defaults() {
+        assert_eq!(framebuffer_path(None), "/dev/fb0");
+        assert_eq!(framebuffer_path(Some("")), "/dev/fb0");
+        assert_eq!(framebuffer_path(Some("/dev/fb1")), "/dev/fb1");
     }
 }
