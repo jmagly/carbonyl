@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.9] - 2026-06-15
+
+### 🚀 Features
+
+- Native install packages — deb/rpm/AppImage + unsigned macOS pkg/dmg ([#129](https://github.com/jmagly/carbonyl/issues/129))
+
+### 📖 Documentation
+
+- Move root docs under docs
+
+### Ci
+
+- Add mutsu macOS runtime SSH driver
+- Harden macOS release artifact staging
+- Add titan x64 host preflight
+- Fix cdp smoke runtime path
+- Wire linux arm64 release path
+- Move mutsu linux build tree to vm disk
+- Keep mutsu colima ssh from consuming remote script
+- Seed mutsu linux chromium tree from existing checkout
+- Seed mutsu linux chromium with bundle
+- Seed mutsu linux chromium with shared clone
+- Auto-skip macOS on tag-push when arm runtime absent
+- Route macOS build scratch to the external volume
+- Add nfpm + appimagetool to the builder image ([#129](https://github.com/jmagly/carbonyl/issues/129))
+- Pin builder image to sha-15f4bdb (nfpm + appimagetool, [#129](https://github.com/jmagly/carbonyl/issues/129))
+
+### Test
+
+- Add carbonyl cdp smoke
+
 ## [0.2.0-alpha.8] - 2026-06-02
 
 ### 🐛 Bug Fixes
