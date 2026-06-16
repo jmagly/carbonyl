@@ -551,109 +551,135 @@ where
 ///
 /// This will block so the calling code should start and own a dedicated thread.
 /// It will panic if there is any error.
-#[no_mangle]
-pub extern "C" fn carbonyl_renderer_listen(bridge: RendererPtr, delegate: *mut BrowserDelegate) {
-    let bridge = unsafe { &*bridge };
-    let delegate = unsafe { *delegate };
-
+/// Translate one batch of input `Event`s into browser-delegate calls. Shared by
+/// every input source so the bridge is source-agnostic: the stdin/terminal
+/// `listen` thread and the framebuffer-mode `listen_evdev` thread (#125) both
+/// funnel here. Serialized by the bridge `Mutex` regardless of source.
+fn dispatch_input_events(
+    bridge: &'static Mutex<RendererBridge>,
+    delegate: BrowserDelegate,
+    mut events: Vec<input::Event>,
+) {
     use input::*;
 
-    thread::spawn(move || {
-        macro_rules! emit {
-            ($event:ident($($args:expr),*) => $closure:expr) => {{
-                let run = move || {
-                    (delegate.$event)($($args),*);
+    macro_rules! emit {
+        ($event:ident($($args:expr),*) => $closure:expr) => {{
+            let run = move || {
+                (delegate.$event)($($args),*);
 
-                    $closure
-                };
+                $closure
+            };
 
-                unsafe { post_task(delegate.post_task, run) }
-            }};
-            ($event:ident($($args:expr),*)) => {{
-                emit!($event($($args),*) => {})
-            }};
-        }
+            unsafe { post_task(delegate.post_task, run) }
+        }};
+        ($event:ident($($args:expr),*)) => {{
+            emit!($event($($args),*) => {})
+        }};
+    }
 
-        listen(|mut events| {
-            bridge.lock().unwrap().renderer.render(move |renderer| {
-                let get_scale = || bridge.lock().unwrap().window.scale;
-                let scale = |col, row| {
+    bridge.lock().unwrap().renderer.render(move |renderer| {
+        let get_scale = || bridge.lock().unwrap().window.scale;
+        let scale = |col, row| {
+            let scale = get_scale();
+
+            scale
+                .mul(((col as f32 + 0.5), (row as f32 - 0.5)))
+                .floor()
+                .cast()
+                .into()
+        };
+        let dispatch = |action| {
+            match action {
+                NavigationAction::Ignore => (),
+                NavigationAction::Forward => return true,
+                NavigationAction::GoBack() => emit!(go_back()),
+                NavigationAction::GoForward() => emit!(go_forward()),
+                NavigationAction::Refresh() => emit!(refresh()),
+                NavigationAction::GoTo(url) => {
+                    let c_str = CString::new(url).unwrap();
+
+                    emit!(go_to(c_str.as_ptr()))
+                }
+            };
+
+            false
+        };
+
+        for event in std::mem::take(&mut events) {
+            use Event::*;
+
+            match event {
+                Exit => (),
+                Scroll { delta } => {
                     let scale = get_scale();
 
-                    scale
-                        .mul(((col as f32 + 0.5), (row as f32 - 0.5)))
-                        .floor()
-                        .cast()
-                        .into()
-                };
-                let dispatch = |action| {
-                    match action {
-                        NavigationAction::Ignore => (),
-                        NavigationAction::Forward => return true,
-                        NavigationAction::GoBack() => emit!(go_back()),
-                        NavigationAction::GoForward() => emit!(go_forward()),
-                        NavigationAction::Refresh() => emit!(refresh()),
-                        NavigationAction::GoTo(url) => {
-                            let c_str = CString::new(url).unwrap();
-
-                            emit!(go_to(c_str.as_ptr()))
-                        }
-                    };
-
-                    false
-                };
-
-                for event in std::mem::take(&mut events) {
-                    use Event::*;
-
-                    match event {
-                        Exit => (),
-                        Scroll { delta } => {
-                            let scale = get_scale();
-
-                            emit!(scroll((delta as f32 * scale.height) as c_int))
-                        }
-                        KeyPress { key } => {
-                            if dispatch(renderer.keypress(&key).unwrap()) {
-                                emit!(key_press(key.char as c_char))
-                            }
-                        }
-                        MouseUp { col, row } => {
-                            if dispatch(renderer.mouse_up((col as _, row as _).into()).unwrap()) {
-                                let (width, height) = scale(col, row);
-
-                                emit!(mouse_up(width, height))
-                            }
-                        }
-                        MouseDown { col, row } => {
-                            if dispatch(renderer.mouse_down((col as _, row as _).into()).unwrap()) {
-                                let (width, height) = scale(col, row);
-
-                                emit!(mouse_down(width, height))
-                            }
-                        }
-                        MouseMove { col, row } => {
-                            if dispatch(renderer.mouse_move((col as _, row as _).into()).unwrap()) {
-                                let (width, height) = scale(col, row);
-
-                                emit!(mouse_move(width, height))
-                            }
-                        }
-                        Terminal(terminal) => match terminal {
-                            TerminalEvent::Name(name) => log::debug!("terminal name: {name}"),
-                            TerminalEvent::TrueColorSupported => renderer.enable_true_color(),
-                        },
+                    emit!(scroll((delta as f32 * scale.height) as c_int))
+                }
+                KeyPress { key } => {
+                    if dispatch(renderer.keypress(&key).unwrap()) {
+                        emit!(key_press(key.char as c_char))
                     }
                 }
-            })
-        })
-        .unwrap();
+                MouseUp { col, row } => {
+                    if dispatch(renderer.mouse_up((col as _, row as _).into()).unwrap()) {
+                        let (width, height) = scale(col, row);
 
-        // Setup single-use channel
+                        emit!(mouse_up(width, height))
+                    }
+                }
+                MouseDown { col, row } => {
+                    if dispatch(renderer.mouse_down((col as _, row as _).into()).unwrap()) {
+                        let (width, height) = scale(col, row);
+
+                        emit!(mouse_down(width, height))
+                    }
+                }
+                MouseMove { col, row } => {
+                    if dispatch(renderer.mouse_move((col as _, row as _).into()).unwrap()) {
+                        let (width, height) = scale(col, row);
+
+                        emit!(mouse_move(width, height))
+                    }
+                }
+                Terminal(terminal) => match terminal {
+                    TerminalEvent::Name(name) => log::debug!("terminal name: {name}"),
+                    TerminalEvent::TrueColorSupported => renderer.enable_true_color(),
+                },
+            }
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn carbonyl_renderer_listen(bridge: RendererPtr, delegate: *mut BrowserDelegate) {
+    let bridge: &'static Mutex<RendererBridge> = unsafe { &*bridge };
+    let delegate = unsafe { *delegate };
+
+    // #125 cycle 2: in framebuffer mode there may be no PTY emitting terminal
+    // escape sequences, so also read local input from evdev (/dev/input/event*).
+    // Additive — the stdin listener below still runs, so input works whether the
+    // session is a bare console or a controlling terminal/SSH. evdev failures
+    // (no device / no permission) end this thread quietly and leave stdin input.
+    if bridge.lock().unwrap().cmd.framebuffer.is_some() {
+        thread::spawn(move || {
+            if let Err(err) =
+                input::listen_evdev(|events| dispatch_input_events(bridge, delegate, events))
+            {
+                log::debug!("evdev input unavailable: {err}");
+            }
+        });
+    }
+
+    thread::spawn(move || {
+        input::listen(|events| dispatch_input_events(bridge, delegate, events)).unwrap();
+
+        // Signal the browser to shut down, then wait for acknowledgement.
         let (tx, rx) = mpsc::channel();
-
-        // Signal the browser to shutdown and notify our thread
-        emit!(shutdown() => tx.send(()).unwrap());
+        let run = move || {
+            (delegate.shutdown)();
+            tx.send(()).unwrap();
+        };
+        unsafe { post_task(delegate.post_task, run) };
         rx.recv().unwrap();
 
         // Shutdown rendering thread
