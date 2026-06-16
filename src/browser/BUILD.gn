@@ -94,6 +94,30 @@ component("javascript") {
   ]
 }
 
+# Network-event capture handler + FFI (issue #6). Observes
+# WebContentsObserver::ResourceLoadComplete and pushes per-resource JSON to the
+# Rust ring buffer. Kept out of `:bridge` for the same skia/content dep-cycle
+# reason as the sibling handlers. Pulled in by `headless_shell` via chromium
+# patch 0032.
+component("network") {
+  output_name = "carbonyl_network"
+  defines = [ "CARBONYL_BRIDGE_IMPLEMENTATION" ]
+  sources = [
+    "network_handler.cc",
+    "network_handler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    # blink::mojom::ResourceLoadInfo (+ net::LoadTimingInfo typemap). Per
+    # //third_party/blink/public/mojom/BUILD.gn, non-Blink targets reach the
+    # mojom_platform C++ bindings through //content/public/common, which
+    # exposes them as a public dependency.
+    "//content/public/common",
+  ]
+}
+
 component("viz") {
   output_name = "carbonyl_viz"
   defines = [ "CARBONYL_VIZ_IMPLEMENTATION" ]
