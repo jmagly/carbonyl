@@ -35,7 +35,7 @@ const char* AllocateCString(const std::string& s) {
 // heap-allocated C string. `reason` is a static string literal (one of the
 // documented reasons in the header).
 const char* AllocateErrorEnvelope(const char* reason) {
-  base::Value::Dict dict;
+  base::DictValue dict;
   dict.Set("result", base::Value());  // JSON null
   dict.Set("error", reason);
   std::string json;
