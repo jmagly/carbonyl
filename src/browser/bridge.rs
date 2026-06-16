@@ -256,14 +256,16 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
         last_frame: None,
     };
 
-    // #6: hand the network-event sink to the C++ NetworkHandler. The handler
-    // singleton is installed C++-side in OnBrowserStart (patch 0032); this only
-    // registers the trampoline that appends to NETWORK_LOG. Capture stays
-    // disabled until `set_network_capture(true)` arms it, so registration is
-    // free until the carbonyl-fleet socket layer (#11) opts in.
-    // SAFETY: `network_event_trampoline` is a plain `extern "C" fn` with static
-    // lifetime; storing its pointer in the C++ static is sound.
-    unsafe { carbonyl_set_network_callback(network_event_trampoline) };
+    // NOTE: the network-event sink is registered lazily in `set_network_capture`
+    // (the carbonyl-fleet entry point), NOT here. Calling
+    // `carbonyl_set_network_callback` from this retained `#[no_mangle]` function
+    // would keep an undefined reference to it *live* in libcarbonyl.so, breaking
+    // the link of auxiliary binaries (e.g. v8_context_snapshot_generator) that
+    // link libcarbonyl.so without the `:network` component under
+    // `--no-allow-shlib-undefined`. Keeping the FFI reachable only from the
+    // dormant `pub fn` below lets the linker dead-strip it — matching the
+    // accessibility/JS handlers, which are likewise only reached from
+    // carbonyl-fleet-facing `pub fn`s.
 
     Box::into_raw(Box::new(Mutex::new(bridge)))
 }
@@ -885,9 +887,19 @@ extern "C" fn network_event_trampoline(json: *const c_char) {
 /// Arm or disarm network capture (#6). Disabled by default; the carbonyl-fleet
 /// socket layer (#11) arms it on demand. Disarming stops new events but leaves
 /// the buffer intact (use `network_clear` to flush).
+///
+/// The C++ sink is (re)registered here rather than at renderer creation so the
+/// network FFI is reachable only from this dormant `pub fn` — letting the
+/// linker dead-strip it in binaries that don't pull in the carbonyl-fleet
+/// surface (see the note in `carbonyl_renderer_create`). Registration is
+/// idempotent C++-side (it just stores the callback pointer).
 pub fn set_network_capture(enabled: bool) {
-    // SAFETY: plain C-ABI setter writing a bool to a C++ static.
-    unsafe { carbonyl_set_network_capture(enabled) };
+    // SAFETY: `network_event_trampoline` is a plain `extern "C" fn` with static
+    // lifetime; both FFIs are plain C-ABI setters writing to C++ statics.
+    unsafe {
+        carbonyl_set_network_callback(network_event_trampoline);
+        carbonyl_set_network_capture(enabled);
+    }
 }
 
 /// Return the buffered network events as a JSON array string (oldest first).
