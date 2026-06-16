@@ -72,6 +72,28 @@ component("accessibility") {
   ]
 }
 
+# JavaScript-evaluation handler + FFI (issue #5). Kept out of `:bridge` for
+# the same reason `:dump_text` and `:accessibility` are — `:bridge` sits below
+# skia, and `//content/public/browser` would close a dep cycle. Pulled in by
+# `headless_shell` via chromium patch 0031.
+component("javascript") {
+  output_name = "carbonyl_javascript"
+  defines = [ "CARBONYL_BRIDGE_IMPLEMENTATION" ]
+  sources = [
+    "javascript_handler.cc",
+    "javascript_handler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    # carbonyl_free_string() — the JSON string handed to the eval callback is
+    # released through the same FFI free as the accessibility tree. Sibling
+    # component; :accessibility does not depend on :javascript, so no cycle.
+    ":accessibility",
+  ]
+}
+
 component("viz") {
   output_name = "carbonyl_viz"
   defines = [ "CARBONYL_VIZ_IMPLEMENTATION" ]
