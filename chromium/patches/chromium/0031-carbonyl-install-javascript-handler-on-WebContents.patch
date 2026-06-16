@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <carbonyl@integrolabs.net>
+Date: Tue, 16 Jun 2026 10:47:04 -0400
+Subject: [PATCH 31/31] carbonyl: install javascript handler on OnBrowserStart's
+ WebContents
+
+Wires carbonyl::JavaScriptHandler::InstallFor() into the headless shell's
+OnBrowserStart(), right after the patch-0028 accessibility install site.
+
+The handler is a process-wide singleton (carbonyl runs one WebContents per
+process in headless mode) that exposes carbonyl_eval_javascript() to the Rust
+FFI in carbonyl/src/browser/bridge.rs. The Rust side dispatches to it when the
+carbonyl-fleet socket layer (roctinam/carbonyl-fleet#10) receives an eval
+request. Scripts run in the primary main frame's isolated world via
+RenderFrameHost::ExecuteJavaScriptInIsolatedWorld and the base::Value result is
+serialized to JSON.
+
+Mirrors patch 0028 in shape: a single small call-site hunk plus the include and
+the headless_shell dep, keeping the chromium-side surface minimal so it survives
+rebases. The dep is :javascript (sibling component depending on :accessibility
+for the shared carbonyl_free_string).
+
+Refs: roctinam/carbonyl#5
+Refs: roctinam/carbonyl-fleet#10
+---
+ headless/BUILD.gn              |  1 +
+ headless/app/headless_shell.cc | 12 ++++++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index be33ffb..aadba45 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -948,6 +948,7 @@ executable("headless_shell") {
+     ":headless_shell_lib",
+     "//carbonyl/src/browser:accessibility",
+     "//carbonyl/src/browser:dump_text",
++    "//carbonyl/src/browser:javascript",
+     "//carbonyl/src/browser:renderer",
+     "//build:branding_buildflags",
+     "//components/os_crypt/common:switches",
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+index 6e9bfe8..9bcd028 100644
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "carbonyl/src/browser/accessibility_handler.h"
+ #include "carbonyl/src/browser/dump_text_handler.h"
++#include "carbonyl/src/browser/javascript_handler.h"
+ #include "carbonyl/src/browser/renderer.h"
+ 
+ #include <memory>
+@@ -175,6 +176,17 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+     carbonyl::AccessibilityHandler::InstallFor(
+         HeadlessWebContentsImpl::From(web_contents)->web_contents());
+   }
++
++  // Carbonyl issue #5: install the JavaScript-evaluation FFI handler on
++  // the freshly built WebContents. Always-on (no CLI gate) for the same
++  // reason as the accessibility handler: the FFI surface is process-wide
++  // and the carbonyl-fleet socket layer (#10) decides whether to expose
++  // it externally. The handler runs scripts in the primary main frame's
++  // isolated world (see javascript_handler.cc::Evaluate).
++  if (web_contents) {
++    carbonyl::JavaScriptHandler::InstallFor(
++        HeadlessWebContentsImpl::From(web_contents)->web_contents());
++  }
+ }
+ 
+ #if defined(HEADLESS_ENABLE_COMMANDS)
+-- 
+2.43.0
+

@@ -741,3 +741,86 @@ pub fn get_accessibility_tree() -> String {
         owned
     }
 }
+
+// JavaScript evaluation FFI (issue #5). Unlike the synchronous accessibility
+// snapshot, JS eval round-trips to the renderer: the result is delivered to a
+// C callback on the UI thread (see src/browser/javascript_handler.{h,cc}). We
+// adapt that to an ergonomic `FnOnce(String)` via a boxed-closure trampoline,
+// the same pattern as `post_task`. The JSON string handed to the callback is
+// freed via `carbonyl_free_string` (reused from the accessibility FFI above).
+
+extern "C" {
+    /// Async. Schedules `script` on the primary main frame's isolated world;
+    /// `callback(json, user_data)` fires exactly once on the UI thread with a
+    /// `new char[]` JSON string the callee frees via `carbonyl_free_string`.
+    /// On the no-WebContents / no-frame fast paths the callback is invoked
+    /// synchronously (before return) with the error envelope.
+    fn carbonyl_eval_javascript(
+        script: *const c_char,
+        callback: extern "C" fn(*const c_char, *mut c_void),
+        user_data: *mut c_void,
+    );
+}
+
+/// Trampoline handed to `carbonyl_eval_javascript`. Reconstructs the boxed
+/// `FnOnce(String)` from `user_data`, copies the JSON into an owned `String`,
+/// releases the C string, and invokes the closure exactly once. Runs on the
+/// browser UI thread.
+extern "C" fn eval_result_trampoline(json: *const c_char, user_data: *mut c_void) {
+    // SAFETY: `user_data` is exactly the `Box<Box<dyn FnOnce(String) + Send>>`
+    // leaked by `eval_javascript`, handed back unchanged by the C++ side and
+    // invoked exactly once — so reconstructing and dropping it here is sound.
+    let closure: Box<Box<dyn FnOnce(String) + Send>> =
+        unsafe { Box::from_raw(user_data as *mut Box<dyn FnOnce(String) + Send>) };
+
+    let result = unsafe {
+        if json.is_null() {
+            // Defensive — the C++ contract always passes a non-null envelope.
+            String::from(r#"{"result":null,"error":"no_result"}"#)
+        } else {
+            let owned = CStr::from_ptr(json).to_string_lossy().into_owned();
+            carbonyl_free_string(json);
+            owned
+        }
+    };
+
+    closure(result);
+}
+
+/// Evaluate `script` in the primary main frame's isolated world and deliver
+/// the JSON-serialized result to `on_result`. The string is either the
+/// serialized script value (e.g. `"\"hi\""`, `"42"`, `"{...}"`; a void result
+/// serializes to `"null"`) or the error envelope
+/// `{"result":null,"error":"<reason>"}` (`no_web_contents`, `no_main_frame`,
+/// `serialization_failed`, or `invalid_script`).
+///
+/// `on_result` runs on the browser UI thread and is invoked exactly once.
+/// Must be called on the browser UI thread (see the accessibility FFI note).
+pub fn eval_javascript<F>(script: &str, on_result: F)
+where
+    F: FnOnce(String) + Send + 'static,
+{
+    let c_script = match CString::new(script) {
+        Ok(s) => s,
+        Err(_) => {
+            // Interior NUL byte — cannot pass as a C string. Deliver the error
+            // envelope directly (closure still invoked exactly once, no FFI
+            // round-trip) rather than silently truncating the script.
+            on_result(String::from(r#"{"result":null,"error":"invalid_script"}"#));
+            return;
+        }
+    };
+
+    let boxed: *mut Box<dyn FnOnce(String) + Send> = Box::into_raw(Box::new(Box::new(on_result)));
+
+    // SAFETY: C++ copies the script synchronously into a std::u16string before
+    // returning, so the local `c_script` lifetime is sufficient; `boxed` is
+    // reclaimed exactly once by `eval_result_trampoline` on the UI thread.
+    unsafe {
+        carbonyl_eval_javascript(
+            c_script.as_ptr(),
+            eval_result_trampoline,
+            boxed as *mut c_void,
+        );
+    }
+}
