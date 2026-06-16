@@ -8,6 +8,7 @@
 // at the file level rather than decorating every function.
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+use std::collections::VecDeque;
 use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -254,6 +255,15 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
         capture_enabled: false,
         last_frame: None,
     };
+
+    // #6: hand the network-event sink to the C++ NetworkHandler. The handler
+    // singleton is installed C++-side in OnBrowserStart (patch 0032); this only
+    // registers the trampoline that appends to NETWORK_LOG. Capture stays
+    // disabled until `set_network_capture(true)` arms it, so registration is
+    // free until the carbonyl-fleet socket layer (#11) opts in.
+    // SAFETY: `network_event_trampoline` is a plain `extern "C" fn` with static
+    // lifetime; storing its pointer in the C++ static is sound.
+    unsafe { carbonyl_set_network_callback(network_event_trampoline) };
 
     Box::into_raw(Box::new(Mutex::new(bridge)))
 }
@@ -822,5 +832,88 @@ where
             eval_result_trampoline,
             boxed as *mut c_void,
         );
+    }
+}
+
+// Network-event capture FFI (issue #6). The C++ NetworkHandler observes
+// WebContentsObserver::ResourceLoadComplete and pushes one JSON object per
+// completed resource to the trampoline below. The ring buffer lives here
+// (Rust owns it, per the issue); retrieval/clear are exposed for the
+// carbonyl-fleet socket layer (#11). Capture is opt-in — `set_network_capture`
+// arms the C++ side, which early-returns (no serialization) while disarmed.
+
+extern "C" {
+    /// Register the per-event sink. Called once at startup with
+    /// `network_event_trampoline`. See src/browser/network_handler.{h,cc}.
+    fn carbonyl_set_network_callback(callback: extern "C" fn(*const c_char));
+
+    /// Arm/disarm capture C++-side. While disarmed, ResourceLoadComplete does
+    /// no work; arming is what makes the per-resource serialize happen.
+    fn carbonyl_set_network_capture(enabled: bool);
+}
+
+/// Maximum buffered network events; oldest are evicted past this cap.
+const NETWORK_LOG_CAP: usize = 1000;
+
+/// Per-process ring buffer of network events, each a JSON object string from
+/// the C++ side. `VecDeque::new` and `Mutex::new` are const, so this needs no
+/// lazy initializer. Touched on the UI thread (trampoline) and the socket
+/// thread (log/clear) — the Mutex serializes both.
+static NETWORK_LOG: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+
+/// Trampoline registered with `carbonyl_set_network_callback`. Copies the JSON
+/// event into the ring buffer, evicting the oldest entry past the cap. Runs on
+/// the browser UI thread (ResourceLoadComplete affinity). The pointer is valid
+/// only for the duration of the call (C++ owns the backing `std::string`), so
+/// we copy synchronously and never retain it.
+extern "C" fn network_event_trampoline(json: *const c_char) {
+    if json.is_null() {
+        return;
+    }
+    // SAFETY: `json` is a non-null, NUL-terminated UTF-8 C string owned by the
+    // C++ caller for the duration of this synchronous call; we copy and return.
+    let event = unsafe { CStr::from_ptr(json).to_string_lossy().into_owned() };
+
+    if let Ok(mut log) = NETWORK_LOG.lock() {
+        if log.len() >= NETWORK_LOG_CAP {
+            log.pop_front();
+        }
+        log.push_back(event);
+    }
+}
+
+/// Arm or disarm network capture (#6). Disabled by default; the carbonyl-fleet
+/// socket layer (#11) arms it on demand. Disarming stops new events but leaves
+/// the buffer intact (use `network_clear` to flush).
+pub fn set_network_capture(enabled: bool) {
+    // SAFETY: plain C-ABI setter writing a bool to a C++ static.
+    unsafe { carbonyl_set_network_capture(enabled) };
+}
+
+/// Return the buffered network events as a JSON array string (oldest first).
+/// Each entry is already a serialized JSON object, so we join with commas
+/// inside brackets rather than re-serializing.
+pub fn network_log() -> String {
+    let log = match NETWORK_LOG.lock() {
+        Ok(log) => log,
+        Err(_) => return String::from("[]"),
+    };
+    let mut out = String::with_capacity(log.iter().map(|e| e.len() + 1).sum::<usize>() + 2);
+    out.push('[');
+    for (i, entry) in log.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str(entry);
+    }
+    out.push(']');
+    out
+}
+
+/// Flush the network ring buffer (#6 `network_clear`). After this, `network_log`
+/// returns `[]` until new events arrive.
+pub fn network_clear() {
+    if let Ok(mut log) = NETWORK_LOG.lock() {
+        log.clear();
     }
 }

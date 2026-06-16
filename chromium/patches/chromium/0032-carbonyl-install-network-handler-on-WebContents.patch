@@ -1,0 +1,71 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <carbonyl@integrolabs.net>
+Date: Tue, 16 Jun 2026 12:32:58 -0400
+Subject: [PATCH 32/32] carbonyl: install network handler on OnBrowserStart's
+ WebContents
+
+Wires carbonyl::NetworkHandler::InstallFor() into the headless shell's
+OnBrowserStart(), right after the patch-0031 javascript install site.
+
+The handler is a process-wide singleton (carbonyl runs one WebContents per
+process in headless mode) that observes WebContentsObserver::ResourceLoadComplete
+and pushes one JSON object per completed resource (url, method, http status,
+timing_ms, mime, cached) to the Rust ring buffer via carbonyl_set_network_callback.
+Capture is opt-in: disarmed by default, armed via carbonyl_set_network_capture so
+an un-armed session does no per-resource serialization. The FFI surface is
+consumed by the carbonyl-fleet socket layer (roctinam/carbonyl-fleet#11).
+
+Mirrors patches 0028/0031 in shape: include + headless_shell dep (:network) +
+a single InstallFor call-site block. No network-stack interceptor patch is
+needed because ResourceLoadComplete already carries url/method/status/timing.
+
+Refs: roctinam/carbonyl#6
+Refs: roctinam/carbonyl-fleet#11
+---
+ headless/BUILD.gn              |  1 +
+ headless/app/headless_shell.cc | 10 ++++++++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index aadba45..ef30a66 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -949,6 +949,7 @@ executable("headless_shell") {
+     "//carbonyl/src/browser:accessibility",
+     "//carbonyl/src/browser:dump_text",
+     "//carbonyl/src/browser:javascript",
++    "//carbonyl/src/browser:network",
+     "//carbonyl/src/browser:renderer",
+     "//build:branding_buildflags",
+     "//components/os_crypt/common:switches",
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+index 9bcd028..f167f72 100644
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -7,6 +7,7 @@
+ #include "carbonyl/src/browser/accessibility_handler.h"
+ #include "carbonyl/src/browser/dump_text_handler.h"
+ #include "carbonyl/src/browser/javascript_handler.h"
++#include "carbonyl/src/browser/network_handler.h"
+ #include "carbonyl/src/browser/renderer.h"
+ 
+ #include <memory>
+@@ -187,6 +188,15 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+     carbonyl::JavaScriptHandler::InstallFor(
+         HeadlessWebContentsImpl::From(web_contents)->web_contents());
+   }
++
++  // Carbonyl issue #6: install the network-event capture handler on the
++  // freshly built WebContents. Always installed (no CLI gate); capture is
++  // opt-in and stays disarmed until carbonyl_set_network_capture(true), so
++  // an un-armed session pays no per-resource cost (see network_handler.cc).
++  if (web_contents) {
++    carbonyl::NetworkHandler::InstallFor(
++        HeadlessWebContentsImpl::From(web_contents)->web_contents());
++  }
+ }
+ 
+ #if defined(HEADLESS_ENABLE_COMMANDS)
+-- 
+2.43.0
+
