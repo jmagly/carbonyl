@@ -18,7 +18,7 @@ use libc::{c_char, c_float, c_int, c_uchar, c_uint, c_void, size_t};
 
 use crate::cli::{CommandLine, CommandLineProgram, EnvVar};
 use crate::gfx::{Cast, Color, Point, Rect, Size};
-use crate::output::{Framebuffer, RenderThread, Window};
+use crate::output::{encode_png, Framebuffer, RenderThread, ScreenshotFormat, Window};
 use crate::ui::navigation::NavigationAction;
 use crate::{input, utils::log};
 
@@ -66,6 +66,13 @@ pub struct RendererBridge {
     /// renderer keeps running — modeled on the X-mirror surface. `None` when
     /// the flag is unset or the device failed to open.
     framebuffer: Option<Framebuffer>,
+    /// #3 screenshot capture. When armed via `carbonyl_set_screenshot_capture`,
+    /// `draw_bitmap` retains a copy of the latest BGRA frame in `last_frame` so
+    /// `carbonyl_capture_screenshot` can encode it on demand with no CDP
+    /// round-trip. Disabled by default so standalone terminal sessions pay no
+    /// per-frame copy cost — embedders (e.g. carbonyl-fleet) arm it explicitly.
+    capture_enabled: bool,
+    last_frame: Option<(Vec<u8>, Size)>,
 }
 
 unsafe impl Send for RendererBridge {}
@@ -244,6 +251,8 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
         window,
         renderer: RenderThread::new(),
         framebuffer,
+        capture_enabled: false,
+        last_frame: None,
     };
 
     Box::into_raw(Box::new(Mutex::new(bridge)))
@@ -384,6 +393,14 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
         );
     }
 
+    // #3 screenshot capture: retain the latest full BGRA frame when armed so
+    // carbonyl_capture_screenshot can encode it on demand. Gated on
+    // capture_enabled — the per-frame copy is only paid when an embedder
+    // actually wants screenshots.
+    if bridge.capture_enabled {
+        bridge.last_frame = Some((pixels.to_vec(), pixels_size.into()));
+    }
+
     bridge.renderer.render(move |renderer| {
         renderer.draw_background(
             pixels,
@@ -396,6 +413,97 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
 
         callback(callback_data.as_ptr());
     });
+}
+
+/// Owned byte buffer handed across FFI (e.g. an encoded screenshot). The caller
+/// MUST return it to `carbonyl_free_screenshot` to release it. An empty result
+/// (capture not armed, no frame yet, or encode failure) is `{ null, 0, 0 }`.
+#[repr(C)]
+pub struct CBuffer {
+    data: *mut c_uchar,
+    len: size_t,
+    cap: size_t,
+}
+
+impl CBuffer {
+    fn empty() -> CBuffer {
+        CBuffer {
+            data: std::ptr::null_mut(),
+            len: 0,
+            cap: 0,
+        }
+    }
+
+    fn from_vec(mut v: Vec<u8>) -> CBuffer {
+        let buf = CBuffer {
+            data: v.as_mut_ptr(),
+            len: v.len(),
+            cap: v.capacity(),
+        };
+        // Ownership transfers to the caller; reclaimed in carbonyl_free_screenshot.
+        std::mem::forget(v);
+        buf
+    }
+}
+
+/// Arm or disarm screenshot capture (#3). While armed, `draw_bitmap` retains a
+/// copy of the latest BGRA frame so `carbonyl_capture_screenshot` can encode it.
+/// Disarming drops any retained frame so the memory isn't held.
+#[no_mangle]
+pub extern "C" fn carbonyl_set_screenshot_capture(bridge: RendererPtr, enabled: bool) {
+    let bridge = unsafe { bridge.as_ref() };
+    let mut bridge = bridge.unwrap().lock().unwrap();
+
+    bridge.capture_enabled = enabled;
+    if !enabled {
+        bridge.last_frame = None;
+    }
+}
+
+/// Encode the latest captured frame to an image and return it as an owned
+/// `CBuffer` (#3). `format` is reserved for future formats (JPEG is deferred);
+/// every value encodes PNG today, and `quality` is ignored for PNG. Returns an
+/// empty buffer when capture is not armed, no frame has arrived yet, or encoding
+/// fails. The caller owns the result and must pass it to
+/// `carbonyl_free_screenshot`.
+#[no_mangle]
+pub extern "C" fn carbonyl_capture_screenshot(
+    bridge: RendererPtr,
+    format: *const c_char,
+    _quality: u8,
+) -> CBuffer {
+    let bridge = unsafe { bridge.as_ref() };
+    let bridge = bridge.unwrap().lock().unwrap();
+
+    // Parse the requested format for forward-compatibility; PNG is the only
+    // backend today, so the parsed value is intentionally unused.
+    let _format = if format.is_null() {
+        ScreenshotFormat::Png
+    } else {
+        let s = unsafe { CStr::from_ptr(format) };
+        ScreenshotFormat::parse(s.to_str().unwrap_or("png"))
+    };
+
+    match &bridge.last_frame {
+        Some((bgra, size)) => match encode_png(bgra, *size) {
+            Some(png) => CBuffer::from_vec(png),
+            None => CBuffer::empty(),
+        },
+        None => CBuffer::empty(),
+    }
+}
+
+/// Release a `CBuffer` returned by `carbonyl_capture_screenshot`. Safe to call
+/// on an empty buffer.
+#[no_mangle]
+pub extern "C" fn carbonyl_free_screenshot(buffer: CBuffer) {
+    if !buffer.data.is_null() {
+        // SAFETY: reconstruct exactly the Vec leaked by CBuffer::from_vec, so the
+        // allocator frees the same (ptr, len, cap) it handed out.
+        unsafe {
+            drop(Vec::from_raw_parts(buffer.data, buffer.len, buffer.cap));
+        }
+    }
 }
 
 /// Return the CSS viewport size Chromium should lay out and raster against.
