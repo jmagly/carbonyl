@@ -7,6 +7,7 @@ mod painter;
 mod quad;
 mod render_thread;
 mod renderer;
+mod screenshot;
 mod window;
 mod xterm;
 
@@ -17,4 +18,5 @@ pub use painter::*;
 pub use quad::*;
 pub use render_thread::*;
 pub use renderer::*;
+pub use screenshot::*;
 pub use window::*;
