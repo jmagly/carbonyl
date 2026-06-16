@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.10] - 2026-06-15
+
+### 🚀 Features
+
+- Runtime container image published to `ghcr.io/jmagly/carbonyl` — hardened with CA certs, default zoom, and tini as PID 1 ([#132](https://github.com/jmagly/carbonyl/issues/132))
+- Framebuffer (`/dev/fb0`) output backend module + `--framebuffer[=PATH]` / `CARBONYL_FRAMEBUFFER` flag — cycle 1, dormant pending live-path wiring ([#125](https://github.com/jmagly/carbonyl/issues/125))
+
+### 📦 Packaging
+
+- Declare the runtime's `dlopen`'d shared-library dependencies in `.deb`/`.rpm` ([#136](https://github.com/jmagly/carbonyl/issues/136))
+- Self-contained AppImage validated by a per-format render smoke test ([#138](https://github.com/jmagly/carbonyl/issues/138))
+
+### Ci
+
+- Keep only the latest runtime cut — prune stale `runtime-*` releases/tags after publishing ([#144](https://github.com/jmagly/carbonyl/issues/144))
+- CI-dispatchable Linux arm64 runtime build on mutsu; SSH from `MUTSU_SSH_KEY`, publish via `BUILD_REPO_TOKEN`, self-heal Colima docker socket (arm64 runtime not yet shipped) ([#116](https://github.com/jmagly/carbonyl/issues/116))
+- Fall back to default-branch tooling when imaging a tag that predates `package-image.sh` ([#132](https://github.com/jmagly/carbonyl/issues/132))
+
+### 📖 Documentation
+
+- Document the framebuffer backend, the keep-latest runtime prune policy, and the container image
+
 ## [0.2.0-alpha.9] - 2026-06-15
 
 ### 🚀 Features
