@@ -33,19 +33,18 @@ impl CommandLineProgram {
                 // #125 cycle 2: the framebuffer output sink is live — frames are
                 // blitted to the device at full resolution *additively*, while
                 // the terminal renderer keeps running (modeled on the X-mirror).
-                // Local-console (evdev) input is the remaining cycle-2 subsystem
-                // and is not yet wired, so on a bare VT with no controlling
-                // terminal there is no input source yet; drive input from the
-                // controlling terminal/SSH session for now. The device is opened
-                // in the bridge (carbonyl_renderer_create), which logs the typed
-                // FbError and falls back to terminal-only on failure.
+                // Input is additive too: the stdin/terminal path stays active and
+                // a bare console is served by the evdev reader (/dev/input/event*),
+                // which needs the `input`/`video` group or root. The device is
+                // opened in the bridge (carbonyl_renderer_create), which logs the
+                // typed FbError and falls back to terminal-only on failure.
                 // See docs/framebuffer-backend.md.
                 if let Some(path) = &cmd.framebuffer {
                     eprintln!(
                         "carbonyl: framebuffer output enabled ({path}) — rendering \
-                         full-resolution frames alongside the terminal renderer. \
-                         Local-console (evdev) input is not yet wired (#125); use the \
-                         controlling terminal/SSH for input. See docs/framebuffer-backend.md."
+                         full-resolution frames alongside the terminal renderer; \
+                         local-console input via evdev (needs the input/video group \
+                         or root). See docs/framebuffer-backend.md."
                     );
                 }
                 return Some(cmd);

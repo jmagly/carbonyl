@@ -11,7 +11,7 @@ renderer (SSH-friendly) remains the default and is unchanged.
 |-------|-------|
 | **1 (landed)** | Self-contained framebuffer backend module (`src/output/framebuffer.rs`): device open, `FBIOGET_{F,V}SCREENINFO` geometry, `mmap`, BGRA→native pixel conversion, stride-aware blit, explicit error taxonomy. Pure convert/blit/format logic is unit-tested (`cargo test --lib`). CLI flag `--framebuffer[=PATH]` + `CARBONYL_FRAMEBUFFER` parsed. Shipped in **v0.2.0-alpha.10**. |
 | **2 — output sink + viewport (landed)** | The backend is wired into the live render path as an **additive output sink** modeled on the X-mirror (`CARBONYL_X_MIRROR`): the bridge opens the device in `carbonyl_renderer_create`, blits every BGRA raster to it from `carbonyl_renderer_draw_bitmap` **while the terminal renderer keeps running**, and on open failure logs the typed `FbError` and falls back to terminal-only. When `--framebuffer` is set and no explicit `--viewport` is given, the CSS viewport tracks the device resolution (`fb_var_screeninfo.{xres,yres}`) so Blink lays out against the real panel. Compile + unit-tested via `cargo`; end-to-end verified by the CI Chromium build. |
-| **2 — input (remaining)** | Local-console input via **evdev** (`/dev/input/event*`), reusing the #58/#57 Trusted Automation evdev/uinput integration. Needed only for the no-PTY/kiosk case; when driven additively from a controlling terminal/SSH session the existing stdin path already carries input. Requires a real console + device to verify. |
+| **2 — input (landed)** | Local-console input via **evdev** (`src/input/evdev.rs`): discovers `/dev/input/event*`, decodes keyboard (US keymap + modifier tracking) and pointer (relative motion, buttons, wheel) into the same `Event`s the terminal parser produces, and funnels them through the shared bridge dispatch. Wired in `carbonyl_renderer_listen` for framebuffer mode, **additive** with the stdin listener (so a controlling terminal/SSH still works). The pure decode core is unit-tested; needs the `input`/`video` group or root, and a real console + device for end-to-end verification. |
 
 ## Enabling (once cycle 2 lands)
 
@@ -88,17 +88,23 @@ rather than a terminal cell grid.
 | `Mmap(err)` | `mmap` failed | check `smem_len` / kernel support |
 | `UnsupportedFormat { bits_per_pixel }` | depth not 16/32bpp | reconfigure the console to a 16/32bpp mode |
 
-## Cycle-2 input (remaining)
+## Cycle-2 input (landed)
 
-- **Input source — decided: evdev/uinput.** The no-PTY/kiosk case reads
-  `/dev/input/event*` directly (keyboard + pointer), reusing the Trusted
-  Automation evdev/uinput integration (#58/#57). The escape-sequence stdin parser
-  is geared to terminal emulators, so it can't serve a bare VT; evdev is the
-  right source there. When the framebuffer is driven additively *from* a
-  controlling terminal/SSH session, the existing stdin path already carries
-  input, so evdev is only required for the headless-console case. Pointer
-  coordinates in framebuffer mode are device pixels (1:1), so the listen loop's
-  coordinate scaling is device-aware rather than cell-scaled.
+- **Input source — evdev (`src/input/evdev.rs`).** The no-PTY/kiosk case reads
+  `/dev/input/event*` directly (keyboard + pointer), per the Trusted Automation
+  evdev/uinput precedent (#58/#57). The escape-sequence stdin parser is geared to
+  terminal emulators and can't serve a bare VT; evdev is the right source there.
+  It is **additive**: `carbonyl_renderer_listen` keeps the stdin listener running
+  and, in framebuffer mode, also spawns an evdev listener — both funnel through
+  one shared dispatch (`dispatch_input_events`), so input works whether the
+  session is a bare console or a controlling terminal/SSH. evdev needs the
+  `input`/`video` group or root; on failure that listener exits quietly and stdin
+  input remains.
+- **Coordinates.** evdev pointer motion is accumulated in device pixels and
+  reported in cell basis (`px / 2`, `py / 4`) so the bridge's existing
+  `window.scale` `(2, 4)` recovers device pixels for the browser — no bridge-side
+  scaling change. Keyboard codes map through a US keymap with modifier tracking;
+  arrows use the same control bytes as the terminal path (0x11–0x14).
 - **CI smoke.** Verify against a fake/loopback framebuffer (e.g. `vfb`/`fbtest`
   in a container) rather than a real host `/dev/fb0`; the pure convert/blit core
   is already unit-tested without a device.
