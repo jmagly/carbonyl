@@ -14,6 +14,10 @@ pub struct Window {
     pub cells: Size,
     /// Size of the browser window in pixels
     pub browser: Size,
+    /// Framebuffer device resolution in pixels, when `--framebuffer` opened a
+    /// device (#125 cycle 2). When set (and no explicit `--viewport`), the CSS
+    /// viewport tracks this so Blink lays out against the real panel.
+    pub fb_size: Option<Size>,
     /// Command line arguments
     pub cmd: CommandLine,
 }
@@ -26,6 +30,7 @@ impl Window {
             scale: (0.0, 0.0).into(),
             cells: (0, 0).into(),
             browser: (0, 0).into(),
+            fb_size: None,
             cmd: CommandLine::parse(),
         };
 
@@ -113,13 +118,24 @@ impl Window {
             self.scale = Size::new(2.0, 4.0);
             self.browser = Size::new(w, h);
         } else {
-            let zoom = self.cmd.zoom.max(0.01);  // guard against divide-by-zero
+            let zoom = self.cmd.zoom.max(0.01); // guard against divide-by-zero
             self.dpi = 1.0;
             self.scale = Size::new(2.0, 4.0);
-            // Sample window in physical pixels; divide by zoom so larger zoom
-            // -> smaller CSS viewport -> bigger-looking rendered content.
-            let sample_window = self.cells.cast::<f32>().mul(self.scale);
-            self.browser = (sample_window / zoom).ceil().cast();
+            // #125 cycle 2 (framebuffer): when a framebuffer device is open and
+            // no explicit `--viewport` was given, lay Blink out against the real
+            // device resolution so the page fills the panel at native pixels.
+            // The terminal renderer is unchanged — it keeps the (2, 4) half-block
+            // sample factor and samples a window of the same raster (additive,
+            // like the X-mirror). Without a framebuffer the CSS viewport is the
+            // terminal sample window, exactly as before.
+            //
+            // Divide by zoom so a larger zoom -> smaller CSS viewport ->
+            // bigger-looking rendered content, in both regimes.
+            let base = match (self.cmd.framebuffer.is_some(), self.fb_size) {
+                (true, Some(fb)) => fb.cast::<f32>(),
+                _ => self.cells.cast::<f32>().mul(self.scale),
+            };
+            self.browser = (base / zoom).ceil().cast();
         }
         // Silence unused-variable warning on `cell`; the terminal cell-pixel
         // hint is no longer consulted now that we derive the CSS viewport

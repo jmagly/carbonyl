@@ -30,15 +30,22 @@ impl CommandLineProgram {
 
         match cmd.program {
             CommandLineProgram::Main => {
-                // #125 cycle 1: the framebuffer backend module has landed but is
-                // not yet wired into the live render path. Recognize the flag and
-                // say so explicitly rather than silently falling back, so the
-                // failure mode is actionable (see docs/framebuffer-backend.md).
+                // #125 cycle 2: the framebuffer output sink is live — frames are
+                // blitted to the device at full resolution *additively*, while
+                // the terminal renderer keeps running (modeled on the X-mirror).
+                // Local-console (evdev) input is the remaining cycle-2 subsystem
+                // and is not yet wired, so on a bare VT with no controlling
+                // terminal there is no input source yet; drive input from the
+                // controlling terminal/SSH session for now. The device is opened
+                // in the bridge (carbonyl_renderer_create), which logs the typed
+                // FbError and falls back to terminal-only on failure.
+                // See docs/framebuffer-backend.md.
                 if let Some(path) = &cmd.framebuffer {
                     eprintln!(
-                        "carbonyl: --framebuffer ({path}) is recognized but the framebuffer \
-                         backend is not yet active in this build (#125); using the terminal \
-                         renderer. See docs/framebuffer-backend.md."
+                        "carbonyl: framebuffer output enabled ({path}) — rendering \
+                         full-resolution frames alongside the terminal renderer. \
+                         Local-console (evdev) input is not yet wired (#125); use the \
+                         controlling terminal/SSH for input. See docs/framebuffer-backend.md."
                     );
                 }
                 return Some(cmd);

@@ -18,7 +18,7 @@ use libc::{c_char, c_float, c_int, c_uchar, c_uint, c_void, size_t};
 
 use crate::cli::{CommandLine, CommandLineProgram, EnvVar};
 use crate::gfx::{Cast, Color, Point, Rect, Size};
-use crate::output::{RenderThread, Window};
+use crate::output::{Framebuffer, RenderThread, Window};
 use crate::ui::navigation::NavigationAction;
 use crate::{input, utils::log};
 
@@ -60,6 +60,12 @@ pub struct RendererBridge {
     cmd: CommandLine,
     window: Window,
     renderer: RenderThread,
+    /// Optional additive framebuffer output sink (#125 cycle 2). When
+    /// `--framebuffer`/`CARBONYL_FRAMEBUFFER` opened a device, every BGRA
+    /// raster is also blitted here at full resolution while the terminal
+    /// renderer keeps running — modeled on the X-mirror surface. `None` when
+    /// the flag is unset or the device failed to open.
+    framebuffer: Option<Framebuffer>,
 }
 
 unsafe impl Send for RendererBridge {}
@@ -176,7 +182,6 @@ fn main() -> io::Result<Option<i32>> {
     Ok(Some(code))
 }
 
-
 #[no_mangle]
 pub extern "C" fn carbonyl_bridge_main() {
     if let Some(code) = main().unwrap() {
@@ -194,12 +199,51 @@ pub extern "C" fn carbonyl_bridge_get_dpi() -> c_float {
     Window::read().dpi
 }
 
+/// Open the Linux framebuffer when `--framebuffer`/`CARBONYL_FRAMEBUFFER` is set
+/// (#125 cycle 2). The framebuffer is an *additive* output sink modeled on the
+/// X-mirror (`CARBONYL_X_MIRROR`): on success it renders full-resolution frames
+/// to the device while the terminal renderer keeps running. On failure it logs
+/// the actionable, typed `FbError` and returns `None` — the terminal renderer is
+/// unaffected, so a framebuffer-open problem never takes down the session.
+///
+/// On success the device resolution is recorded on the `Window` so the CSS
+/// viewport tracks the real panel dimensions (unless an explicit `--viewport`
+/// overrides it). See docs/framebuffer-backend.md.
+fn open_framebuffer(cmd: &CommandLine, window: &mut Window) -> Option<Framebuffer> {
+    let path = cmd.framebuffer.as_deref()?;
+
+    match Framebuffer::open(path) {
+        Ok(fb) => {
+            let size = fb.size();
+            log::debug!(
+                "framebuffer enabled on {path}: {}x{} (additive with the terminal renderer)",
+                size.width,
+                size.height
+            );
+            window.fb_size = Some(size);
+            Some(fb)
+        }
+        Err(err) => {
+            log::warning!("framebuffer disabled: {err}; continuing with the terminal renderer");
+            None
+        }
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
+    let cmd = CommandLine::parse();
+    let mut window = Window::read();
+    // Open the framebuffer (if requested) before the first viewport
+    // computation so the device resolution feeds the CSS viewport.
+    let framebuffer = open_framebuffer(&cmd, &mut window);
+    window.update();
+
     let bridge = RendererBridge {
-        cmd: CommandLine::parse(),
-        window: Window::read(),
+        cmd,
+        window,
         renderer: RenderThread::new(),
+        framebuffer,
     };
 
     Box::into_raw(Box::new(Mutex::new(bridge)))
@@ -212,7 +256,10 @@ pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
     // renderer would interleave its ANSI escape sequences and chrome
     // bar into the same fd, corrupting the dump output. Skip the
     // render-thread spin-up in this mode.
-    if matches!(CommandLine::parse().program, CommandLineProgram::DumpText { .. }) {
+    if matches!(
+        CommandLine::parse().program,
+        CommandLineProgram::DumpText { .. }
+    ) {
         return;
     }
 
@@ -321,6 +368,21 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
     let (bridge, pixels) = unsafe { (bridge.as_ref(), std::slice::from_raw_parts(pixels, length)) };
     let callback_data = CallbackData(callback_data);
     let mut bridge = bridge.unwrap().lock().unwrap();
+
+    // #125 cycle 2: additive framebuffer sink. Blit the same BGRA raster to the
+    // device at full resolution while the terminal renderer keeps running
+    // (modeled on the X-mirror). No-op unless `--framebuffer` opened a device.
+    // Runs synchronously here while `pixels` is valid and `bridge` is locked.
+    if let Some(fb) = bridge.framebuffer.as_mut() {
+        fb.present(
+            pixels,
+            pixels_size.into(),
+            Rect {
+                size: rect.size.into(),
+                origin: rect.origin.into(),
+            },
+        );
+    }
 
     bridge.renderer.render(move |renderer| {
         renderer.draw_background(
