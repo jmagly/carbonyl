@@ -2,27 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.0-alpha.10] - 2026-06-15
+## [0.2.0-alpha.11] - 2026-06-17
 
 ### 🚀 Features
 
-- Runtime container image published to `ghcr.io/jmagly/carbonyl` — hardened with CA certs, default zoom, and tini as PID 1 ([#132](https://github.com/jmagly/carbonyl/issues/132))
-- Framebuffer (`/dev/fb0`) output backend module + `--framebuffer[=PATH]` / `CARBONYL_FRAMEBUFFER` flag — cycle 1, dormant pending live-path wiring ([#125](https://github.com/jmagly/carbonyl/issues/125))
+- Wire framebuffer as an additive output sink ([#125](https://github.com/jmagly/carbonyl/issues/125) cycle 2)
+- Screenshot capture — BGRA frame cache + PNG FFI ([#3](https://github.com/jmagly/carbonyl/issues/3))
+- Evdev input source for framebuffer mode ([#125](https://github.com/jmagly/carbonyl/issues/125) cycle 2)
+- JavaScript evaluation FFI ([#5](https://github.com/jmagly/carbonyl/issues/5))
+- Network event capture FFI ([#6](https://github.com/jmagly/carbonyl/issues/6))
 
-### 📦 Packaging
+### 🐛 Bug Fixes
 
-- Declare the runtime's `dlopen`'d shared-library dependencies in `.deb`/`.rpm` ([#136](https://github.com/jmagly/carbonyl/issues/136))
-- Self-contained AppImage validated by a per-format render smoke test ([#138](https://github.com/jmagly/carbonyl/issues/138))
-
-### Ci
-
-- Keep only the latest runtime cut — prune stale `runtime-*` releases/tags after publishing ([#144](https://github.com/jmagly/carbonyl/issues/144))
-- CI-dispatchable Linux arm64 runtime build on mutsu; SSH from `MUTSU_SSH_KEY`, publish via `BUILD_REPO_TOKEN`, self-heal Colima docker socket (arm64 runtime not yet shipped) ([#116](https://github.com/jmagly/carbonyl/issues/116))
-- Fall back to default-branch tooling when imaging a tag that predates `package-image.sh` ([#132](https://github.com/jmagly/carbonyl/issues/132))
+- Use base::DictValue in JS eval handler ([#5](https://github.com/jmagly/carbonyl/issues/5))
+- Make network FFI dead-strippable to fix aux-binary link ([#6](https://github.com/jmagly/carbonyl/issues/6))
 
 ### 📖 Documentation
 
-- Document the framebuffer backend, the keep-latest runtime prune policy, and the container image
+- Document JS-eval/network/screenshot FFI surface + dead-strip invariant
+
+## [0.2.0-alpha.10] - 2026-06-16
+
+### 🚀 Features
+
+- CI-dispatched aarch64-linux runtime build on mutsu ([#116](https://github.com/jmagly/carbonyl/issues/116))
+- Framebuffer (/dev/fb0) output backend module + flag ([#125](https://github.com/jmagly/carbonyl/issues/125))
+
+### 🐛 Bug Fixes
+
+- Self-contained AppImage + per-format render smoke ([#138](https://github.com/jmagly/carbonyl/issues/138))
+- Self-heal Colima docker socket before arm64 build ([#116](https://github.com/jmagly/carbonyl/issues/116))
+
+### Merge
+
+- Ci(runtime): keep only the latest runtime cut ([#144](https://github.com/jmagly/carbonyl/issues/144))
+
+### Ci
+
+- Publish runtime container image to ghcr.io/jmagly/carbonyl ([#132](https://github.com/jmagly/carbonyl/issues/132))
+- Fall back to default-branch tooling when a tag predates package-image.sh ([#132](https://github.com/jmagly/carbonyl/issues/132))
+- Harden runtime image — HTTPS, zoom, tini, x11 ([#132](https://github.com/jmagly/carbonyl/issues/132))
+- Drive mutsu SSH from MUTSU_SSH_KEY secret; publish via BUILD_REPO_TOKEN ([#116](https://github.com/jmagly/carbonyl/issues/116))
+- Keep only the latest runtime cut
+
+### Packaging
+
+- Declare dlopen'd runtime deps in .deb/.rpm ([#136](https://github.com/jmagly/carbonyl/issues/136))
 
 ## [0.2.0-alpha.9] - 2026-06-15
 
@@ -314,13 +339,6 @@ All notable changes to this project will be documented in this file.
 
 ### 🚀 Features
 
-- Add Docker image ([#4](https://github.com/jmagly/carbonyl/issues/4))
-- Add PDF support ([#8](https://github.com/jmagly/carbonyl/issues/8))
-- Add `--width` and `--height` options ([#15](https://github.com/jmagly/carbonyl/issues/15))
-- Add `--full` option
-- Add `--wait` option
-- Complete unicode support ([#20](https://github.com/jmagly/carbonyl/issues/20))
-- Raster support ([#22](https://github.com/jmagly/carbonyl/issues/22))
 - Better true color detection
 - Linux support
 - Xterm title
@@ -331,13 +349,6 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Bug Fixes
 
-- Fix gmail.com and youtube.com in Docker ([#7](https://github.com/jmagly/carbonyl/issues/7))
-- Fix `<canvas>` vectorization ([#10](https://github.com/jmagly/carbonyl/issues/10))
-- Remove docker-specific error messages ([#13](https://github.com/jmagly/carbonyl/issues/13))
-- Fix viewport height with `--full`
-- Prevent truncated stdout ([#16](https://github.com/jmagly/carbonyl/issues/16))
-- Dedupe `--wait` shortcut to `-W` ([#28](https://github.com/jmagly/carbonyl/issues/28))
-- Support websites with zone.js ([#29](https://github.com/jmagly/carbonyl/issues/29))
 - Parser fixes
 - Properly enter tab and return keys
 - Fix some special characters ([#35](https://github.com/jmagly/carbonyl/issues/35))
@@ -351,10 +362,6 @@ All notable changes to this project will be documented in this file.
 
 ### 📖 Documentation
 
-- Add CLI help to readme ([#18](https://github.com/jmagly/carbonyl/issues/18))
-- Fix Docker build instructions ([#21](https://github.com/jmagly/carbonyl/issues/21))
-- Fix readme blockquotes and add post link
-- Update CLI help
 - Upload demo videos
 - Fix video layout
 - Fix a typo ([#1](https://github.com/jmagly/carbonyl/issues/1))
@@ -369,13 +376,8 @@ All notable changes to this project will be documented in this file.
 - Fix a typo (`know` -> `known`) ([#71](https://github.com/jmagly/carbonyl/issues/71))
 - Add license
 
-### ⚡ Performance
-
-- Stream output instead of buffering it
-
 ### Build
 
-- Fix arm64 build
 - Various build system fixes ([#20](https://github.com/jmagly/carbonyl/issues/20))
 
 
