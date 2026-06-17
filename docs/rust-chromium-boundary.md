@@ -108,7 +108,10 @@ Functions declared `extern "C"` in `src/browser/bridge.rs`, consumed by `src/bro
 - `carbonyl_bridge_main` — Chromium entry point; blocks until Rust decides the process should continue as the browser.
 - `carbonyl_bridge_bitmap_mode` / `carbonyl_bridge_get_dpi` — static singletons read once at Chromium startup via `Bridge::Configure`.
 - `carbonyl_renderer_create` — allocates the opaque `carbonyl_renderer*` handle (actually `Box<Arc<Mutex<RendererBridge>>>` on the Rust side).
-- `carbonyl_renderer_start`, `_resize`, `_get_size`, `_push_nav`, `_set_title`, `_clear_text`, `_listen`, `_draw_text`, `_draw_bitmap` — runtime calls through the Mutex-guarded bridge.
+- `carbonyl_renderer_start`, `_resize`, `_get_size`, `_push_nav`, `_set_title`, `_listen`, `_draw_text`, `_draw_bitmap` — runtime calls through the Mutex-guarded bridge.
+- `carbonyl_set_screenshot_capture` / `carbonyl_capture_screenshot` / `carbonyl_free_screenshot` — screenshot FFI (#3). Arming makes `draw_bitmap` retain the latest BGRA frame; `capture` encodes it to PNG and returns an owned `CBuffer` the caller frees via `free_screenshot`. `format`/`quality` args are reserved (PNG-only today).
+
+The JavaScript-eval (#5) and network-capture (#6) handlers are a **separate, opt-in surface** bound to injected C++ on the `WebContents` (`src/browser/javascript_handler.{h,cc}`, `network_handler.{h,cc}`; installed by the `install-javascript-handler` / `install-network-handler` patches). Their `extern "C"` decls (`carbonyl_eval_javascript`, `carbonyl_set_network_callback`, `carbonyl_set_network_capture`) are *not* `#[no_mangle]` exports — they are reached only from the dormant `pub fn eval_javascript` / `set_network_capture` wrappers so the linker can dead-strip them in binaries that don't pull in the carbonyl-fleet socket surface (see the dead-strip invariant below). Both deliver results to the UI thread via boxed-closure / static trampolines (`eval_result_trampoline`, `network_event_trampoline`).
 
 ### Direction 2: Rust → Chromium (Rust observes / configures Chromium via C++ statics)
 
@@ -124,6 +127,7 @@ Documented at each function's entry in the catalog. The ones that have bitten us
 - **`carbonyl_renderer_get_size`** returns the **CSS viewport** (`cells × scale`). Chromium must multiply by `carbonyl_bridge_get_dpi()` to get the physical raster size. If that multiplication is dropped anywhere in the compositor, only the upper-left `dpi²` fraction of the page is visible (issue #37).
 - **`carbonyl_renderer_draw_bitmap`**: the `pixels_size` argument MUST equal `cells × (2, 4)` physical pixels, matching the renderer's 2×4 quadrant sampler. If the Chromium side hands a larger buffer, the renderer silently crops.
 - **Mutex inside the `carbonyl_renderer*` bridge** is re-entered across `get_size` and `draw_bitmap`. Never call one while holding the other; treat them as exclusive entries.
+- **Handler FFIs (eval #5, network #6) must stay dead-strippable.** Call `carbonyl_eval_javascript` / `carbonyl_set_network_callback` / `carbonyl_set_network_capture` only from the dormant `pub fn` wrappers — never from a retained `#[no_mangle]` function. A retained reference forces the symbols into every link unit, including the `v8_context_snapshot_generator` aux binary, which does **not** link the injected C++ handlers and so fails with undefined references (PR #151). The matching `BUILD.gn` must also keep the handler objects out of the aux-binary's sources.
 
 ---
 
