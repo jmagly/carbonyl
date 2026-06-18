@@ -415,23 +415,55 @@ jobs:
 
       - name: Resolve release notes
         run: |
-          # Convention: docs/releases/RELEASE-<tag>.md. Fall back to a
-          # generic note if missing.
+          # Release-note body, in precedence order:
+          #   1. Hand-authored docs/releases/RELEASE-<tag>.md, verbatim.
+          #   2. The CHANGELOG section for this version, copied verbatim
+          #      (docs/changelog.md, "## [VERSION] - date" sections). This
+          #      is the usual path — the note IS the changelog entry.
+          #   3. A minimal generic fallback if neither is present.
+          # The body always ends with a Downloads pointer to the GitHub
+          # release page. GitHub is the canonical download location, so
+          # both the Gitea and GitHub release notes point to the files there.
           NOTES_FILE="${GITHUB_WORKSPACE}/.repo-clone/docs/releases/RELEASE-${TAG}.md"
+          CHANGELOG_FILE="${GITHUB_WORKSPACE}/.repo-clone/docs/changelog.md"
           BODY_FILE="${GITHUB_WORKSPACE}/.release-body.md"
+          GH_RELEASE_URL="https://github.com/jmagly/carbonyl/releases/tag/${TAG}"
+
+          : > "${BODY_FILE}"
+
           if [ -f "${NOTES_FILE}" ]; then
             cp "${NOTES_FILE}" "${BODY_FILE}"
-            echo "[release] using ${NOTES_FILE}"
+            echo "[release] body: hand-authored ${NOTES_FILE}"
           else
-            {
-              printf '# Carbonyl %s\n\n' "${VERSION}"
-              printf 'Pre-built Chromium runtime for Carbonyl, ozone variants: %s.\n\n' "${OZONE_VARIANTS}"
-              printf 'Runtime hash: `%s`\n\n' "${HASH}"
-              printf 'See https://git.integrolabs.net/%s/blob/%s/docs/changelog.md\n' "${GITHUB_REPOSITORY}" "${TAG}"
-              printf 'for the change log entry.\n'
-            } > "${BODY_FILE}"
-            echo "[release] no docs/releases/RELEASE-${TAG}.md found; using generic body"
+            # Extract the "## [VERSION]" section up to (not including) the
+            # next "## " header. The trailing "]" in the match disambiguates
+            # e.g. [0.2.0-alpha.1] from [0.2.0-alpha.11]; "### " subheaders
+            # are preserved (the /^## / regex requires a space after exactly
+            # two hashes).
+            if [ -f "${CHANGELOG_FILE}" ]; then
+              awk -v ver="[${VERSION}]" '
+                /^## / { if (index($0, ver)) { grab=1; print; next } else if (grab) { exit } }
+                grab { print }
+              ' "${CHANGELOG_FILE}" > "${BODY_FILE}"
+            fi
+            if [ -s "${BODY_FILE}" ]; then
+              echo "[release] body: changelog section for ${VERSION}"
+            else
+              {
+                printf '# Carbonyl %s\n\n' "${VERSION}"
+                printf 'Pre-built Chromium runtime for Carbonyl, ozone variants: %s.\n\n' "${OZONE_VARIANTS}"
+                printf 'Runtime hash: `%s`\n' "${HASH}"
+              } > "${BODY_FILE}"
+              echo "[release] body: generic (no RELEASE note or changelog section for ${VERSION})"
+            fi
           fi
+
+          # Always point readers at the GitHub release assets.
+          {
+            printf '\n## Downloads\n\n'
+            printf 'Pre-built binaries and installers are attached to the [GitHub release](%s).\n' "${GH_RELEASE_URL}"
+          } >> "${BODY_FILE}"
+
           echo "BODY_FILE=${BODY_FILE}" >> "$GITHUB_ENV"
 
       - name: Create or reuse Gitea release
