@@ -24,13 +24,24 @@
 # artifact publishing uses the standard CI token; the deliver-as-roctinam policy
 # applies to authored git/tracker deliveries, not artifact uploads.
 #
-# Manual dispatch only: this is a multi-hour native Chromium build. It never
-# fires on push. Once it publishes the asset, release.yml --include_linux_arm64=true
-# (#108) consumes it.
+# Triggers:
+#   - workflow_dispatch: manual run (build-only, preflight, or publish).
+#   - push: tags ['v*']: a release tag auto-dispatches this build (headless,
+#     publish=true) so the aarch64-unknown-linux-gnu runtime lands on the shared
+#     runtime-<hash> release; on success it re-dispatches release.yml with
+#     include_linux_arm64=true to package + attach the arm64 installers to the
+#     same release (Option A "async attach" — release.yml publishes amd64
+#     immediately; arm64 attaches when this multi-hour build finishes).
+# This is a multi-hour native Chromium build. The mutsu checkout, Colima home,
+# and VM build dir all live on the external drive /Volumes/build (mutsu's system
+# drive is too small) — pinned via the MUTSU_* env below so they can never
+# regress to the system drive.
 
 name: Build Runtime (arm64 / mutsu)
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       ozone_platform:
@@ -77,13 +88,21 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # External-drive pins (mutsu system drive is too small for a Chromium build).
+  # These match scripts/mutsu-build-linux-arm64.sh defaults; setting them
+  # explicitly guards against a future default change moving the build onto
+  # mutsu's small system drive. The driver reads them on the titan side.
+  MUTSU_LINUX_CARBONYL_DIR: /Volumes/build/carbonyl-linux-arm64
+  MUTSU_COLIMA_HOME: /Volumes/build/.colima
+  MUTSU_VM_BUILD_DIR: /mnt/lima-colima-carbonyl-linux-arm64/carbonyl-linux-arm64
 
-# One arm64 mutsu build at a time: the driver uses a single Colima profile and a
-# single /Volumes/build/carbonyl-linux-arm64 checkout, so concurrent runs (and the
-# two ozone variants) would clash on that shared remote state. Do NOT cancel an
-# in-flight build — let it finish; queue the next.
+# One mutsu build at a time across BOTH arm64-linux and macOS: mutsu is a single
+# Apple Silicon host and the builds share its CPU/RAM and the /Volumes/build
+# external drive. The shared group serializes them (and the arm64 ozone variants)
+# so concurrent runs never oversubscribe mutsu or clash on remote state. Do NOT
+# cancel an in-flight build — let it finish; queue the next.
 concurrency:
-  group: build-runtime-arm64-mutsu
+  group: build-runtime-mutsu
   cancel-in-progress: false
 
 jobs:
@@ -145,7 +164,17 @@ jobs:
             *) echo "ERROR: unknown ozone_platform '$OZ'" >&2; exit 1 ;;
           esac
           echo "VARIANTS=${VARIANTS}" >> "$GITHUB_ENV"
-          echo "[arm64-build] ssh_config=${SSH_CONFIG} variants=[${VARIANTS}] publish=${{ github.event.inputs.publish || 'false' }}"
+
+          # Resolve publish: a release tag push always publishes (headless) so
+          # the runtime-<hash> asset exists for the release re-dispatch below.
+          # A manual dispatch honors its publish input (default false).
+          if [ "${{ github.event_name }}" = "push" ]; then
+            PUBLISH="true"
+          else
+            PUBLISH="${{ github.event.inputs.publish || 'false' }}"
+          fi
+          echo "PUBLISH=${PUBLISH}" >> "$GITHUB_ENV"
+          echo "[arm64-build] event=${{ github.event_name }} ssh_config=${SSH_CONFIG} variants=[${VARIANTS}] publish=${PUBLISH}"
 
       - name: Preflight mutsu readiness
         run: |
@@ -168,7 +197,7 @@ jobs:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          PUBLISH="${{ github.event.inputs.publish || 'false' }}"
+          PUBLISH="${PUBLISH:-false}"   # resolved in the SSH-setup step (true on tag push)
           JOBS="${{ github.event.inputs.ninja_jobs }}"
           SKIP_SYNC="${{ github.event.inputs.skip_sync || 'false' }}"
 
@@ -192,6 +221,27 @@ jobs:
               "${jobs_flag[@]}" "${skip_flag[@]}" "${publish_flag[@]}"
             echo "::endgroup::"
           done
+
+      - name: Attach arm64 to the release (re-dispatch release.yml)
+        # Option A async attach: only on a release tag push, after a successful
+        # publish. release.yml is create-or-reuse + idempotent, so re-running it
+        # with include_linux_arm64=true pulls the now-published runtime-<hash>
+        # arm64 tarball and attaches the arm64 installers to the existing release.
+        # include_macos=false here — the macOS workflow re-dispatches for its own
+        # triple independently.
+        if: ${{ github.event_name == 'push' && github.event.inputs.preflight_only != 'true' }}
+        env:
+          DISPATCH_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "ERROR: BUILD_REPO_TOKEN empty; cannot re-dispatch release.yml" >&2; exit 1; }
+          echo "[arm64-build] dispatching release.yml for ${TAG} (include_linux_arm64=true)"
+          curl -fsS -X POST \
+            -H "Authorization: token ${DISPATCH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" \
+            -d "{\"ref\":\"${TAG}\",\"inputs\":{\"tag\":\"${TAG}\",\"include_linux_arm64\":\"true\",\"include_macos\":\"false\"}}"
 
       - name: Cleanup
         if: ${{ always() }}
