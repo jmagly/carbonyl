@@ -1,0 +1,176 @@
+# build-runtime-macos.yml — CI-dispatched aarch64-apple-darwin runtime build.
+#
+# Mirror of build-runtime-arm64.yml for the macOS (Apple Silicon) runtime.
+#
+# Why titan-orchestrated SSH to mutsu (not `runs-on: mutsu`):
+#   - mutsu is the Apple Silicon build host but CANNOT run a Gitea Actions
+#     runner (docs/ci-runner-mutsu.md — macOS act_runner RPC issue).
+#   - titan is the always-on, monitored x86_64 runner; it survives an operator
+#     reboot a hand-run SSH session would not. titan SSH-drives the existing
+#     scripts/mutsu-build-macos.sh; mutsu does the native macOS compute.
+#
+# Triggers:
+#   - workflow_dispatch: manual run (build-only or publish).
+#   - push: tags ['v*']: a release tag auto-dispatches this build (headless,
+#     publish=true) so the aarch64-apple-darwin runtime lands on the shared
+#     runtime-<hash> release; on success it re-dispatches release.yml with
+#     include_macos=true to package + attach the macOS runtime to the same
+#     release (Option A "async attach").
+#
+# SSH to mutsu: identical to build-runtime-arm64.yml — a job-local SSH config
+# built from the MUTSU_SSH_KEY secret, connecting to 10.0.42.41 (user manitcor)
+# via the `mutsu-agent` alias. See docs/ci-secrets.md.
+#
+# External drive: the macOS Chromium checkout lives at /Volumes/build/carbonyl
+# (mutsu's system drive is too small) — pinned via MUTSU_CARBONYL_DIR below and
+# passed explicitly as --remote-dir so it can never regress to the system drive.
+#
+# Publish: scripts/mutsu-build-macos.sh --publish runs runtime-push.sh on the
+# macOS host, uploading aarch64-apple-darwin.tgz to the shared runtime-<hash>
+# release with the BUILD_REPO_TOKEN. release.yml --include_macos=true consumes it.
+
+name: Build Runtime (macOS / mutsu)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the aarch64-apple-darwin runtime to the runtime-<hash> release (needs BUILD_REPO_TOKEN)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      ninja_jobs:
+        description: 'ninja -j parallelism passed to the build (empty = builder default)'
+        required: false
+        default: ''
+      ssh_config:
+        description: 'Override: path to an SSH config already on the runner (default: build one from the MUTSU_SSH_KEY secret)'
+        required: false
+        default: ''
+
+env:
+  CARGO_TERM_COLOR: always
+  # External-drive pin (mutsu system drive is too small for a Chromium build).
+  # Matches scripts/mutsu-build-macos.sh default; set explicitly so a future
+  # default change can't move the build onto mutsu's small system drive.
+  MUTSU_CARBONYL_DIR: /Volumes/build/carbonyl
+
+# Shared with build-runtime-arm64.yml: one mutsu build at a time across both the
+# arm64-linux and macOS runtimes — mutsu is a single host and the builds share
+# its CPU/RAM and the /Volumes/build external drive. Serialize; never cancel an
+# in-flight build.
+concurrency:
+  group: build-runtime-mutsu
+  cancel-in-progress: false
+
+jobs:
+  build-runtime-macos:
+    name: Build aarch64-apple-darwin on mutsu (headless)
+    runs-on: titan
+    timeout-minutes: 600
+
+    steps:
+      - name: Checkout repo at the dispatched ref
+        run: |
+          set -euo pipefail
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${{ github.ref_name }}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Set up mutsu SSH (from MUTSU_SSH_KEY)
+        env:
+          MUTSU_SSH_KEY: ${{ secrets.MUTSU_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          OVERRIDE="${{ github.event.inputs.ssh_config }}"
+          if [ -n "$OVERRIDE" ]; then
+            [ -f "$OVERRIDE" ] || { echo "ERROR: ssh_config override '$OVERRIDE' not found" >&2; exit 1; }
+            SSH_CONFIG="$OVERRIDE"
+          else
+            [ -n "${MUTSU_SSH_KEY:-}" ] || { echo "ERROR: MUTSU_SSH_KEY secret is empty; see docs/ci-secrets.md" >&2; exit 1; }
+            SSH_DIR="${GITHUB_WORKSPACE}/.ssh-mutsu"
+            rm -rf "$SSH_DIR"; mkdir -p "$SSH_DIR"; chmod 700 "$SSH_DIR"
+            ( umask 077; printf '%s\n' "$MUTSU_SSH_KEY" > "$SSH_DIR/id_mutsu" )
+            chmod 600 "$SSH_DIR/id_mutsu"
+            : > "$SSH_DIR/known_hosts"; chmod 600 "$SSH_DIR/known_hosts"
+            {
+              echo "Host mutsu-agent"
+              echo "  HostName 10.0.42.41"
+              echo "  User manitcor"
+              echo "  IdentityFile ${SSH_DIR}/id_mutsu"
+              echo "  IdentitiesOnly yes"
+              echo "  UserKnownHostsFile ${SSH_DIR}/known_hosts"
+              echo "  StrictHostKeyChecking accept-new"
+              echo "  BatchMode yes"
+            } > "$SSH_DIR/config"
+            chmod 600 "$SSH_DIR/config"
+            SSH_CONFIG="$SSH_DIR/config"
+          fi
+          echo "SSH_CONFIG=${SSH_CONFIG}" >> "$GITHUB_ENV"
+
+          # A release tag push always publishes; a manual dispatch honors its input.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            PUBLISH="true"
+          else
+            PUBLISH="${{ github.event.inputs.publish || 'false' }}"
+          fi
+          echo "PUBLISH=${PUBLISH}" >> "$GITHUB_ENV"
+          echo "[macos-build] event=${{ github.event_name }} ssh_config=${SSH_CONFIG} publish=${PUBLISH}"
+
+      - name: Build (+ optionally publish) macOS runtime
+        env:
+          # runtime-push.sh (via --publish) uploads to runtime-<hash> with the CI
+          # token; not an authored delivery, so no roctinam identity needed. Only
+          # consumed when PUBLISH=true.
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          JOBS="${{ github.event.inputs.ninja_jobs }}"
+          publish_flag=()
+          [ "${PUBLISH:-false}" = "true" ] && publish_flag=(--publish)
+          jobs_flag=()
+          [ -n "$JOBS" ] && jobs_flag=(--jobs "$JOBS")
+
+          if [ "${PUBLISH:-false}" = "true" ] && [ -z "${GITEA_TOKEN:-}" ]; then
+            echo "ERROR: publish requested but BUILD_REPO_TOKEN is empty; see docs/ci-secrets.md" >&2
+            exit 1
+          fi
+
+          echo "::group::build macOS runtime — ozone=headless publish=${PUBLISH:-false}"
+          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/mutsu-build-macos.sh" \
+            --ssh-config "${SSH_CONFIG}" \
+            --host mutsu-agent \
+            --remote-dir "${MUTSU_CARBONYL_DIR}" \
+            --ozone headless \
+            "${jobs_flag[@]}" "${publish_flag[@]}"
+          echo "::endgroup::"
+
+      - name: Attach macOS to the release (re-dispatch release.yml)
+        # Option A async attach: only on a release tag push, after a successful
+        # publish. release.yml is create-or-reuse + idempotent — re-running with
+        # include_macos=true pulls the now-published aarch64-apple-darwin runtime
+        # and attaches the macOS asset to the existing release. include_linux_arm64
+        # =false — the arm64-linux workflow re-dispatches for its own triple.
+        if: ${{ github.event_name == 'push' }}
+        env:
+          DISPATCH_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "ERROR: BUILD_REPO_TOKEN empty; cannot re-dispatch release.yml" >&2; exit 1; }
+          echo "[macos-build] dispatching release.yml for ${TAG} (include_macos=true)"
+          curl -fsS -X POST \
+            -H "Authorization: token ${DISPATCH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" \
+            -d "{\"ref\":\"${TAG}\",\"inputs\":{\"tag\":\"${TAG}\",\"include_macos\":\"true\",\"include_linux_arm64\":\"false\"}}"
+
+      - name: Cleanup
+        if: ${{ always() }}
+        run: rm -rf "${GITHUB_WORKSPACE}/.repo-clone" "${GITHUB_WORKSPACE}/.ssh-mutsu" 2>/dev/null || true

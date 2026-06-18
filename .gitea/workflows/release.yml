@@ -63,6 +63,16 @@ env:
   CARGO_TERM_COLOR: always
   HOST_CARBONYL_DIR: /srv/carbonyl
 
+# Serialize release runs for the same tag. A single tag now yields up to three
+# runs: the initial tag-push (amd64 + any present macOS), then the arm64-linux
+# and macOS mutsu builds each re-dispatch this workflow to attach their triple
+# (Option A async attach). The mutsu builds are hours apart, so overlap is
+# unlikely — but this guards against two runs racing on asset uploads to the
+# same release. Never cancel an in-flight release; queue the next.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Publish ${{ github.event.inputs.tag || github.ref_name }}
