@@ -33,6 +33,13 @@ Options:
     -h, --help                 display this help message
     -v, --version              output the version number
 
+Keyboard shortcuts:
+    Alt+Left / Cmd+Left        go back
+    Alt+Right / Cmd+Right      go forward
+    Alt+Up / Cmd+Up            toggle color inversion (Alt on Linux/Windows,
+                               Cmd on macOS; useful for dark pages in a light
+                               terminal and vice versa)
+
 Environment variables:
     CARBONYL_VIEWPORT=WxH      same as --viewport
     CARBONYL_CHROME_ROWS=N     same as --chrome-rows

@@ -9,6 +9,7 @@ pub struct Painter {
     buffer: Vec<u8>,
     cursor: Option<Point<u32>>,
     true_color: bool,
+    invert: bool,
     background: Option<Color>,
     foreground: Option<Color>,
     background_code: Option<u8>,
@@ -27,6 +28,7 @@ impl Painter {
             buffer: Vec::new(),
             cursor: None,
             output: io::stdout(),
+            invert: false,
             background: None,
             foreground: None,
             background_code: None,
@@ -44,6 +46,22 @@ impl Painter {
 
     pub fn set_true_color(&mut self, true_color: bool) {
         self.true_color = true_color
+    }
+
+    /// Whether color inversion is currently active (issue #181).
+    pub fn invert(&self) -> bool {
+        self.invert
+    }
+
+    /// Flip the color-inversion state. Resets the cached SGR color state so the
+    /// next `paint` re-emits every cell's color under the new mapping (the
+    /// renderer pairs this with a full repaint).
+    pub fn toggle_invert(&mut self) {
+        self.invert = !self.invert;
+        self.background = None;
+        self.foreground = None;
+        self.background_code = None;
+        self.foreground_code = None;
     }
 
     pub fn begin(&mut self) -> io::Result<()> {
@@ -94,6 +112,15 @@ impl Painter {
             let (char, background, foreground) = binarize_quandrant(quadrant);
 
             (char, background, foreground, 1)
+        };
+
+        // Color-inversion toggle (issue #181): emit the photographic negative of
+        // every cell's colors. Applied at SGR-emit time so the Chromium raster
+        // and cell buffer are untouched — toggling off restores exact colors.
+        let (background, foreground) = if self.invert {
+            (background.invert(), foreground.invert())
+        } else {
+            (background, foreground)
         };
 
         if self.cursor != Some(cursor) {
