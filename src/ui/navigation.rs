@@ -66,11 +66,35 @@ impl Navigation {
         Some((11 + self.cursor? as i32, (self.chrome_rows as i32) / 2).into())
     }
 
-    pub fn keypress(&mut self, key: &Key) -> NavigationAction {
-        let modifier_key = match env::consts::OS {
+    /// True when the URL bar holds the text cursor, i.e. keystrokes are being
+    /// typed into the address field rather than forwarded to the page. Used by
+    /// the renderer to gate local chrome shortcuts (e.g. invert-colors) so they
+    /// don't fire mid-edit.
+    pub fn is_url_editing(&self) -> bool {
+        self.cursor.is_some()
+    }
+
+    /// The platform navigation modifier: Cmd (meta) on macOS, Alt elsewhere.
+    /// Matches what the navigation chrome already uses for back/forward.
+    fn modifier_key(key: &Key) -> bool {
+        match env::consts::OS {
             "macos" => key.modifiers.meta,
             _ => key.modifiers.alt,
-        };
+        }
+    }
+
+    /// Local chrome shortcut for issue #181: `modifier + Up` toggles color
+    /// inversion. `0x11` is the Up arrow (see `Keyboard::key`). This combo is
+    /// collision-free with page input because `key_press` forwards only
+    /// `key.char` to Chromium and drops the modifier — so `modifier+Up` would
+    /// otherwise send the exact same byte to the page as a bare Up. The renderer
+    /// consumes it (does not forward) when the URL bar is not being edited.
+    pub fn is_invert_shortcut(key: &Key) -> bool {
+        Self::modifier_key(key) && key.char == 0x11
+    }
+
+    pub fn keypress(&mut self, key: &Key) -> NavigationAction {
+        let modifier_key = Self::modifier_key(key);
 
         match self.cursor {
             None => match (modifier_key, key.char) {
@@ -253,5 +277,52 @@ impl Navigation {
         }
 
         elements
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use super::Navigation;
+    use crate::input::{Key, KeyModifiers};
+
+    /// Build a Key carrying the current platform's navigation modifier
+    /// (Cmd on macOS, Alt elsewhere) so the assertions hold on any host.
+    fn key_with_modifier(char: u8) -> Key {
+        let mut modifiers = KeyModifiers::default();
+        match env::consts::OS {
+            "macos" => modifiers.meta = true,
+            _ => modifiers.alt = true,
+        }
+        Key { char, modifiers }
+    }
+
+    #[test]
+    fn invert_shortcut_is_modifier_plus_up() {
+        // 0x11 == Up
+        assert!(Navigation::is_invert_shortcut(&key_with_modifier(0x11)));
+    }
+
+    #[test]
+    fn invert_shortcut_requires_modifier() {
+        let plain_up = Key {
+            char: 0x11,
+            modifiers: KeyModifiers::default(),
+        };
+        assert!(!Navigation::is_invert_shortcut(&plain_up));
+    }
+
+    #[test]
+    fn invert_shortcut_requires_up_key() {
+        // modifier + Down (0x12) is not the invert shortcut
+        assert!(!Navigation::is_invert_shortcut(&key_with_modifier(0x12)));
+        // modifier + Left (0x14, back) is not the invert shortcut
+        assert!(!Navigation::is_invert_shortcut(&key_with_modifier(0x14)));
+    }
+
+    #[test]
+    fn url_not_editing_by_default() {
+        assert!(!Navigation::new().is_url_editing());
     }
 }

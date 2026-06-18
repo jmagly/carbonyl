@@ -20,6 +20,10 @@ pub struct Renderer {
     cells: Vec<(Cell, Cell)>,
     painter: Painter,
     size: Size,
+    /// Set when a state change that isn't reflected in the cell buffer (e.g. the
+    /// invert-colors toggle, issue #181) requires every cell to be re-emitted on
+    /// the next `render`, bypassing the usual previous/current diff.
+    force_repaint: bool,
 }
 
 impl Default for Renderer {
@@ -39,6 +43,7 @@ impl Renderer {
             cells: Vec::with_capacity(0),
             painter: Painter::new(),
             size: Size::new(0, 0),
+            force_repaint: false,
         }
     }
 
@@ -47,6 +52,16 @@ impl Renderer {
     }
 
     pub fn keypress(&mut self, key: &Key) -> io::Result<NavigationAction> {
+        // Local chrome shortcut (issue #181): modifier + Up toggles color
+        // inversion. Consumed here (never forwarded to Chromium) and only when
+        // the URL bar isn't being edited, so Up still moves the text cursor.
+        if !self.nav.is_url_editing() && Navigation::is_invert_shortcut(key) {
+            self.painter.toggle_invert();
+            self.force_repaint = true;
+
+            return Ok(NavigationAction::Ignore);
+        }
+
         let action = self.nav.keypress(key);
 
         Ok(action)
@@ -117,8 +132,12 @@ impl Renderer {
 
         self.painter.begin()?;
 
+        // After an invert toggle the cell buffer is unchanged but the emitted
+        // colors must change, so repaint every cell once (issue #181).
+        let force = std::mem::take(&mut self.force_repaint);
+
         for (previous, current) in self.cells.iter_mut() {
-            if current == previous {
+            if !force && current == previous {
                 continue;
             }
 
