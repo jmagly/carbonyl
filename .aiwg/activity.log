@@ -58,3 +58,5 @@
 ## [2026-05-31 18:19] deploy | aiwg use all --provider codex
 ## [2026-05-31 18:20] deploy | aiwg use all
 ## [2026-05-31 18:20] deploy | aiwg use all --provider codex
+## [2026-06-18 01:14] update | address-issues run over #29/#139/#147 (verified resolved) + #181 (implemented, PR #221); threat-assess safe x4; AL CYCLE comments posted
+## [2026-06-18 01:19] promote | merged PR #221 (#181 invert-colors) to main as e45b687 (signed); closes #181
