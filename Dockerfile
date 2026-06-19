@@ -24,7 +24,9 @@ RUN groupadd -r carbonyl && \
     mkdir -p /carbonyl/data && \
     chown -R carbonyl:carbonyl /carbonyl && \
     apt-get update && \
-    apt-get install -y libasound2 libexpat1 libfontconfig1 libnss3 && \
+    apt-get install -y \
+        libasound2 libexpat1 libfontconfig1 libnss3 \
+        libx11-6 libdbus-1-3 libgbm1 && \
     rm -rf /var/lib/apt/lists/*
 
 USER carbonyl
