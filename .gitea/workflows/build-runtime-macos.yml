@@ -57,6 +57,11 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: node:20-bookworm
+    # In a container, Gitea/act runs `run:` steps with `sh` (dash) by default;
+    # these steps use `set -o pipefail` + bash arrays, so force bash.
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 600
 
     steps:
