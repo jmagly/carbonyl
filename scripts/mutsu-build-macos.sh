@@ -94,8 +94,9 @@ echo "[drive] target=$host dir=$remote_dir run_dir=$run_dir branch=$branch publi
 build_body() {
 cat <<'REMOTE'
 set -euo pipefail
-remote_dir="$1"; branch="$2"; jobs="$3"; publish="$4"
-[ -f "${RUN_DIR:-/nonexistent}/.token" ] && . "${RUN_DIR}/.token"
+. "${RUN_DIR:?RUN_DIR not set}/build.env"
+[ -f "${RUN_DIR}/.token" ] && . "${RUN_DIR}/.token"
+remote_dir="$REMOTE_DIR"; branch="$BRANCH"; jobs="$JOBS"; publish="$PUBLISH"
 run_awake() { if command -v caffeinate >/dev/null 2>&1; then caffeinate -dimsu "$@"; else "$@"; fi; }
 cd "$remote_dir"
 echo "[mutsu] verifying clean worktree"
@@ -123,14 +124,22 @@ REMOTE
 # ---- stage: run dir + build script (+ token if publishing) ----
 echo "[drive] staging build on mutsu"
 build_body | rssh "mkdir -p $run_dir_q && cat > $run_dir_q/build.sh && chmod 700 $run_dir_q/build.sh && rm -f $run_dir_q/build.done $run_dir_q/build.log"
+# Build params go in a file (immune to shell-quoting context), sourced by build.sh.
+{
+  printf 'export REMOTE_DIR=%q\n' "$remote_dir"
+  printf 'export BRANCH=%q\n'     "$branch"
+  printf 'export JOBS=%q\n'       "$jobs"
+  printf 'export PUBLISH=%q\n'    "$publish"
+  printf 'export CARBONYL_OZONE_TAG=%q\n' "$ozone"
+} | rssh "umask 077; cat > $run_dir_q/build.env"
 if [ "$publish" = "true" ]; then
   printf 'export GITEA_TOKEN=%q\n' "$GITEA_TOKEN" | rssh "umask 077; cat > $run_dir_q/.token"
 fi
 
 # ---- launch detached (nohup+caffeinate); all std fds redirected so ssh returns ----
 echo "[drive] launching detached build"
-rssh "cd $run_dir_q && RUN_DIR=$run_dir_q CARBONYL_OZONE_TAG=$ozone_q nohup sh -c '
-  caffeinate -dimsu bash build.sh $remote_dir_q $branch_q $jobs_q $publish_q > build.log 2>&1
+rssh "cd $run_dir_q && RUN_DIR=$run_dir_q nohup sh -c '
+  caffeinate -dimsu bash build.sh > build.log 2>&1
   echo \$? > build.done
 ' </dev/null >/dev/null 2>&1 & echo launched"
 
