@@ -137,6 +137,21 @@ impl Window {
             };
             self.browser = (base / zoom).ceil().cast();
         }
+
+        // Full-page layout height override (#87). `--viewport=WxH` clips the page
+        // to `H` px tall, so below-the-fold content is never laid out or rastered.
+        // `--page-height=N` overrides only the height of the CSS viewport computed
+        // above — width is preserved from whichever path ran — so Chromium lays
+        // out and rasters the page `N` px tall. The screenshot capture FFI (#3)
+        // then receives the full-page raster. The interactive terminal renderer
+        // is unchanged: it still samples the top-left `cells * (2, 4)` window, so
+        // this knob targets the automation / screenshot / framebuffer path. Memory
+        // scales with `N`; cap it for infinite-scroll pages by choosing a finite
+        // `N`. A zero/unset value is ignored (parsed out in cli.rs).
+        if let Some(h) = self.cmd.page_height {
+            self.browser.height = h;
+        }
+
         // Silence unused-variable warning on `cell`; the terminal cell-pixel
         // hint is no longer consulted now that we derive the CSS viewport
         // directly from the cell count and the half-block sample factor.
