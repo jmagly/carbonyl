@@ -1,33 +1,26 @@
 # build-runtime-macos.yml — CI-dispatched aarch64-apple-darwin runtime build.
 #
-# Mirror of build-runtime-arm64.yml for the macOS (Apple Silicon) runtime.
+# Runs on the always-available `ubuntu-latest` Gitea runner and drives the
+# native macOS build on mutsu over SSH during the run (mutsu is NOT a Gitea
+# runner — see docs/ci-runner-mutsu.md). This mirrors the HotM "build via
+# mutsu" pattern: a standard runner SSHes to mutsu; mutsu does the compute.
 #
-# Why titan-orchestrated SSH to mutsu (not `runs-on: mutsu`):
-#   - mutsu is the Apple Silicon build host but CANNOT run a Gitea Actions
-#     runner (docs/ci-runner-mutsu.md — macOS act_runner RPC issue).
-#   - titan is the always-on, monitored x86_64 runner; it survives an operator
-#     reboot a hand-run SSH session would not. titan SSH-drives the existing
-#     scripts/mutsu-build-macos.sh; mutsu does the native macOS compute.
+# Previously ran on `runs-on: titan`; moved off titan because the macOS drop
+# must not depend on the single titan runner being online (a queued titan job
+# stalled the alpha.10/11 macOS asset — #227).
 #
 # Triggers:
 #   - workflow_dispatch: manual run (build-only or publish).
 #   - push: tags ['v*']: a release tag auto-dispatches this build (headless,
 #     publish=true) so the aarch64-apple-darwin runtime lands on the shared
 #     runtime-<hash> release; on success it re-dispatches release.yml with
-#     include_macos=true to package + attach the macOS runtime to the same
-#     release (Option A "async attach").
+#     include_macos=true to attach the macOS runtime (Option A "async attach").
 #
-# SSH to mutsu: identical to build-runtime-arm64.yml — a job-local SSH config
-# built from the MUTSU_SSH_KEY secret, connecting to 10.0.42.41 (user manitcor)
-# via the `mutsu-agent` alias. See docs/ci-secrets.md.
-#
-# External drive: the macOS Chromium checkout lives at /Volumes/build/carbonyl
-# (mutsu's system drive is too small) — pinned via MUTSU_CARBONYL_DIR below and
-# passed explicitly as --remote-dir so it can never regress to the system drive.
-#
-# Publish: scripts/mutsu-build-macos.sh --publish runs runtime-push.sh on the
-# macOS host, uploading aarch64-apple-darwin.tgz to the shared runtime-<hash>
-# release with the BUILD_REPO_TOKEN. release.yml --include_macos=true consumes it.
+# SSH to mutsu: a job-local SSH config built from the MUTSU_SSH_KEY secret,
+# connecting to 10.0.42.41 (user manitcor) via the `mutsu-agent` alias.
+# Publish: scripts/mutsu-build-macos.sh --publish runs runtime-push.sh on mutsu,
+# uploading aarch64-apple-darwin.tgz to the runtime-<hash> release with
+# BUILD_REPO_TOKEN. release.yml --include_macos=true consumes it.
 
 name: Build Runtime (macOS / mutsu)
 
@@ -56,25 +49,23 @@ on:
 env:
   CARGO_TERM_COLOR: always
   # External-drive pin (mutsu system drive is too small for a Chromium build).
-  # Matches scripts/mutsu-build-macos.sh default; set explicitly so a future
-  # default change can't move the build onto mutsu's small system drive.
   MUTSU_CARBONYL_DIR: /Volumes/build/carbonyl
-
-# Shared with build-runtime-arm64.yml: one mutsu build at a time across both the
-# arm64-linux and macOS runtimes — mutsu is a single host and the builds share
-# its CPU/RAM and the /Volumes/build external drive. Serialize; never cancel an
-# in-flight build.
-concurrency:
-  group: build-runtime-mutsu
-  cancel-in-progress: false
 
 jobs:
   build-runtime-macos:
     name: Build aarch64-apple-darwin on mutsu (headless)
-    runs-on: titan
+    runs-on: ubuntu-latest
+    container:
+      image: node:20-bookworm
     timeout-minutes: 600
 
     steps:
+      - name: Install ssh/git/curl
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends openssh-client git curl ca-certificates
+
       - name: Checkout repo at the dispatched ref
         run: |
           set -euo pipefail
@@ -114,7 +105,6 @@ jobs:
           fi
           echo "SSH_CONFIG=${SSH_CONFIG}" >> "$GITHUB_ENV"
 
-          # A release tag push always publishes; a manual dispatch honors its input.
           if [ "${{ github.event_name }}" = "push" ]; then
             PUBLISH="true"
           else
@@ -125,9 +115,6 @@ jobs:
 
       - name: Build (+ optionally publish) macOS runtime
         env:
-          # runtime-push.sh (via --publish) uploads to runtime-<hash> with the CI
-          # token; not an authored delivery, so no roctinam identity needed. Only
-          # consumed when PUBLISH=true.
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
         run: |
           set -euo pipefail
@@ -152,11 +139,6 @@ jobs:
           echo "::endgroup::"
 
       - name: Attach macOS to the release (re-dispatch release.yml)
-        # Option A async attach: only on a release tag push, after a successful
-        # publish. release.yml is create-or-reuse + idempotent — re-running with
-        # include_macos=true pulls the now-published aarch64-apple-darwin runtime
-        # and attaches the macOS asset to the existing release. include_linux_arm64
-        # =false — the arm64-linux workflow re-dispatches for its own triple.
         if: ${{ github.event_name == 'push' }}
         env:
           DISPATCH_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
