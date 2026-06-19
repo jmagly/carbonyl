@@ -14,6 +14,14 @@ Options:
                                terminal samples a cells * (2, 4) window of the
                                resulting physical raster. Use for reproducible
                                layout across terminal sizes.
+    --page-height=<N>          lay the page out N pixels tall for full-page
+                               capture (also via CARBONYL_PAGE_HEIGHT env var).
+                               --viewport=WxH clips the page to H px; below-the-
+                               fold content is never rastered. This overrides
+                               only the height, so Chromium rasters the full
+                               page and the screenshot capture sees all of it.
+                               The interactive terminal still shows the top-left
+                               window — use for automation / screenshots.
     --chrome-rows=<N>          stack the URL/nav chrome across N terminal rows
                                (default: 1; also via CARBONYL_CHROME_ROWS env
                                var). Use at large terminal sizes where a
@@ -42,6 +50,7 @@ Keyboard shortcuts:
 
 Environment variables:
     CARBONYL_VIEWPORT=WxH      same as --viewport
+    CARBONYL_PAGE_HEIGHT=N     same as --page-height
     CARBONYL_CHROME_ROWS=N     same as --chrome-rows
     CARBONYL_ENV_DEBUG=1       same as --debug
     CARBONYL_ENV_BITMAP=1      same as --bitmap

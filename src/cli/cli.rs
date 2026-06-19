@@ -29,6 +29,16 @@ pub struct CommandLine {
     /// Set via `--framebuffer[=PATH]` or `CARBONYL_FRAMEBUFFER[=PATH]`; an empty
     /// or missing value defaults to `/dev/fb0`.
     pub framebuffer: Option<String>,
+    /// Optional CSS-viewport height override in pixels for full-page layout (#87).
+    /// `--viewport=WxH` clips the page to `H` px tall — content below the fold is
+    /// never laid out or rastered. `--page-height=N` overrides only the height,
+    /// keeping the width from `--viewport` (if set) or the terminal-derived
+    /// width, so Chromium lays out (and rasters) the page `N` px tall. The
+    /// screenshot capture FFI (#3) then receives the full-page raster. The
+    /// interactive terminal still samples the top-left window — this knob targets
+    /// the automation / screenshot path. Set via `--page-height=N` or
+    /// `CARBONYL_PAGE_HEIGHT=N`; `0`/malformed values are ignored.
+    pub page_height: Option<u32>,
 }
 
 pub enum EnvVar {
@@ -63,6 +73,7 @@ impl CommandLine {
         let mut viewport: Option<(u32, u32)> = None;
         let mut chrome_rows: u32 = 1;
         let mut framebuffer: Option<String> = None;
+        let mut page_height: Option<u32> = None;
         let mut program = CommandLineProgram::Main;
         // --dump-text scaffolding — collected during the loop and folded into
         // `program` after, so it composes with `--help` / `--version` /
@@ -122,6 +133,13 @@ impl CommandLine {
                     }
                 }
                 "--framebuffer" => framebuffer = Some(framebuffer_path(value.copied())),
+                "--page-height" => {
+                    if let Some(value) = value {
+                        if let Some(h) = parse_page_height(value) {
+                            page_height = Some(h);
+                        }
+                    }
+                }
 
                 "--dump-text" => {
                     dump_text_requested = true;
@@ -173,6 +191,12 @@ impl CommandLine {
         if framebuffer.is_none() {
             if let Ok(value) = env::var("CARBONYL_FRAMEBUFFER") {
                 framebuffer = Some(framebuffer_path(Some(value.as_str())));
+            }
+        }
+
+        if page_height.is_none() {
+            if let Ok(value) = env::var("CARBONYL_PAGE_HEIGHT") {
+                page_height = parse_page_height(&value);
             }
         }
 
@@ -237,6 +261,7 @@ impl CommandLine {
             viewport,
             chrome_rows,
             framebuffer,
+            page_height,
         }
     }
 }
@@ -247,6 +272,15 @@ fn framebuffer_path(value: Option<&str>) -> String {
     match value {
         Some(v) if !v.is_empty() => v.to_string(),
         _ => "/dev/fb0".to_string(),
+    }
+}
+
+/// Parse a positive pixel height for `--page-height` / `CARBONYL_PAGE_HEIGHT`
+/// (#87). Returns None on malformed input or a zero height.
+fn parse_page_height(value: &str) -> Option<u32> {
+    match value.parse::<u32>() {
+        Ok(h) if h > 0 => Some(h),
+        _ => None,
     }
 }
 
@@ -316,5 +350,16 @@ mod tests {
         assert_eq!(framebuffer_path(None), "/dev/fb0");
         assert_eq!(framebuffer_path(Some("")), "/dev/fb0");
         assert_eq!(framebuffer_path(Some("/dev/fb1")), "/dev/fb1");
+    }
+
+    #[test]
+    fn page_height_parsing() {
+        assert_eq!(parse_page_height("4000"), Some(4000));
+        assert_eq!(parse_page_height("1"), Some(1));
+        assert_eq!(parse_page_height("0"), None);
+        assert_eq!(parse_page_height(""), None);
+        assert_eq!(parse_page_height("-1"), None);
+        assert_eq!(parse_page_height("1280x800"), None);
+        assert_eq!(parse_page_height("abc"), None);
     }
 }
