@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Measure rastered extent of issue-87 before/after captures.
+"""Measure rendered-content extent of issue-87 before/after captures.
 
-The X-mirror window maps at the screen origin and is exactly `window.browser`
-tall (the CSS viewport) once chromium patch 0029 honours it. Everything below /
-right of that window is X-root background. So the lowest screen row that still
-belongs to the carbonyl window (= differs from the X-root background) is the
-**rastered extent** — which equals the viewport height for `before` and rises to
-`--page-height` (or the page's own content height, whichever Chromium rasters)
-for `after`. That growth is exactly the #87 fix.
+capture.sh drives carbonyl under a large PTY so the X-mirror window is
+`cells*(2,4)` = full-screen, and blits Chromium's compositor frame into it. With
+`--viewport=1280x800` the frame is 800px tall (content only in the top band);
+with `--page-height=4000` the frame is up to 4000px tall (content down the page).
 
-This is a rastered-extent proxy (it can't tell page content from page-background
-fill inside the window); the human confirms actual below-the-fold *content* by
-eyeballing the before/after PNGs that land in docs/renders/issue-87/.
+We measure the lowest 200px band that still holds rendered text (pixels darker
+than a light page bg), which rises from ~viewport height (before) to the full
+page (after). That growth is the #87 fix.
+
+REQUIRES a host where carbonyl actually renders page text. Under a GPU-less Xvfb
+with only the SwiftShader fallback, carbonyl may paint the page background but
+little text, yielding near-empty bands for both before and after — that is an
+environment limitation, not a fix regression. Run on a GL-capable host (or the
+CI capture environment).
 
 Pass criterion: for each URL the `after` extent must materially exceed the
 `before` extent (which caps near the viewport height). A page whose document
@@ -26,30 +29,33 @@ from pathlib import Path
 from PIL import Image
 
 
-def rastered_extent(path: Path, win_width: int = 1280, bg_tol: int = 8) -> int:
-    """Return the lowest screen row still inside the carbonyl X-mirror window.
+def rastered_extent(path: Path, win_width: int = 1270, band: int = 200,
+                    min_text: int = 40) -> int:
+    """Return the lowest px row that still contains rendered page *content*.
 
-    Background = the bottom-right corner, which is guaranteed X-root (the window
-    is <= win_width wide and shorter than the screen). A row counts as "window"
-    if any sampled pixel within the window's x-range differs from that background
-    by more than bg_tol on a channel. Scans bottom-up and returns the first such
-    row (the rastered extent in px).
+    The carbonyl X-mirror window paints the page background across its whole
+    height, so a background-vs-corner test can't tell rastered content from a
+    plain bg fill. Instead we count "text" pixels (notably darker than a light
+    page bg: channel sum < 480, i.e. avg < 160) per 200px band, and return the
+    bottom of the lowest band that exceeds `min_text` text pixels. That tracks
+    where actual rendered content ends, which rises from ~viewport height
+    (before) to the full page (after).
     """
     img = Image.open(path).convert("RGB")
     w, h = img.size
     px = img.load()
-    bg = px[w - 1, h - 1]  # X-root background, outside the window
-
-    def differs(c) -> bool:
-        return any(abs(c[i] - bg[i]) > bg_tol for i in range(3))
-
     x_max = min(w, win_width)
-    xs = range(0, x_max, max(1, x_max // 256))
-    for y in range(h - 1, -1, -1):
-        for x in xs:
-            if differs(px[x, y]):
-                return y + 1
-    return 0
+    last = 0
+    for b0 in range(0, h, band):
+        cnt = 0
+        for y in range(b0, min(b0 + band, h), 4):
+            for x in range(0, x_max, 6):
+                r, g, bl = px[x, y]
+                if r + g + bl < 480:
+                    cnt += 1
+        if cnt > min_text:
+            last = min(b0 + band, h)
+    return last
 
 
 def main() -> int:

@@ -17,4 +17,10 @@ X11 ozone screen") **and** carrying PR #226 (`--page-height`). The
 `build-runtime` CI on the post-#226 `main` produces that runtime. The bundled
 `build/pre-built/...alpha.1` runtime predates 0029 and cannot demonstrate the fix.
 
+**Host requirement:** the harness needs a host where carbonyl renders page *text*.
+A GPU-less `Xvfb` with only the SwiftShader fallback paints the page background but
+little text, so the captures come out near-empty for both before and after — use a
+GL-capable host or the CI capture environment. The most direct full-raster check is
+the screenshot-capture FFI (#3), exercised by the carbonyl-fleet screenshot harness.
+
 See `test/repro/issue-87/README.md` for the full method and pass criterion.

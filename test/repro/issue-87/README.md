@@ -35,13 +35,39 @@ artifact published by `build-runtime` on the post-#226 `main` is the correct tar
 The pre-bundled `build/pre-built/...alpha.1` runtime is **too old** (predates 0029)
 and will NOT demonstrate the fix.
 
+## How the capture works (and why a large PTY)
+
+The X-mirror window is `cells*(2,4)` px — i.e. it tracks the **terminal** size,
+not the viewport. With the default ~80x24 cells the window is only ~160x92 px, so
+it cannot show the full page no matter what `--page-height` is. `capture.sh`
+therefore launches carbonyl through `ptycap.py`, which forces a **640x1001 PTY
+winsize** → a **1280x4000** X-mirror window. Chromium's compositor frame is sized
+to `window.browser` (the CSS viewport), so:
+
+- `before` (`--viewport=1280x800`): frame is 800px tall → fills the top 800px.
+- `after` (`--page-height=4000`): frame is up to 4000px tall → fills the window.
+
+The PTY is also what lets carbonyl set up its terminal at all — without it the
+bridge aborts (`Failed to setup terminal`) and never applies the viewport.
+
+> The most *direct* full-raster path is the **screenshot capture FFI**
+> (`carbonyl_set_screenshot_capture` + `carbonyl_capture_screenshot`, #3), which
+> retains the entire compositor frame regardless of terminal size. That path is
+> SDK-driven (no CLI trigger), so the carbonyl-fleet screenshot harness is the
+> canonical place to assert full-page pixels. This X-mirror harness is the
+> CLI-only approximation.
+
 ## Requirements
 
-- `Xvfb` (tall virtual screen), `ffmpeg` (x11grab — used instead of `scrot`),
-  `python3` + Pillow (PIL) for the content-extent measurement.
-- An **x11-capable** carbonyl runtime as above. Point `CARBONYL_BIN` at it (the
-  directory must also contain `libcarbonyl.so`, `icudtl.dat`, the `.so`/`.bin`
-  blobs, and `locales/`).
+- `Xvfb`, `ffmpeg` (x11grab — used instead of `scrot`), `python3` + Pillow.
+- An **x11-capable** post-#226 runtime carrying patch 0029 (see above).
+  Point `CARBONYL_BIN` at it (its directory must hold `libcarbonyl.so`,
+  `icudtl.dat`, the `.so`/`.bin` blobs, and `locales/`).
+- **A host where carbonyl renders page text.** Under a GPU-less `Xvfb` with only
+  the SwiftShader fallback, carbonyl may paint the page background but little/no
+  text — yielding near-empty captures for **both** before and after. That is an
+  environment limitation, not a fix regression. Use a GL-capable host or the CI
+  capture environment.
 
 ## Run
 
@@ -49,15 +75,9 @@ and will NOT demonstrate the fix.
 CARBONYL_BIN=/path/to/runtime-x11/carbonyl ./capture.sh
 ```
 
-`capture.sh` starts a `1280x4200` Xvfb, then for each test URL captures two frames:
-
-| Frame | Flags | Expected rastered height |
-|-------|-------|--------------------------|
-| `before` | `--viewport=1280x800` | ~800 px (above-the-fold only) |
-| `after`  | `--viewport=1280x800 --page-height=4000` | up to 4000 px (full page) |
-
-Captures land in `out/<host>/{before,after}.png`. `analyze.py` then reports, per URL,
-the lowest image row that still contains non-background content (the "content extent").
+Captures land in `out/<host>/{before,after}.png`. `analyze.py` reports, per URL,
+the lowest 200px band that still holds rendered text (the content extent), and
+asserts `after > before` for pages taller than the viewport.
 
 ## Pass criterion
 

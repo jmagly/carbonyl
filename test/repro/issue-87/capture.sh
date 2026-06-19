@@ -3,20 +3,28 @@
 #
 # For each test URL, capture two X-mirror frames from the SAME x11-capable
 # carbonyl runtime:
-#   before : --viewport=1280x800                 -> page rastered ~800px tall
-#   after  : --viewport=1280x800 --page-height=4000 -> page rastered up to 4000px
+#   before : --viewport=1280x800                     -> frame ~800px tall
+#   after  : --viewport=1280x800 --page-height=4000  -> frame up to 4000px tall
 #
-# The X-mirror window mirrors Chromium's compositor frame, so its height tracks
-# window.browser (the CSS viewport). With chromium patch 0029 the X11 ozone
-# screen honours that size, so `after` is taller and contains below-the-fold
-# content that `before` never rastered.
+# The X-mirror window is `cells*(2,4)` px, so we launch carbonyl under a LARGE
+# PTY (ptycap.py forces a 640x1001 winsize) to make the window 1280x4000 — big
+# enough to show the full `after` page. Chromium's compositor frame is sized to
+# window.browser (the CSS viewport); --page-height enlarges only the height, so
+# `after` fills the window while `before` fills only its top 800px.
 #
-# Capture uses ffmpeg x11grab (scrot is not assumed present). Frames are written
-# to out/<host>/{before,after}.png; analyze.py then measures content extent.
+# Capture uses ffmpeg x11grab (scrot is not assumed present). Frames -> out/<host>/
+# {before,after}.png; analyze.py then measures rendered-content extent.
 #
-# REQUIREMENTS: Xvfb, ffmpeg, an x11-capable post-#226 runtime (see README —
-# the runtime MUST include chromium patch 0029, commit 2f49034). Point
-# CARBONYL_BIN at it.
+# REQUIREMENTS:
+#   - Xvfb, ffmpeg, python3 + Pillow.
+#   - An x11-capable post-#226 runtime that ALSO carries chromium patch 0029
+#     (commit 2f49034). Point CARBONYL_BIN at it. The bundled alpha.1 runtime is
+#     too old. The `runtime-x11-<hash>` published by build-runtime on post-#226
+#     main is correct.
+#   - A host where carbonyl renders page TEXT. A GPU-less Xvfb with only the
+#     SwiftShader fallback may paint the page background but little text — that
+#     produces near-empty captures for BOTH before and after (an environment
+#     limit, not a regression). Use a GL-capable host or the CI capture env.
 #
 # Exit 0 if all captures were produced; analysis verdict is printed by analyze.py.
 
@@ -25,7 +33,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname -- "$0")" && pwd)"
 cd "$HERE"
 
-# ── Locate runtime ───────────────────────────────────────────────────────────
 : "${CARBONYL_BIN:?Set CARBONYL_BIN to an x11-capable post-#226 carbonyl (see README)}"
 [ -x "$CARBONYL_BIN" ] || { echo "FAIL: \$CARBONYL_BIN not executable: $CARBONYL_BIN"; exit 1; }
 RT_DIR="$(cd "$(dirname -- "$CARBONYL_BIN")" && pwd)"
@@ -36,13 +43,17 @@ for cmd in Xvfb ffmpeg python3; do
 done
 
 # ── Config ───────────────────────────────────────────────────────────────────
-VW_WIDTH="${VW_WIDTH:-1280}"
-VW_HEIGHT="${VW_HEIGHT:-800}"        # the "before" viewport height (the clip)
-PAGE_HEIGHT="${PAGE_HEIGHT:-4000}"   # the "after" --page-height
+VW="${VW:-1280x800}"             # the "before" viewport (the clip)
+PAGE_HEIGHT="${PAGE_HEIGHT:-4000}"
+PTY_COLS="${PTY_COLS:-640}"      # 640*2 = 1280 px wide window
+PTY_ROWS="${PTY_ROWS:-1001}"     # ~1000*4 = 4000 px tall window
+GRAB_W="${GRAB_W:-1280}"
+GRAB_H="${GRAB_H:-4000}"
 SCREEN_W="${SCREEN_W:-1300}"
-SCREEN_H="${SCREEN_H:-4200}"         # tall enough to hold the 4000px "after" window
-SETTLE="${SETTLE:-9}"                # seconds to let the page load + paint
-DISP="${DISP:-:97}"
+SCREEN_H="${SCREEN_H:-4100}"
+SETTLE="${SETTLE:-15}"           # PTY lifetime; grab fires at SETTLE-5
+GRAB_AT="${GRAB_AT:-10}"
+DISP="${DISP:-:96}"
 
 URLS=(
     "https://example.com"
@@ -51,10 +62,8 @@ URLS=(
     "https://github.com/jmagly/carbonyl"
 )
 
-OUT="$HERE/out"
-rm -rf "$OUT"; mkdir -p "$OUT"
+OUT="$HERE/out"; rm -rf "$OUT"; mkdir -p "$OUT"
 
-# ── Xvfb ─────────────────────────────────────────────────────────────────────
 echo "==> Xvfb $DISP @ ${SCREEN_W}x${SCREEN_H}x24"
 Xvfb "$DISP" -screen 0 "${SCREEN_W}x${SCREEN_H}x24" -nolisten tcp >/dev/null 2>&1 &
 XVFB_PID=$!
@@ -64,20 +73,16 @@ sleep 1
 
 host_slug() { echo "$1" | sed -E 's#^https?://##; s#[/?].*$##; s#[^A-Za-z0-9._-]#_#g'; }
 
-# capture <label> <url> <outfile> <extra-flags...>
+# capture <url> <outfile> <extra-flags...>
 capture() {
-    local label="$1" url="$2" outfile="$3"; shift 3
-    echo "    [$label] $url"
-    CARBONYL_X_MIRROR=1 DISPLAY="$DISP" \
-        "$CARBONYL_BIN" --no-sandbox --ozone-platform=x11 \
-            --viewport="${VW_WIDTH}x${VW_HEIGHT}" "$@" "$url" \
-            >/dev/null 2>&1 &
+    local url="$1" outfile="$2"; shift 2
+    DISPLAY="$DISP" python3 "$HERE/ptycap.py" "$PTY_COLS" "$PTY_ROWS" "$SETTLE" \
+        "$CARBONYL_BIN" -- --no-sandbox --ozone-platform=x11 --viewport="$VW" "$@" "$url" \
+        >/dev/null 2>&1 &
     local pid=$!
-    sleep "$SETTLE"
-    # Single full-screen grab; the carbonyl window maps at the origin.
-    ffmpeg -loglevel error -y -f x11grab -video_size "${SCREEN_W}x${SCREEN_H}" \
+    sleep "$GRAB_AT"
+    ffmpeg -loglevel error -y -f x11grab -video_size "${GRAB_W}x${GRAB_H}" \
         -i "$DISP" -frames:v 1 "$outfile" </dev/null || true
-    kill -TERM "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
     [ -s "$outfile" ] || { echo "FAIL: empty capture: $outfile"; exit 1; }
 }
@@ -86,9 +91,11 @@ for url in "${URLS[@]}"; do
     slug="$(host_slug "$url")"
     dir="$OUT/$slug"; mkdir -p "$dir"
     echo "==> $url"
-    capture before "$url" "$dir/before.png"
-    capture after  "$url" "$dir/after.png" --page-height="$PAGE_HEIGHT"
+    echo "    [before] --viewport=$VW"
+    capture "$url" "$dir/before.png"
+    echo "    [after]  --viewport=$VW --page-height=$PAGE_HEIGHT"
+    capture "$url" "$dir/after.png" --page-height="$PAGE_HEIGHT"
 done
 
 echo "==> Analysis"
-python3 "$HERE/analyze.py" "$OUT" "$VW_HEIGHT"
+python3 "$HERE/analyze.py" "$OUT" "${VW##*x}"
