@@ -20,6 +20,8 @@ ozone="headless"
 publish="false"
 poll_secs="${MUTSU_POLL_SECS:-60}"
 max_wait_secs="${MUTSU_MAX_WAIT_SECS:-36000}"   # 10h ceiling
+heartbeat_secs="${MUTSU_HEARTBEAT_SECS:-300}"   # emit a heartbeat after this much quiet (#228)
+ssh_cmd_timeout="${MUTSU_SSH_CMD_TIMEOUT:-120}" # bound each poll SSH so a hung call can't stall the loop (#228)
 
 usage() {
   cat <<'USAGE'
@@ -86,7 +88,15 @@ printf -v ozone_q       '%q' "$ozone"
 
 ssh_args=(-o BatchMode=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=15)
 [ -n "$ssh_config" ] && ssh_args+=(-F "$ssh_config")
-rssh() { ssh "${ssh_args[@]}" "$host" "$@"; }
+# Bound each remote command with `timeout` (#228): ServerAlive only catches a
+# dead transport, not a remote command that hangs after a healthy connect. A
+# stalled poll SSH must fail a single iteration, not freeze the whole loop.
+# `timeout` exits 124 on expiry; every rssh call site already tolerates failure.
+if command -v timeout >/dev/null 2>&1; then
+  rssh() { timeout "$ssh_cmd_timeout" ssh "${ssh_args[@]}" "$host" "$@"; }
+else
+  rssh() { ssh "${ssh_args[@]}" "$host" "$@"; }
+fi
 
 echo "[drive] target=$host dir=$remote_dir run_dir=$run_dir branch=$branch publish=$publish jobs=${jobs:-auto} poll=${poll_secs}s"
 
@@ -144,14 +154,19 @@ rssh "cd $run_dir_q && RUN_DIR=$run_dir_q nohup sh -c '
 ' </dev/null >/dev/null 2>&1 & echo launched"
 
 # ---- poll: short SSH calls; stream new log lines; tolerate transient failures ----
-echo "[drive] polling for completion (interval ${poll_secs}s, ceiling ${max_wait_secs}s)"
-waited=0; seen=0; misses=0
+echo "[drive] polling for completion (interval ${poll_secs}s, ceiling ${max_wait_secs}s, heartbeat ${heartbeat_secs}s)"
+waited=0; seen=0; misses=0; last_progress=0
 while [ "$waited" -lt "$max_wait_secs" ]; do
   total="$(rssh "wc -l < $run_dir_q/build.log 2>/dev/null || echo $seen" 2>/dev/null || echo "$seen")"
   total="${total//[^0-9]/}"; [ -n "$total" ] || total="$seen"
   if [ "$total" -gt "$seen" ]; then
     rssh "sed -n '$((seen+1)),\${p}' $run_dir_q/build.log 2>/dev/null" 2>/dev/null || true
-    seen="$total"
+    seen="$total"; last_progress="$waited"
+  elif [ $((waited - last_progress)) -ge "$heartbeat_secs" ]; then
+    # No new log lines for a while (e.g. a long ninja link step) — emit a
+    # heartbeat so the CI poll never looks hung. (#228)
+    echo "[drive] heartbeat: build still running on mutsu — ${waited}s elapsed, ${seen} log lines, no new output for $((waited - last_progress))s ($run_dir/build.log)"
+    last_progress="$waited"
   fi
   if done_code="$(rssh "cat $run_dir_q/build.done 2>/dev/null" 2>/dev/null)" && [ -n "$done_code" ]; then
     done_code="${done_code//[^0-9]/}"; [ -n "$done_code" ] || done_code=1

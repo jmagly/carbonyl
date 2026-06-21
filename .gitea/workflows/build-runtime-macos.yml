@@ -144,20 +144,12 @@ jobs:
             "${jobs_flag[@]}" "${publish_flag[@]}"
           echo "::endgroup::"
 
-      - name: Attach macOS to the release (re-dispatch release.yml)
-        if: ${{ github.event_name == 'push' }}
-        env:
-          DISPATCH_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          [ -n "${DISPATCH_TOKEN:-}" ] || { echo "ERROR: BUILD_REPO_TOKEN empty; cannot re-dispatch release.yml" >&2; exit 1; }
-          echo "[macos-build] dispatching release.yml for ${TAG} (include_macos=true)"
-          curl -fsS -X POST \
-            -H "Authorization: token ${DISPATCH_TOKEN}" \
-            -H "Content-Type: application/json" \
-            "https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/actions/workflows/release.yml/dispatches" \
-            -d "{\"ref\":\"${TAG}\",\"inputs\":{\"tag\":\"${TAG}\",\"include_macos\":\"true\",\"include_linux_arm64\":\"false\"}}"
+      # NOTE (#228): no "re-dispatch release.yml" step here. This workflow is
+      # workflow_dispatch-only — there is no v* tag/push trigger — so the macOS
+      # runtime is built+published BEFORE a release is tagged, and release.yml
+      # pulls the already-published asset. A dead CI job therefore cannot strand
+      # the macOS asset on a tag release. The previous push-gated re-dispatch
+      # step was unreachable (github.event_name is always workflow_dispatch).
 
       - name: Cleanup
         if: ${{ always() }}
