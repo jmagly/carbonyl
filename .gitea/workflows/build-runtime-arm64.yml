@@ -40,8 +40,10 @@
 name: Build Runtime (arm64 / mutsu)
 
 on:
-  push:
-    tags: ['v*']
+  # No v* tag trigger: runtimes are built (manually / on main) BEFORE a release
+  # is tagged, so the tag must not kick off a redundant/failing mutsu build.
+  # arm64-linux is deferred (#116); macOS is built on-demand then release.yml
+  # pulls the published asset. (#227/#228)
   workflow_dispatch:
     inputs:
       ozone_platform:

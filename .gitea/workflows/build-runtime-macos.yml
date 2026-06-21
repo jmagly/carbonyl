@@ -10,11 +10,10 @@
 # stalled the alpha.10/11 macOS asset — #227).
 #
 # Triggers:
-#   - workflow_dispatch: manual run (build-only or publish).
-#   - push: tags ['v*']: a release tag auto-dispatches this build (headless,
-#     publish=true) so the aarch64-apple-darwin runtime lands on the shared
-#     runtime-<hash> release; on success it re-dispatches release.yml with
-#     include_macos=true to attach the macOS runtime (Option A "async attach").
+#   - workflow_dispatch ONLY (build-only or publish). NO v* tag trigger:
+#     build the macOS runtime here first (publish=true), then tag for release —
+#     release.yml pulls the already-published asset. A tag must not kick off a
+#     redundant ~3h rebuild. (#227/#228)
 #
 # SSH to mutsu: a job-local SSH config built from the MUTSU_SSH_KEY secret,
 # connecting to 10.0.42.41 (user manitcor) via the `mutsu-agent` alias.
@@ -25,8 +24,10 @@
 name: Build Runtime (macOS / mutsu)
 
 on:
-  push:
-    tags: ['v*']
+  # No v* tag trigger: runtimes are built (manually / on main) BEFORE a release
+  # is tagged, so the tag must not kick off a redundant/failing mutsu build.
+  # arm64-linux is deferred (#116); macOS is built on-demand then release.yml
+  # pulls the published asset. (#227/#228)
   workflow_dispatch:
     inputs:
       publish:
