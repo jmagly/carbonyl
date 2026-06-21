@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.12] - 2026-06-21
+
+### 🚀 Features
+
+- Keyboard shortcut to invert colors ([#181](https://github.com/jmagly/carbonyl/issues/181))
+- --page-height for full-page layout/capture ([#87](https://github.com/jmagly/carbonyl/issues/87))
+
+### 🐛 Bug Fixes
+
+- Add missing runtime libs to top-level Dockerfile
+- Pass params via build.env, not launch interpolation
+
+### Merge
+
+- GPU-less rendering repro harness for [#210](https://github.com/jmagly/carbonyl/issues/210) ([#225](https://github.com/jmagly/carbonyl/issues/225))
+- Top-level Dockerfile runtime libs fix ([#224](https://github.com/jmagly/carbonyl/issues/224))
+
+### Ci
+
+- Resolve release notes from changelog section + GitHub downloads pointer
+- Auto-build arm64-linux + macOS runtimes on release tags (mutsu)
+- Run on ubuntu-latest, SSH to mutsu (off titan)
+- Force bash for container run steps
+- Detached build + poll, survive SSH drops
+- Drop v* tag trigger from mutsu runtime builds
+
+### Test
+
+- Add GPU-less container rendering harness for [#210](https://github.com/jmagly/carbonyl/issues/210)
+- Add [#87](https://github.com/jmagly/carbonyl/issues/87) full-page-capture verification harness
+- Correct [#87](https://github.com/jmagly/carbonyl/issues/87) harness — large-PTY X-mirror + text-density metric
+- Drop accidentally-committed [#87](https://github.com/jmagly/carbonyl/issues/87) out/ captures; gitignore them
+
 ## [0.2.0-alpha.11] - 2026-06-17
 
 ### 🚀 Features
