@@ -139,7 +139,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  void HeadlessBrowserImpl::SetOptions(HeadlessBrowser::Options options) {
    options_ = std::move(options);
-@@ -272,6 +299,324 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -272,6 +299,332 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
    return true;
  }
  
@@ -302,11 +302,19 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +  }
 +}
 +
-+void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key) {
++void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key, unsigned int modifiers) {
 +  bool raw = true;
++  // Translate the carbonyl modifier mask (bridge.rs KeyModifiers::mask:
++  // bit0 shift, bit1 control, bit2 alt, bit3 meta) into blink flags so
++  // Shift+Tab (reverse focus) and Ctrl/Alt/Meta combos reach the page (#237).
++  int blink_modifiers = blink::WebInputEvent::kNoModifiers;
++  if (modifiers & 0x1) blink_modifiers |= blink::WebInputEvent::kShiftKey;
++  if (modifiers & 0x2) blink_modifiers |= blink::WebInputEvent::kControlKey;
++  if (modifiers & 0x4) blink_modifiers |= blink::WebInputEvent::kAltKey;
++  if (modifiers & 0x8) blink_modifiers |= blink::WebInputEvent::kMetaKey;
 +  content::NativeWebKeyboardEvent event(
 +      blink::WebKeyboardEvent::Type::kRawKeyDown,
-+      blink::WebInputEvent::kNoModifiers,
++      blink_modifiers,
 +      base::TimeTicks::Now());
 +
 +  // TODO(fathy): support IME
@@ -464,7 +472,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    CreateOSCryptAsync();
  
-@@ -284,6 +629,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -284,6 +637,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    platform_delegate_->Start();
  
    std::move(on_start_callback_).Run(this);
@@ -509,9 +517,9 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +          carbonyl::browser->OnScrollInput(delta);
 +        }
 +      },
-+      .key_press = [](unsigned int key) {
++      .key_press = [](unsigned int key, unsigned int modifiers) {
 +        if (carbonyl::browser) {
-+          carbonyl::browser->OnKeyPressInput(key);
++          carbonyl::browser->OnKeyPressInput(key, modifiers);
 +        }
 +      },
 +      .mouse_up = [](unsigned int x, unsigned int y, unsigned int button) {
@@ -578,7 +586,7 @@ index 1d9ba1861de00..eed25b81f39c6 100644
 +  void OnGoBackInput();
 +  void OnGoForwardInput();
 +  void OnScrollInput(int delta);
-+  void OnKeyPressInput(unsigned int key);
++  void OnKeyPressInput(unsigned int key, unsigned int modifiers);
 +  void OnMouseUpInput(unsigned int x, unsigned int y, unsigned int button);
 +  void OnMouseDownInput(unsigned int x, unsigned int y, unsigned int button);
 +  void OnMouseMoveInput(unsigned int x, unsigned int y);

@@ -96,6 +96,12 @@ impl Parser {
                 Sequence::Control => match key {
                     b'<' => Sequence::Mouse(Mouse::new()),
                     b'1' => Sequence::Keyboard(Keyboard::new()),
+                    // CSI Z (back-tab, terminfo `kcbt`): the bare Shift+Tab xterm
+                    // emits for reverse focus. Deliver Tab (0x09) with shift so
+                    // Blink runs reverse traversal once the FFI carries the
+                    // modifier mask (#237). The modifyOtherKeys `CSI 1;2 Z`
+                    // variant (rare, non-default) is intentionally out of scope.
+                    b'Z' => emit!(Event::KeyPress { key: Key::back_tab() }),
                     key => emit!(Keyboard::key(key, 0)),
                 },
                 Sequence::Mouse(ref mut mouse) => parse!(mouse, key),
@@ -123,6 +129,34 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// (char, modifier-mask) pairs for each keypress, so tests can assert that
+    /// modifiers survive parsing and reach the FFI boundary (#237).
+    fn key_codes_with_mask(events: Vec<Event>) -> Vec<(u32, u32)> {
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::KeyPress { key } => Some((key.char, key.modifiers.mask())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn csi_z_is_shift_tab_back_tab() {
+        // xterm sends a bare CSI Z (ESC [ Z) for Shift+Tab. It must decode to
+        // Tab (0x09) carrying the shift modifier (mask bit0) so reverse focus
+        // works once the FFI forwards modifiers (#237).
+        let mut p = Parser::new();
+        assert_eq!(key_codes_with_mask(p.parse(b"\x1b[Z")), vec![(0x09, 0b0001)]);
+    }
+
+    #[test]
+    fn plain_tab_has_no_modifiers() {
+        // A bare Tab byte is still an unmodified Tab — only CSI Z carries shift.
+        let mut p = Parser::new();
+        assert_eq!(key_codes_with_mask(p.parse(b"\x09")), vec![(0x09, 0)]);
     }
 
     #[test]

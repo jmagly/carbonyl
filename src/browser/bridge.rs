@@ -120,7 +120,7 @@ pub struct BrowserDelegate {
     go_back: extern "C" fn(),
     go_forward: extern "C" fn(),
     scroll: extern "C" fn(c_int),
-    key_press: extern "C" fn(c_uint),
+    key_press: extern "C" fn(c_uint, c_uint),
     mouse_up: extern "C" fn(c_uint, c_uint, c_uint),
     mouse_down: extern "C" fn(c_uint, c_uint, c_uint),
     mouse_move: extern "C" fn(c_uint, c_uint),
@@ -629,7 +629,11 @@ fn dispatch_input_events(
                 }
                 KeyPress { key } => {
                     if dispatch(renderer.keypress(&key).unwrap()) {
-                        emit!(key_press(key.char as c_uint))
+                        // Carry the modifier mask alongside the codepoint so
+                        // Shift+Tab / Ctrl/Alt/Meta combos reach the page (#237).
+                        // The renderer still intercepts the invert-color shortcut
+                        // before this dispatch, so its consumption is preserved.
+                        emit!(key_press(key.char as c_uint, key.modifiers.mask()))
                     }
                 }
                 MouseUp { col, row, button } => {
