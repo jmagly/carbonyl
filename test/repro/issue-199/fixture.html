@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- #199 right-click verification. Focus/button state is reflected into the
+       document title, which Carbonyl emits as an OSC sequence (GPU-independent;
+       see issue-169 README). A right mouse button must arrive as button==2 and
+       fire a contextmenu. -->
+  <title>RC:init</title>
+</head>
+<body style="margin:0;width:100vw;height:100vh">
+  <script>
+    function t(s) { document.title = s; }
+    document.addEventListener('mousedown',  e => t('RC:md:'  + e.button));
+    document.addEventListener('contextmenu', e => { t('RC:ctx:' + e.button); e.preventDefault(); });
+    window.addEventListener('load', () => t('RC:ready'));
+  </script>
+</body>
+</html>

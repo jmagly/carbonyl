@@ -121,8 +121,8 @@ pub struct BrowserDelegate {
     go_forward: extern "C" fn(),
     scroll: extern "C" fn(c_int),
     key_press: extern "C" fn(c_char),
-    mouse_up: extern "C" fn(c_uint, c_uint),
-    mouse_down: extern "C" fn(c_uint, c_uint),
+    mouse_up: extern "C" fn(c_uint, c_uint, c_uint),
+    mouse_down: extern "C" fn(c_uint, c_uint, c_uint),
     mouse_move: extern "C" fn(c_uint, c_uint),
     post_task: extern "C" fn(extern "C" fn(*mut c_void), *mut c_void),
 }
@@ -632,18 +632,18 @@ fn dispatch_input_events(
                         emit!(key_press(key.char as c_char))
                     }
                 }
-                MouseUp { col, row } => {
+                MouseUp { col, row, button } => {
                     if dispatch(renderer.mouse_up((col as _, row as _).into()).unwrap()) {
                         let (width, height) = scale(col, row);
 
-                        emit!(mouse_up(width, height))
+                        emit!(mouse_up(width, height, button))
                     }
                 }
-                MouseDown { col, row } => {
+                MouseDown { col, row, button } => {
                     if dispatch(renderer.mouse_down((col as _, row as _).into()).unwrap()) {
                         let (width, height) = scale(col, row);
 
-                        emit!(mouse_down(width, height))
+                        emit!(mouse_down(width, height, button))
                     }
                 }
                 MouseMove { col, row } => {

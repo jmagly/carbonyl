@@ -62,13 +62,15 @@ impl Mouse {
             } else {
                 let col = col as usize - 1;
                 let row = row as usize - 1;
+                // SGR low 2 bits select the button: 0=left, 1=middle, 2=right.
+                let button = btn & 0b11;
 
                 if key == b'm' {
-                    Event::MouseUp { row, col }
+                    Event::MouseUp { row, col, button }
                 } else if Mask::MouseMove & btn {
                     Event::MouseMove { row, col }
                 } else {
-                    Event::MouseDown { row, col }
+                    Event::MouseDown { row, col, button }
                 }
             }
         })
