@@ -67,3 +67,4 @@
 ## [2026-06-22 13:46] update | issue audit apply: refreshed epic #58 (Layer-1 row), linked #58<->#223, closed #173/#174/#175 (resolved), cross-linked mouse+IME clusters
 ## [2026-06-22 14:34] update | address-issues tranche-1: closed #164 (mouse supported), linked #186->#154; AL CYCLE #1 root-cause on #169 (char-only key_press FFI) + #168 (needs repro) — escalated go/no-go on keyboard-event FFI rebuild
 ## [2026-06-22 14:39] update | address-issues: processed full ~14 queue (AL CYCLE #1 dispositions, 4 workstreams); created #231 input-event-FFI workstream (children #169/#199/#178/#217)
+## [2026-06-22 14:59] update | #231 Stage 1: merged PR #232 (201be82) — TAB->VKEY_TAB focus fix (#169) via patch 0009; validate-patches green; build-runtime rebuilding; #169 open pending runtime verification
