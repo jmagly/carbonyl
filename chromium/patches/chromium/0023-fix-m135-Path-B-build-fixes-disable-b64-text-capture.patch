@@ -219,16 +219,14 @@ index 43d8c71167a7b..f1ba2b6b74d24 100644
      gfx::FontRenderParams::Hinting::HINTING_FULL;
  
  #if defined(HEADLESS_USE_PREFS)
-@@ -462,7 +466,7 @@ void HeadlessBrowserImpl::OnScrollInput(int delta) {
- 
- void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key) {
-   bool raw = true;
+@@ -472,5 +476,5 @@ void HeadlessBrowserImpl::OnScrollInput(int delta) {
+   if (modifiers & 0x8) blink_modifiers |= blink::WebInputEvent::kMetaKey;
 -  content::NativeWebKeyboardEvent event(
 +  input::NativeWebKeyboardEvent event(
        blink::WebKeyboardEvent::Type::kRawKeyDown,
-       blink::WebInputEvent::kNoModifiers,
+       blink_modifiers,
        base::TimeTicks::Now());
-@@ -625,7 +629,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -633,7 +637,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
      }
    });
  
