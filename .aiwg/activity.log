@@ -65,3 +65,4 @@
 ## [2026-06-22 02:03] update | src/cli + readme: document & test Chromium flag passthrough (#188)
 ## [2026-06-22 02:08] update | #188 resolved & closed; PR #230 merged (c4a7252) + closed
 ## [2026-06-22 13:46] update | issue audit apply: refreshed epic #58 (Layer-1 row), linked #58<->#223, closed #173/#174/#175 (resolved), cross-linked mouse+IME clusters
+## [2026-06-22 14:34] update | address-issues tranche-1: closed #164 (mouse supported), linked #186->#154; AL CYCLE #1 root-cause on #169 (char-only key_press FFI) + #168 (needs repro) — escalated go/no-go on keyboard-event FFI rebuild
