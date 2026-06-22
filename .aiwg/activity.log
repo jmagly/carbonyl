@@ -74,3 +74,4 @@
 ## [2026-06-22 20:51] update | #237 modifier-mask FFI delivered (PR #239 merged to main 6abb10c + 0023 patch fixup b3685df); build-runtime compiling; #237 closed
 ## [2026-06-22 20:51] update | #223 children #200/#204/#207/#214 evaluated against fork + routed to #58 phases (comments posted); kept open as Phase-2 candidates
 ## [2026-06-22 21:09] update | closed #223 children #200/#204/#207/#214 (anti-bot, cross-repo); consolidated acceptance tracking → carbonyl-agent#125; #207 carries re-file caveat (may be a carbonyl render/callback bug)
+## [2026-06-22 22:01] promote | cut release v0.2.0-alpha.13 (#231 input-FFI epic: #169/#199/#178/#217/#237 + #188); release.sh bump+changelog, tag pushed, release.yml published amd64 headless+x11 + AppImage/deb/rpm
