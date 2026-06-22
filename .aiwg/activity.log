@@ -68,3 +68,4 @@
 ## [2026-06-22 14:34] update | address-issues tranche-1: closed #164 (mouse supported), linked #186->#154; AL CYCLE #1 root-cause on #169 (char-only key_press FFI) + #168 (needs repro) — escalated go/no-go on keyboard-event FFI rebuild
 ## [2026-06-22 14:39] update | address-issues: processed full ~14 queue (AL CYCLE #1 dispositions, 4 workstreams); created #231 input-event-FFI workstream (children #169/#199/#178/#217)
 ## [2026-06-22 14:59] update | #231 Stage 1: merged PR #232 (201be82) — TAB->VKEY_TAB focus fix (#169) via patch 0009; validate-patches green; build-runtime rebuilding; #169 open pending runtime verification
+## [2026-06-22 16:11] update | #169 RESOLVED+verified (TAB focus): 3-layer fix #232/#233/#234 (VKEY_TAB+Focus+dom_key); test/repro/issue-169 PASS x4 on runtime-48dcfb; closed #169; #231 Stage 1 complete
