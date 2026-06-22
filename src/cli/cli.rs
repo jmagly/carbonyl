@@ -65,6 +65,20 @@ impl AsRef<OsStr> for EnvVar {
 
 impl CommandLine {
     pub fn parse() -> CommandLine {
+        Self::parse_args(env::args().skip(1).collect())
+    }
+
+    /// Parse an explicit argument vector (everything after argv[0]).
+    ///
+    /// Split out from `parse()` so the Chromium-flag passthrough invariant
+    /// (#188, upstream fathyb#148) is unit-testable without touching the
+    /// process's real argv. Flags Carbonyl does not recognize fall through to
+    /// the `_ => ()` arm below and are preserved verbatim in `args`, which
+    /// `bridge.rs::main()` forwards to the in-process Chromium child — so
+    /// e.g. `--proxy-server` / `--user-agent` reach Chromium's
+    /// `base::CommandLine`. Carbonyl's own flags are consumed here *and* still
+    /// forwarded (Chromium ignores switches it doesn't know, like `--fps`).
+    fn parse_args(args: Vec<String>) -> CommandLine {
         let mut fps = 60.0;
         let mut zoom = 1.0;
         let mut debug = false;
@@ -82,7 +96,6 @@ impl CommandLine {
         let mut dump_text_mode = DumpTextMode::InnerText;
         let mut dump_text_idle_ms: u64 = 500;
         let mut dump_text_max_wait_ms: u64 = 30_000;
-        let args = env::args().skip(1).collect::<Vec<String>>();
 
         for arg in &args {
             let split: Vec<&str> = arg.split("=").collect();
@@ -361,5 +374,56 @@ mod tests {
         assert_eq!(parse_page_height("-1"), None);
         assert_eq!(parse_page_height("1280x800"), None);
         assert_eq!(parse_page_height("abc"), None);
+    }
+
+    // Issue #188 / upstream fathyb#148: "Provide a way to pass flags to
+    // chromium." Flags Carbonyl does not recognize (Chromium switches) must
+    // survive verbatim in `args`, in order, so `bridge.rs::main()` can forward
+    // them to the in-process Chromium child. This guards the passthrough
+    // invariant against a future cleanup of the parse loop silently dropping
+    // unknown flags. Asserting on `args` is env-independent: the field is the
+    // input vector and is never mutated by the parser.
+    #[test]
+    fn chromium_flags_pass_through_verbatim() {
+        let argv = vec![
+            "--proxy-server=socks5://127.0.0.1:9050".to_string(),
+            "--user-agent=Custom UA 1.0".to_string(),
+            "--lang=fr-FR".to_string(),
+            "--host-resolver-rules=MAP * 127.0.0.1".to_string(),
+            "https://example.com".to_string(),
+        ];
+        let cmd = CommandLine::parse_args(argv.clone());
+
+        // Every arg preserved verbatim and in order — the passthrough contract.
+        assert_eq!(cmd.args, argv);
+        // Unknown (Chromium) flags do not divert the program away from Main.
+        assert!(matches!(cmd.program, CommandLineProgram::Main));
+    }
+
+    #[test]
+    fn carbonyl_flags_are_consumed_yet_still_forwarded() {
+        // A Carbonyl flag (`--fps`) is parsed into config AND still left on
+        // `args` so it reaches Chromium too (which ignores unknown switches).
+        // A Chromium flag in the same argv is untouched by the parser. #188.
+        let argv = vec![
+            "--fps=30".to_string(),
+            "--proxy-server=http://proxy:8080".to_string(),
+            "https://example.com".to_string(),
+        ];
+        let cmd = CommandLine::parse_args(argv.clone());
+
+        assert_eq!(cmd.fps, 30.0); // consumed by Carbonyl
+        assert_eq!(cmd.args, argv); // and still forwarded verbatim
+    }
+
+    #[test]
+    fn chromium_flag_value_with_extra_equals_is_preserved() {
+        // The parser splits on '=' and keeps only the first value segment, but
+        // `args` retains the full original token — so a Chromium flag whose
+        // value itself contains '=' is forwarded intact. #188.
+        let argv = vec!["--proxy-server=https://u:p@host/?a=b&c=d".to_string()];
+        let cmd = CommandLine::parse_args(argv.clone());
+
+        assert_eq!(cmd.args, argv);
     }
 }

@@ -65,6 +65,13 @@ Environment variables:
                                ffmpeg, x11vnc) can capture them alongside
                                the terminal render. See docs/runtime-modes.md.
 
+Chromium options:
+    Any flag Carbonyl does not recognize is forwarded to Chromium, so you can
+    set the proxy, user-agent, language, and most other Chromium switches:
+        carbonyl --proxy-server=socks5://127.0.0.1:9050 https://example.com
+        carbonyl --user-agent="MyAgent/1.0" https://example.com
+        carbonyl --lang=fr-FR https://example.com
+
 Runtime modes (see docs/runtime-modes.md for the full operator guide):
     terminal-only              carbonyl <url>
     x11 + trusted input        carbonyl --ozone-platform=x11 <url>
