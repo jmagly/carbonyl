@@ -161,6 +161,28 @@ One binary, three deployment shapes:
 Full operator reference, session-portability rules, and CLI/env-var
 matrix: [docs/runtime-modes.md](docs/runtime-modes.md).
 
+### Passing Chromium flags
+
+Carbonyl forwards any flag it does not recognize straight to the underlying
+Chromium, so you can set the proxy, user-agent, language, and most other
+Chromium command-line switches alongside Carbonyl's own options:
+
+```bash
+# Route traffic through a SOCKS proxy
+carbonyl --proxy-server=socks5://127.0.0.1:9050 https://example.com
+
+# Override the user-agent string
+carbonyl --user-agent="MyAgent/1.0" https://example.com
+
+# Set the UI / Accept-Language locale, with a Carbonyl flag in the same line
+carbonyl --lang=fr-FR --zoom=80 https://example.com
+```
+
+Carbonyl-specific flags (`--fps`, `--zoom`, `--viewport`, …) are consumed by
+Carbonyl and still passed to Chromium, which ignores switches it doesn't know.
+Chromium flags Carbonyl doesn't recognize are passed through untouched — see
+`carbonyl --help` and [Chromium's flag list](https://peter.sh/experiments/chromium-command-line-switches/).
+
 ---
 
 ## Active Fork — Continued Maintenance
