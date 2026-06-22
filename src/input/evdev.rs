@@ -269,7 +269,7 @@ impl DeviceState {
             if let Some(char) = keycode_to_byte(code, self.shift) {
                 return Some(Event::KeyPress {
                     key: Key {
-                        char,
+                        char: char as u32,
                         modifiers: self.modifiers(),
                     },
                 });
@@ -418,7 +418,7 @@ mod tests {
         assert!(s.handle(ev(EV_KEY, KEY_LEFTSHIFT, KEY_PRESS)).is_none());
         match s.handle(ev(EV_KEY, 30, KEY_PRESS)) {
             Some(Event::KeyPress { key }) => {
-                assert_eq!(key.char, b'A');
+                assert_eq!(key.char, b'A' as u32);
                 assert!(key.modifiers.shift);
             }
             other => panic!("expected KeyPress, got {other:?}"),
@@ -426,7 +426,7 @@ mod tests {
         // release shift, 'a' -> 'a'
         assert!(s.handle(ev(EV_KEY, KEY_LEFTSHIFT, KEY_RELEASE)).is_none());
         match s.handle(ev(EV_KEY, 30, KEY_PRESS)) {
-            Some(Event::KeyPress { key }) => assert_eq!(key.char, b'a'),
+            Some(Event::KeyPress { key }) => assert_eq!(key.char, b'a' as u32),
             other => panic!("expected KeyPress, got {other:?}"),
         }
     }

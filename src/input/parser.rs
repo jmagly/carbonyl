@@ -17,6 +17,7 @@ enum Sequence {
     Mouse(Mouse),
     Keyboard(Keyboard),
     DeviceControl(DeviceControl),
+    Utf8(Utf8),
 }
 
 #[derive(Clone, Debug)]
@@ -78,6 +79,9 @@ impl Parser {
                 Sequence::Char => match key {
                     0x1b => Sequence::Escape,
                     0x03 => emit!(Event::Exit),
+                    // UTF-8 leading byte: accumulate the multi-byte sequence so
+                    // non-ASCII / composed input reaches the page intact.
+                    key if key >= 0x80 => Sequence::Utf8(Utf8::new(key)),
                     key => emit!(Event::KeyPress { key: key.into() }),
                 },
                 Sequence::Escape => match key {
@@ -97,11 +101,56 @@ impl Parser {
                 Sequence::Mouse(ref mut mouse) => parse!(mouse, key),
                 Sequence::Keyboard(ref mut keyboard) => parse!(keyboard, key),
                 Sequence::DeviceControl(ref mut dcs) => parse!(dcs, key),
+                Sequence::Utf8(ref mut utf8) => parse!(utf8, key),
             }
         }
 
         self.sequence = sequence;
 
         std::mem::take(&mut self.events)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key_codes(events: Vec<Event>) -> Vec<u32> {
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::KeyPress { key } => Some(key.char),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ascii_is_one_keypress_per_byte() {
+        let mut p = Parser::new();
+        assert_eq!(key_codes(p.parse(b"ab")), vec![0x61, 0x62]);
+    }
+
+    #[test]
+    fn two_byte_utf8_decodes_to_one_codepoint() {
+        // Cyrillic 'д' (U+0434) = 0xD0 0xB4 (#178).
+        let mut p = Parser::new();
+        assert_eq!(key_codes(p.parse("д".as_bytes())), vec![0x0434]);
+    }
+
+    #[test]
+    fn three_byte_utf8_decodes_to_one_codepoint() {
+        // CJK '中' (U+4E2D) = 0xE4 0xB8 0xAD (#217).
+        let mut p = Parser::new();
+        assert_eq!(key_codes(p.parse("中".as_bytes())), vec![0x4E2D]);
+    }
+
+    #[test]
+    fn utf8_accumulates_across_parse_calls() {
+        // Bytes can arrive split across reads; the codepoint must still be whole.
+        let mut p = Parser::new();
+        let bytes = "д".as_bytes();
+        assert!(key_codes(p.parse(&bytes[..1])).is_empty());
+        assert_eq!(key_codes(p.parse(&bytes[1..])), vec![0x0434]);
     }
 }

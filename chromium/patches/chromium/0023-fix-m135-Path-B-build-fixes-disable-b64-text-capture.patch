@@ -221,7 +221,7 @@ index 43d8c71167a7b..f1ba2b6b74d24 100644
  #if defined(HEADLESS_USE_PREFS)
 @@ -462,7 +466,7 @@ void HeadlessBrowserImpl::OnScrollInput(int delta) {
  
- void HeadlessBrowserImpl::OnKeyPressInput(char key) {
+ void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key) {
    bool raw = true;
 -  content::NativeWebKeyboardEvent event(
 +  input::NativeWebKeyboardEvent event(

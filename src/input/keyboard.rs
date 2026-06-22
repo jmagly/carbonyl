@@ -8,7 +8,10 @@ pub struct Keyboard {
 
 #[derive(Clone, Debug)]
 pub struct Key {
-    pub char: u8,
+    /// Unicode scalar value. Control/navigation keys use small codes
+    /// (e.g. 0x11 Up, 0x7f Backspace); printable input is the full codepoint,
+    /// so multi-byte UTF-8 (Cyrillic, CJK, …) survives intact (#178/#217).
+    pub char: u32,
     pub modifiers: KeyModifiers,
 }
 
@@ -39,7 +42,7 @@ impl Keyboard {
     }
     pub fn key(key: u8, modifiers: u8) -> Option<Event> {
         let modifiers = KeyModifiers::parse(modifiers);
-        let char = match key {
+        let char: u32 = match key {
             // Up
             b'A' => 0x11,
             // Down
@@ -75,7 +78,7 @@ impl Keyboard {
 impl From<u8> for Key {
     fn from(char: u8) -> Self {
         Self {
-            char,
+            char: char as u32,
             modifiers: KeyModifiers::default(),
         }
     }
