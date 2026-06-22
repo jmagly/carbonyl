@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.13] - 2026-06-22
+
+### 🚀 Features
+
+- Widen mouse FFI to carry button — right-click works ([#199](https://github.com/jmagly/carbonyl/issues/199))
+- Accept multi-byte UTF-8 input — Cyrillic/CJK ([#178](https://github.com/jmagly/carbonyl/issues/178), [#217](https://github.com/jmagly/carbonyl/issues/217))
+- Carry key modifier mask across input FFI — Shift+Tab, Ctrl/Alt/Meta combos ([#237](https://github.com/jmagly/carbonyl/issues/237))
+
+### 🐛 Bug Fixes
+
+- Map TAB to VKEY_TAB so it advances focus ([#169](https://github.com/jmagly/carbonyl/issues/169))
+- Focus headless WebContents on key input so TAB advances focus ([#169](https://github.com/jmagly/carbonyl/issues/169))
+- Set dom_key=TAB so Blink runs Tab focus traversal ([#169](https://github.com/jmagly/carbonyl/issues/169))
+- Update 0023 context for widened OnKeyPressInput signature
+- Mark runtime-<hash> releases as prerelease
+- Update 0023 context+offsets for [#237](https://github.com/jmagly/carbonyl/issues/237) OnKeyPressInput modifier widening
+
+### 📖 Documentation
+
+- Document Chromium flag passthrough; guard with tests ([#188](https://github.com/jmagly/carbonyl/issues/188))
+
+### Ci
+
+- Poll heartbeat + bounded SSH; drop dead re-dispatch ([#228](https://github.com/jmagly/carbonyl/issues/228))
+
+### Test
+
+- Add [#169](https://github.com/jmagly/carbonyl/issues/169) TAB-focus verification harness
+- Settle before TAB in [#169](https://github.com/jmagly/carbonyl/issues/169) harness (de-flake)
+
 ## [0.2.0-alpha.12] - 2026-06-21
 
 ### 🚀 Features
