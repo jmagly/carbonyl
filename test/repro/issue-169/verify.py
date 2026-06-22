@@ -91,6 +91,12 @@ def main():
             cleanup()
             return 2
 
+        # Settle: CFOCUS:f0 can fire from autofocus before the frame has fully
+        # taken focus and the renderer is ready to process a key event. Sending
+        # TAB too early drops the first focus traversal (observed flakiness).
+        # Drain briefly so the frame is focused before we send TAB.
+        drain(2.5)
+
         # 2. TAB -> #f1
         os.write(fd, b"\t")
         if not wait_for_focus("f1", timeout=6):
