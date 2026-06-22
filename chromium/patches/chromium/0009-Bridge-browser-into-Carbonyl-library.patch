@@ -370,7 +370,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +  }
 +}
 +
-+void HeadlessBrowserImpl::OnMouseUpInput(unsigned int x, unsigned int y) {
++void HeadlessBrowserImpl::OnMouseUpInput(unsigned int x, unsigned int y, unsigned int button) {
 +  for (auto* ctx: GetAllBrowserContexts()) {
 +    for (auto* contents: ctx->GetAllWebContents()) {
 +      auto* impl = HeadlessWebContentsImpl::From(contents);
@@ -387,7 +387,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +
 +      blink::WebMouseEvent event;
 +
-+      event.button = blink::WebMouseEvent::Button::kLeft;
++      event.button = button == 2 ? blink::WebMouseEvent::Button::kRight : button == 1 ? blink::WebMouseEvent::Button::kMiddle : blink::WebMouseEvent::Button::kLeft;
 +      event.click_count = 1;
 +      event.SetType(blink::WebInputEvent::Type::kMouseUp);
 +      event.SetTimeStamp(base::TimeTicks::Now());
@@ -399,7 +399,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +  }
 +}
 +
-+void HeadlessBrowserImpl::OnMouseDownInput(unsigned int x, unsigned int y) {
++void HeadlessBrowserImpl::OnMouseDownInput(unsigned int x, unsigned int y, unsigned int button) {
 +  for (auto* ctx: GetAllBrowserContexts()) {
 +    for (auto* contents: ctx->GetAllWebContents()) {
 +      auto* impl = HeadlessWebContentsImpl::From(contents);
@@ -416,7 +416,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +
 +      blink::WebMouseEvent event;
 +
-+      event.button = blink::WebMouseEvent::Button::kLeft;
++      event.button = button == 2 ? blink::WebMouseEvent::Button::kRight : button == 1 ? blink::WebMouseEvent::Button::kMiddle : blink::WebMouseEvent::Button::kLeft;
 +      event.click_count = 1;
 +      event.SetType(blink::WebInputEvent::Type::kMouseDown);
 +      event.SetTimeStamp(base::TimeTicks::Now());
@@ -512,14 +512,14 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +          carbonyl::browser->OnKeyPressInput(key);
 +        }
 +      },
-+      .mouse_up = [](unsigned int x, unsigned int y) {
++      .mouse_up = [](unsigned int x, unsigned int y, unsigned int button) {
 +        if (carbonyl::browser) {
-+          carbonyl::browser->OnMouseUpInput(x, y);
++          carbonyl::browser->OnMouseUpInput(x, y, button);
 +        }
 +      },
-+      .mouse_down = [](unsigned int x, unsigned int y) {
++      .mouse_down = [](unsigned int x, unsigned int y, unsigned int button) {
 +        if (carbonyl::browser) {
-+          carbonyl::browser->OnMouseDownInput(x, y);
++          carbonyl::browser->OnMouseDownInput(x, y, button);
 +        }
 +      },
 +      .mouse_move = [](unsigned int x, unsigned int y) {
@@ -577,8 +577,8 @@ index 1d9ba1861de00..eed25b81f39c6 100644
 +  void OnGoForwardInput();
 +  void OnScrollInput(int delta);
 +  void OnKeyPressInput(char key);
-+  void OnMouseUpInput(unsigned int x, unsigned int y);
-+  void OnMouseDownInput(unsigned int x, unsigned int y);
++  void OnMouseUpInput(unsigned int x, unsigned int y, unsigned int button);
++  void OnMouseDownInput(unsigned int x, unsigned int y, unsigned int button);
 +  void OnMouseMoveInput(unsigned int x, unsigned int y);
 +
 +  bool did_shutdown() const { return did_shutdown_; }

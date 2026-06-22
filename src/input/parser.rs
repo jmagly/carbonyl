@@ -28,8 +28,8 @@ pub enum TerminalEvent {
 #[derive(Clone, Debug)]
 pub enum Event {
     KeyPress { key: Key },
-    MouseUp { row: usize, col: usize },
-    MouseDown { row: usize, col: usize },
+    MouseUp { row: usize, col: usize, button: u32 },
+    MouseDown { row: usize, col: usize, button: u32 },
     MouseMove { row: usize, col: usize },
     Scroll { delta: isize },
     Terminal(TerminalEvent),

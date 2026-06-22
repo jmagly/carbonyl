@@ -247,14 +247,18 @@ impl DeviceState {
         let (col, row) = self.cell();
         match code {
             BTN_LEFT => match value {
-                KEY_PRESS => return Some(Event::MouseDown { row, col }),
-                KEY_RELEASE => return Some(Event::MouseUp { row, col }),
+                KEY_PRESS => return Some(Event::MouseDown { row, col, button: 0 }),
+                KEY_RELEASE => return Some(Event::MouseUp { row, col, button: 0 }),
                 _ => return None,
             },
-            // Right/middle have no distinct terminal Event; treat as left for now.
-            BTN_RIGHT | BTN_MIDDLE => match value {
-                KEY_PRESS => return Some(Event::MouseDown { row, col }),
-                KEY_RELEASE => return Some(Event::MouseUp { row, col }),
+            BTN_RIGHT => match value {
+                KEY_PRESS => return Some(Event::MouseDown { row, col, button: 2 }),
+                KEY_RELEASE => return Some(Event::MouseUp { row, col, button: 2 }),
+                _ => return None,
+            },
+            BTN_MIDDLE => match value {
+                KEY_PRESS => return Some(Event::MouseDown { row, col, button: 1 }),
+                KEY_RELEASE => return Some(Event::MouseUp { row, col, button: 1 }),
                 _ => return None,
             },
             _ => {}

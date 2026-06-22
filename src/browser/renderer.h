@@ -20,8 +20,8 @@ struct carbonyl_renderer_browser_delegate {
     void (*go_forward) ();
     void (*scroll) (int);
     void (*key_press) (char);
-    void (*mouse_up) (unsigned int, unsigned int);
-    void (*mouse_down) (unsigned int, unsigned int);
+    void (*mouse_up) (unsigned int, unsigned int, unsigned int);
+    void (*mouse_down) (unsigned int, unsigned int, unsigned int);
     void (*mouse_move) (unsigned int, unsigned int);
     void (*post_task) (void (*)(void*), void*);
 };
