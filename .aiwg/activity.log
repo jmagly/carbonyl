@@ -61,3 +61,6 @@
 ## [2026-06-18 01:14] update | address-issues run over #29/#139/#147 (verified resolved) + #181 (implemented, PR #221); threat-assess safe x4; AL CYCLE comments posted
 ## [2026-06-18 01:19] promote | merged PR #221 (#181 invert-colors) to main as e45b687 (signed); closes #181
 ## [2026-06-18 17:09] deploy | merged PR #222 (6589c2b): arm64-linux + macOS runtime builds auto-dispatch on v* release tags (mutsu, external drive)
+## [2026-06-21 21:00] create | .aiwg/working/issue-223-antibot-characterization.md (epic #223 anti-bot characterization, step 1)
+## [2026-06-22 02:03] update | src/cli + readme: document & test Chromium flag passthrough (#188)
+## [2026-06-22 02:08] update | #188 resolved & closed; PR #230 merged (c4a7252) + closed
