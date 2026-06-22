@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <!-- #178 (Cyrillic) / #217 (Chinese): non-ASCII input. The input's value is
+       reflected into document.title, which Carbonyl emits as a UTF-8 OSC
+       sequence (GPU-independent; see issue-169 README). -->
+  <title>RC:init</title>
+</head>
+<body>
+  <input id="f" autofocus>
+  <script>
+    const f = document.getElementById('f');
+    f.addEventListener('input', () => { document.title = 'VAL:' + f.value; });
+    window.addEventListener('load', () => { document.title = 'READY'; });
+  </script>
+</body>
+</html>

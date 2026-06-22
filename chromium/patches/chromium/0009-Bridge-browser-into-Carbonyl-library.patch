@@ -139,7 +139,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  void HeadlessBrowserImpl::SetOptions(HeadlessBrowser::Options options) {
    options_ = std::move(options);
-@@ -272,6 +299,322 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -272,6 +299,324 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
    return true;
  }
  
@@ -302,7 +302,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +  }
 +}
 +
-+void HeadlessBrowserImpl::OnKeyPressInput(char key) {
++void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key) {
 +  bool raw = true;
 +  content::NativeWebKeyboardEvent event(
 +      blink::WebKeyboardEvent::Type::kRawKeyDown,
@@ -336,7 +336,9 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +    default:
 +      raw = false;
 +
-+      event.text[0] = key;
++      // key is a full Unicode scalar; deliver as UTF-16 text. BMP covers
++      // Cyrillic/CJK (#178/#217); non-BMP would need a surrogate pair.
++      event.text[0] = static_cast<char16_t>(key);
 +  }
 +
 +  for (auto* ctx: GetAllBrowserContexts()) {
@@ -462,7 +464,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    CreateOSCryptAsync();
  
-@@ -284,6 +627,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -284,6 +629,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    platform_delegate_->Start();
  
    std::move(on_start_callback_).Run(this);
@@ -507,7 +509,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +          carbonyl::browser->OnScrollInput(delta);
 +        }
 +      },
-+      .key_press = [](char key) {
++      .key_press = [](unsigned int key) {
 +        if (carbonyl::browser) {
 +          carbonyl::browser->OnKeyPressInput(key);
 +        }
@@ -576,7 +578,7 @@ index 1d9ba1861de00..eed25b81f39c6 100644
 +  void OnGoBackInput();
 +  void OnGoForwardInput();
 +  void OnScrollInput(int delta);
-+  void OnKeyPressInput(char key);
++  void OnKeyPressInput(unsigned int key);
 +  void OnMouseUpInput(unsigned int x, unsigned int y, unsigned int button);
 +  void OnMouseDownInput(unsigned int x, unsigned int y, unsigned int button);
 +  void OnMouseMoveInput(unsigned int x, unsigned int y);

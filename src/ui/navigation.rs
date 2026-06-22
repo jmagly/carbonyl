@@ -125,9 +125,13 @@ impl Navigation {
                             }
                         }
                         key => {
-                            url.insert(cursor, key as char);
+                            // key is now a full Unicode scalar, so non-ASCII
+                            // URL-bar input works too (was the "TODO: Unicode").
+                            if let Some(ch) = char::from_u32(key) {
+                                url.insert(cursor, ch);
 
-                            self.cursor = Some((cursor + 1).min(url.width()))
+                                self.cursor = Some((cursor + 1).min(url.width()))
+                            }
                         }
                     }
 
@@ -295,7 +299,7 @@ mod tests {
             "macos" => modifiers.meta = true,
             _ => modifiers.alt = true,
         }
-        Key { char, modifiers }
+        Key { char: char.into(), modifiers }
     }
 
     #[test]
