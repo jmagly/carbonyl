@@ -64,3 +64,4 @@
 ## [2026-06-21 21:00] create | .aiwg/working/issue-223-antibot-characterization.md (epic #223 anti-bot characterization, step 1)
 ## [2026-06-22 02:03] update | src/cli + readme: document & test Chromium flag passthrough (#188)
 ## [2026-06-22 02:08] update | #188 resolved & closed; PR #230 merged (c4a7252) + closed
+## [2026-06-22 13:46] update | issue audit apply: refreshed epic #58 (Layer-1 row), linked #58<->#223, closed #173/#174/#175 (resolved), cross-linked mouse+IME clusters
