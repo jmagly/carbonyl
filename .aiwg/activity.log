@@ -70,3 +70,4 @@
 ## [2026-06-22 14:59] update | #231 Stage 1: merged PR #232 (201be82) — TAB->VKEY_TAB focus fix (#169) via patch 0009; validate-patches green; build-runtime rebuilding; #169 open pending runtime verification
 ## [2026-06-22 16:11] update | #169 RESOLVED+verified (TAB focus): 3-layer fix #232/#233/#234 (VKEY_TAB+Focus+dom_key); test/repro/issue-169 PASS x4 on runtime-48dcfb; closed #169; #231 Stage 1 complete
 ## [2026-06-22 18:03] update | #199 RESOLVED+verified (right-click): mouse-button FFI widened (PR #235, 95d3aa9); test/repro/issue-199 PASS x2 on runtime-edd288d9 (RC:md:2+RC:ctx:2); closed #199; #231 Stage 2a complete
+## [2026-06-22 18:34] update | #178/#217 RESOLVED+verified (UTF-8 input, PR #236 4f56a2c, runtime-414a0008 PASS x2); #231 EPIC CLOSED (all 4 children #169/#199/#178/#217 done+verified); modifier-mask follow-up filed
