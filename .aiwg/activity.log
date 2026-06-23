@@ -84,3 +84,4 @@
 ## [2026-06-23 04:56] create | #247 auto-wire macOS pkg/dmg into release.yml (PR #248 merged: package-macos job + --ssh-config); smoke-test surfaced mirror-idempotency bug → #249; closed #247
 ## [2026-06-23 04:58] create | filed MD5+GPG-signing issue on carbonyl + verification/keys-page issue on roctinam/magly.net (cross-linked)
 ## [2026-06-23 05:11] create | generated Carbonyl release signing key (ed25519, fpr 96B5DCE9…3A8907C0); committed keys/carbonyl-release.asc + docs/SIGNING.md; private→CI secret pending; updated #250 + magly.net#32
+## [2026-06-23 05:39] promote | #250 implemented (PR #251 merged): per-asset .md5 + detached .asc GPG signatures across release.yml + package-macos; soft-skip if key absent; docs SIGNING.md/install.md; smoke-tested; closed #250
