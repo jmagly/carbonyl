@@ -127,7 +127,21 @@ printf -v po_q '%q' "${scratch_base}/pkgout"
 echo "[mutsu-pkg] fetching artifacts back"
 remote "cd $po_q && tar cf - $(printf '%q ' "$pkg" "$dmg")" | tar xf - -C "$localout"
 [ -f "$localout/$pkg" ] && [ -f "$localout/$dmg" ] || { echo "ERROR: artifacts not received" >&2; exit 1; }
-( cd "$localout" && sha256sum "$pkg" > "$pkg.sha256" && sha256sum "$dmg" > "$dmg.sha256" )
+( cd "$localout"
+  for a in "$pkg" "$dmg"; do sha256sum "$a" > "$a.sha256"; md5sum "$a" > "$a.md5"; done
+)
+# Detached GPG signatures (per-asset) with the dedicated release key, if configured (#250).
+sigs=""
+if [ -n "${CARBONYL_RELEASE_GPG_PRIVATE_KEY:-}" ] && command -v gpg >/dev/null 2>&1; then
+  export GNUPGHOME="$(mktemp -d)"; chmod 700 "$GNUPGHOME"
+  printf '%s\n' "${CARBONYL_RELEASE_GPG_PRIVATE_KEY}" | gpg --batch --quiet --import
+  ( cd "$localout" && for a in "$pkg" "$dmg"; do gpg --batch --yes --pinentry-mode loopback --armor --detach-sign "$a"; done )
+  rm -rf "$GNUPGHOME"; sigs="$pkg.asc $dmg.asc"
+  echo "[mutsu-pkg] GPG-signed pkg + dmg"
+else
+  echo "[mutsu-pkg] CARBONYL_RELEASE_GPG_PRIVATE_KEY unset or gpg missing — pkg/dmg NOT signed"
+fi
+upload_files="$pkg $pkg.sha256 $pkg.md5 $dmg $dmg.sha256 $dmg.md5 $sigs"
 echo "[mutsu-pkg] local artifacts:"; ls -lh "$localout"/carbonyl-* | sed 's/^/  /'
 
 # ── 3. upload to the versioned Gitea release ────────────────────────────────
@@ -135,7 +149,7 @@ echo "[mutsu-pkg] resolving Gitea release for ${tag}"
 rid="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${GITEA_API}/releases/tags/${tag}" 2>/dev/null | jq -r '.id // empty')"
 [ -n "$rid" ] || { echo "ERROR: Gitea release ${tag} not found; run release.yml first" >&2; exit 1; }
 assets_api="${GITEA_API}/releases/${rid}/assets"
-for f in "$pkg" "$pkg.sha256" "$dmg" "$dmg.sha256"; do
+for f in $upload_files; do
   old="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${assets_api}" | jq -r ".[] | select(.name==\"${f}\") | .id" 2>/dev/null || true)"
   [ -n "$old" ] && curl -sf -X DELETE -H "Authorization: token ${GITEA_TOKEN}" "${assets_api}/${old}" >/dev/null
   curl -sf -X POST "${assets_api}" -H "Authorization: token ${GITEA_TOKEN}" \
@@ -153,7 +167,7 @@ else
   if [ -z "$ghid" ]; then
     echo "[mutsu-pkg] WARNING: GitHub release ${tag} not found; skipping mirror"
   else
-    for f in "$pkg" "$pkg.sha256" "$dmg" "$dmg.sha256"; do
+    for f in $upload_files; do
       mime="$(file -b --mime-type "${localout}/${f}")"
       old="$(curl -sf -H "Authorization: Bearer ${GH_MIRROR_TOKEN}" "${GH_API}/releases/${ghid}/assets" | jq -r ".[] | select(.name==\"${f}\") | .id" 2>/dev/null || true)"
       [ -n "$old" ] && curl -sf -X DELETE -H "Authorization: Bearer ${GH_MIRROR_TOKEN}" "${GH_API}/releases/assets/${old}" >/dev/null

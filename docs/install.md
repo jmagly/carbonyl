@@ -15,6 +15,15 @@ Gitea origin).
 > Prerelease versions appear as `0.2.0~alpha.9` in `.deb`/`.rpm` filenames — the
 > `~` is correct Debian/RPM ordering (sorts *before* `0.2.0`).
 
+> **Verifying downloads.** Every asset ships a `.sha256`, an `.md5`, and a detached
+> GPG signature `.asc` (signed with the dedicated Carbonyl release key):
+> ```bash
+> curl -fsSL https://magly.net/keys/carbonyl-release.asc | gpg --import
+> gpg --verify carbonyl-<version>-<asset>.asc carbonyl-<version>-<asset>
+> sha256sum -c carbonyl-<version>-<asset>.sha256   # md5sum -c …md5 (legacy)
+> ```
+> See [SIGNING.md](SIGNING.md) for the key fingerprint and full instructions.
+
 After installing, run for example:
 
 ```bash
