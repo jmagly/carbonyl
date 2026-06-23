@@ -98,7 +98,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  #include "base/compiler_specific.h"
  #include "base/functional/callback.h"
-@@ -65,6 +67,23 @@
+@@ -65,6 +67,24 @@
  #include "components/variations/service/variations_service.h"  // nogncheck
  #endif
  
@@ -110,6 +110,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +#include "third_party/blink/public/common/input/web_mouse_event.h"
 +#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 +#include "ui/events/keycodes/keyboard_codes.h"
++#include "ui/events/keycodes/dom/dom_key.h"
 +
 +namespace carbonyl {
 +
