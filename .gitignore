@@ -40,3 +40,9 @@ __pycache__/
 .windsurf/agents/
 .windsurf/skills/
 .windsurf/rules/
+*-private.asc
+*secret*.asc
+*.pem
+*.p12
+id_rsa
+id_ed25519
