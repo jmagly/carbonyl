@@ -137,7 +137,7 @@ npm install --global carbonyl && carbonyl https://github.com
 ### Install a native package
 
 Releases also ship native install packages — `.deb` / `.rpm` / `.AppImage`
-(Linux x86_64) and an unsigned `.pkg` / `.dmg` (macOS arm64):
+(Linux x86_64) and a `.pkg` / `.dmg` (macOS arm64, not Apple-notarized):
 
 ```bash
 sudo apt install ./carbonyl_<version>_amd64.deb        # Debian / Ubuntu
@@ -147,6 +147,22 @@ sudo dnf install ./carbonyl-<version>-1.x86_64.rpm     # Fedora / RHEL
 
 Full instructions (incl. the macOS Gatekeeper step for the unsigned installer):
 [docs/install.md](docs/install.md).
+
+### Verifying releases
+
+Every release asset ships a SHA-256 + MD5 checksum **and** a detached GPG signature
+(`<asset>.asc`). The checksums prove the download is intact; the **signature** proves it
+genuinely came from us. Import the Carbonyl release key once, then verify:
+
+```bash
+curl -fsSL https://magly.net/keys/carbonyl-release.asc | gpg --import
+gpg --verify carbonyl-<version>-<asset>.asc carbonyl-<version>-<asset>
+# → Good signature from "Carbonyl Release Signing <release@magly.net>"
+```
+
+Key fingerprint `96B5 DCE9 275E 218C BAB9  CB28 2DE7 DD0D 3A89 07C0` — published at
+<https://magly.net/keys/carbonyl-release.asc>. Full details, the key block, and rotation
+policy: [docs/SIGNING.md](docs/SIGNING.md).
 
 ### Runtime modes
 
