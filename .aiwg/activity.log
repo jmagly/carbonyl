@@ -79,3 +79,5 @@
 ## [2026-06-22 23:53] create | fathyb#210 fork-availability note posted; captured thread requests → sixel #241, tab-flag #242 (download #182/framebuffer #125/kbd #216 already tracked)
 ## [2026-06-22 23:53] create | fathyb#214 macOS Gatekeeper education posted; filed docs #245 (install.md .pkg→.tgz fix, modeled on Fortemi/HotM desktop-macos.md)
 ## [2026-06-23 01:57] update | found darwin build's REAL blocker: #169 dom_key=ui::DomKey::TAB missing dom_key.h include (green amd64 via transitive, fails macOS); fixed PR #246 (hash 1ffa→bc4c), macOS build re-dispatched to verify
+## [2026-06-23 03:05] promote | cut v0.2.0-alpha.14 — FIRST release with macOS arm64 (aarch64-apple-darwin.tgz) + #169 dom_key.h build fix; release.yml staged all 3 runtimes (hash bc4c)
+## [2026-06-23 03:19] promote | built+attached macOS .pkg/.dmg to v0.2.0-alpha.14 via mutsu-package-macos.sh (was the missing installer); filed auto-wire issue + updated #245
