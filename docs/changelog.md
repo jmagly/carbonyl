@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.15] - 2026-06-23
+
+### 🚀 Features
+
+- MD5 checksums + per-asset GPG signatures ([#250](https://github.com/jmagly/carbonyl/issues/250))
+
+### 📖 Documentation
+
+- Add Carbonyl release signing key + SIGNING.md ([#250](https://github.com/jmagly/carbonyl/issues/250))
+- Educate on release verification; embed public key + checksums; link magly.net ([#250](https://github.com/jmagly/carbonyl/issues/250))
+- Expand macOS Gatekeeper guidance + .tgz path ([#245](https://github.com/jmagly/carbonyl/issues/245))
+
+### Ci
+
+- Auto-build + attach macOS .pkg/.dmg on each release ([#247](https://github.com/jmagly/carbonyl/issues/247))
+- Make GitHub + Gitea asset mirror idempotent on re-dispatch ([#249](https://github.com/jmagly/carbonyl/issues/249))
+- Add report-only supply-chain + secret scanning ([#244](https://github.com/jmagly/carbonyl/issues/244))
+
+### Security
+
+- Harden the Rust↔C++ bridge boundary against panic/UB ([#243](https://github.com/jmagly/carbonyl/issues/243))
+
 ## [0.2.0-alpha.14] - 2026-06-23
 
 ### 🐛 Bug Fixes
