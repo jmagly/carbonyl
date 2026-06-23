@@ -1,0 +1,40 @@
+# cargo-deny configuration — supply-chain policy for the Rust crate.
+#
+# Consumed by `.gitea/workflows/security-audit.yml` (cargo-deny 0.19.x).
+# The workflow runs report-only first (#244); promote individual checks to
+# required once the tree is clean. Keep this file in sync with the cargo-deny
+# version pinned in that workflow.
+
+[advisories]
+# RustSec advisory database (vulnerabilities + unmaintained). Pulled fresh each
+# run, so the scheduled scan catches newly-disclosed CVEs in unchanged deps.
+# `ignore` is intentionally empty during the report-only phase: outstanding
+# advisories should stay visible, not be pre-cleared. When advisories is
+# promoted to a required check, either remediate the finding or add the
+# advisory id here with a written justification.
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Permissive licenses actually present across the crate + its transitive deps
+# (the crate itself is BSD-3-Clause). A license outside this set is a deliberate
+# review gate — it should surface in the report, not be silently allowed.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "Unicode-DFS-2016",
+]
+confidence-threshold = 0.8
+
+[bans]
+# A second major version of a crate is worth a look, not a block.
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+# Only crates.io and (for git deps) explicitly-allowed hosts. Mirrors the
+# dependency-source-policy rule at the supply-chain layer.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

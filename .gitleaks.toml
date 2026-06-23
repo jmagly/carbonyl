@@ -1,0 +1,23 @@
+# gitleaks configuration for the secret-scan job in
+# .gitea/workflows/security-audit.yml.
+#
+# Extends the upstream default ruleset and allowlists paths that are
+# high-false-positive and contain no project secrets. Token hygiene itself is
+# enforced by the token-security rule (heredoc-scoped, never echoed); this scan
+# is the regression guard.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Vendored upstream tooling and archived terminal/build session logs"
+paths = [
+    # Captured tmux / build-session logs. These contain compiler and tmux
+    # lexer debug output (e.g. `yylex_token: DoubleColon`) whose 16+ char runs
+    # trip the generic-api-key heuristic. Not credentials — verified 2026-06-23.
+    '''docs/archive/.*''',
+    # Vendored Google depot_tools — upstream tooling, not our secrets to manage.
+    '''chromium/depot_tools/.*''',
+    # The clone's own .git directory (scanned in --no-git filesystem mode).
+    '''(^|/)\.git/.*''',
+]
