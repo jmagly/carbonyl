@@ -83,3 +83,4 @@
 ## [2026-06-23 03:19] promote | built+attached macOS .pkg/.dmg to v0.2.0-alpha.14 via mutsu-package-macos.sh (was the missing installer); filed auto-wire issue + updated #245
 ## [2026-06-23 04:56] create | #247 auto-wire macOS pkg/dmg into release.yml (PR #248 merged: package-macos job + --ssh-config); smoke-test surfaced mirror-idempotency bug → #249; closed #247
 ## [2026-06-23 04:58] create | filed MD5+GPG-signing issue on carbonyl + verification/keys-page issue on roctinam/magly.net (cross-linked)
+## [2026-06-23 05:11] create | generated Carbonyl release signing key (ed25519, fpr 96B5DCE9…3A8907C0); committed keys/carbonyl-release.asc + docs/SIGNING.md; private→CI secret pending; updated #250 + magly.net#32
