@@ -1,0 +1,203 @@
+# security-audit.yml — supply-chain + secret scanning (#244)
+#
+# Four independent, REPORT-ONLY checks. Each runs its scanner with the scanner's
+# real exit code, so findings are visible as a failed step and in the run
+# summary — but every scan step is wrapped in `continue-on-error: true`, so the
+# workflow conclusion stays green. This is the deliberate "non-blocking report
+# first, promote to required once clean" rollout from #244. Nothing is
+# suppressed: findings appear in the step log and the job summary; only the GATE
+# is deferred.
+#
+# To promote a check to a required gate:
+#   1. drop its `continue-on-error: true`;
+#   2. add the job name (e.g. "cargo-audit") to the branch's required status checks.
+#
+# Tooling is fully pinned — gitleaks / cargo-audit / cargo-deny by version +
+# sha256, node by image digest. No Chromium builder image is needed: cargo-audit
+# and cargo-deny operate directly on Cargo.lock, and gitleaks scans the tree.
+# Advisory databases (RustSec, npm) are fetched fresh each run by design, which
+# is why the weekly schedule matters — an unchanged dependency can newly become
+# vulnerable.
+
+name: Security Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'deny.toml'
+      - '.gitleaks.toml'
+      - '.gitea/workflows/security-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'deny.toml'
+      - '.gitleaks.toml'
+      - '.gitea/workflows/security-audit.yml'
+  schedule:
+    # Mondays 06:00 UTC — re-scan unchanged deps against the latest advisory DBs.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  CARGO_AUDIT_VERSION: "0.22.2"
+  CARGO_AUDIT_SHA256: "7fb9497f8594b389e5fce5ef9b92db08432996895b2e0c5a0167a69ed445c428"
+  CARGO_DENY_VERSION: "0.19.9"
+  CARGO_DENY_SHA256: "f1f8eedc2a3ac297c540873f93785d4104b102c0079506b2a6b3221b7ec956af"
+  # node:22-bookworm-slim, pinned by digest (ci-action-pinning).
+  NODE_IMAGE: "node:22-bookworm-slim@sha256:d9f850096136edbc402debdd8729579a288aac64574ada0ff4db26b6ae58b0b2"
+
+jobs:
+  secret-scan:
+    name: gitleaks
+    runs-on: titan
+    steps:
+      - name: Checkout
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          CLONE_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"
+          git clone --depth 1 --branch "${CLONE_BRANCH}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      # Report-only (#244): real exit code is preserved (findings show as a failed
+      # step) but does not block the workflow. Promote by removing this line.
+      - name: gitleaks detect
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          tmp="$(mktemp -d)"
+          curl -fsSL -o "$tmp/gl.tgz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $tmp/gl.tgz" | sha256sum -c -
+          tar xzf "$tmp/gl.tgz" -C "$tmp" gitleaks
+          chmod +x "$tmp/gitleaks"
+          set +e
+          "$tmp/gitleaks" detect --no-git --source . --redact --no-banner \
+            --config .gitleaks.toml \
+            --report-format json --report-path "$tmp/report.json"
+          rc=$?
+          set -e
+          n=0; [ -f "$tmp/report.json" ] && n=$(grep -o '"RuleID"' "$tmp/report.json" | wc -l | tr -d ' ')
+          {
+            echo "### gitleaks ${GITLEAKS_VERSION}"
+            if [ "$rc" -eq 0 ]; then echo "✅ No leaks found."
+            else echo "⚠️ ${n} potential leak(s) — see step log. Report-only (#244)."; fi
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit "$rc"
+
+  cargo-audit:
+    name: cargo-audit
+    runs-on: titan
+    steps:
+      - name: Checkout
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          CLONE_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"
+          git clone --depth 1 --branch "${CLONE_BRANCH}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      # Report-only (#244). Promote by removing this line.
+      - name: cargo audit
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          tmp="$(mktemp -d)"
+          curl -fsSL -o "$tmp/ca.tgz" \
+            "https://github.com/rustsec/rustsec/releases/download/cargo-audit/v${CARGO_AUDIT_VERSION}/cargo-audit-x86_64-unknown-linux-musl-v${CARGO_AUDIT_VERSION}.tgz"
+          echo "${CARGO_AUDIT_SHA256}  $tmp/ca.tgz" | sha256sum -c -
+          tar xzf "$tmp/ca.tgz" -C "$tmp" --strip-components=1 --wildcards '*/cargo-audit'
+          chmod +x "$tmp/cargo-audit"
+          set +e
+          "$tmp/cargo-audit" audit --file Cargo.lock
+          rc=$?
+          set -e
+          {
+            echo "### cargo-audit ${CARGO_AUDIT_VERSION}"
+            if [ "$rc" -eq 0 ]; then echo "✅ No RustSec advisories."
+            else echo "⚠️ Advisories found — see step log. Report-only (#244)."; fi
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit "$rc"
+
+  cargo-deny:
+    name: cargo-deny
+    runs-on: titan
+    steps:
+      - name: Checkout
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          CLONE_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"
+          git clone --depth 1 --branch "${CLONE_BRANCH}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      # Report-only (#244). advisories+bans+licenses+sources, per deny.toml.
+      - name: cargo deny check
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          tmp="$(mktemp -d)"
+          curl -fsSL -o "$tmp/cd.tgz" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/${CARGO_DENY_VERSION}/cargo-deny-${CARGO_DENY_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          echo "${CARGO_DENY_SHA256}  $tmp/cd.tgz" | sha256sum -c -
+          tar xzf "$tmp/cd.tgz" -C "$tmp" --strip-components=1 --wildcards '*/cargo-deny'
+          chmod +x "$tmp/cargo-deny"
+          set +e
+          "$tmp/cargo-deny" check advisories bans licenses sources
+          rc=$?
+          set -e
+          {
+            echo "### cargo-deny ${CARGO_DENY_VERSION}"
+            if [ "$rc" -eq 0 ]; then echo "✅ Supply-chain policy clean."
+            else echo "⚠️ Policy findings — see step log. Report-only (#244)."; fi
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit "$rc"
+
+  npm-audit:
+    name: npm-audit
+    runs-on: titan
+    steps:
+      - name: Checkout
+        run: |
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          CLONE_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-main}}"
+          git clone --depth 1 --branch "${CLONE_BRANCH}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      # Report-only (#244). Runs in a digest-pinned node image.
+      - name: npm audit
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          CLONE="${GITHUB_WORKSPACE}/.repo-clone"
+          docker pull "${NODE_IMAGE}"
+          set +e
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp -e npm_config_cache=/tmp/.npm \
+            -v "${CLONE}:/w" -w /w \
+            "${NODE_IMAGE}" \
+            npm audit --omit=dev --audit-level=moderate
+          rc=$?
+          set -e
+          {
+            echo "### npm audit"
+            if [ "$rc" -eq 0 ]; then echo "✅ No npm advisories."
+            else echo "⚠️ Advisories — see step log. Report-only (#244)."; fi
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit "$rc"
