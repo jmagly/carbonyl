@@ -78,6 +78,9 @@ jobs:
     name: Publish ${{ github.event.inputs.tag || github.ref_name }}
     runs-on: titan
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.export.outputs.version }}
+      include_macos: ${{ steps.export.outputs.include_macos }}
 
     steps:
       - name: Resolve tag, version, target platforms, builder image
@@ -600,8 +603,11 @@ jobs:
                  "${GITHUB_WORKSPACE}/.release-stage" \
                  "${GITHUB_WORKSPACE}/.release-body.md" 2>/dev/null || true
 
-      - name: Summary
+      - name: Summary + export outputs
+        id: export
         run: |
+          echo "version=${VERSION}"             >> "$GITHUB_OUTPUT"
+          echo "include_macos=${INCLUDE_MACOS}" >> "$GITHUB_OUTPUT"
           echo ""
           echo "==> Release published"
           echo "    Gitea:  https://git.integrolabs.net/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
@@ -609,3 +615,79 @@ jobs:
           echo "    Variants: ${OZONE_VARIANTS}"
           echo "    Linux triples: ${LINUX_TRIPLES}"
           echo "    macOS arm64: ${INCLUDE_MACOS}"
+
+  # ── macOS installer (.pkg + .dmg) ───────────────────────────────────────────
+  # Runs AFTER the release exists (needs: release) and only when the release
+  # actually included the macOS runtime. Mirrors build-runtime-macos.yml: a
+  # standard ubuntu-latest runner SSHes to mutsu (only macOS runs pkgbuild/
+  # hdiutil) and drives scripts/mutsu-package-macos.sh, which builds the
+  # version-stamped installer and attaches it to both the Gitea + GitHub
+  # releases. This closes the gap where the installer was a manual step (#247).
+  package-macos:
+    name: Package macOS .pkg/.dmg on mutsu
+    needs: release
+    if: needs.release.outputs.include_macos == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: node:20-bookworm
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 60
+    env:
+      # External-drive pin (mutsu system drive is too small).
+      MUTSU_CARBONYL_DIR: /Volumes/build/carbonyl
+    steps:
+      - name: Install ssh/git/curl/jq
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends openssh-client git curl jq ca-certificates
+
+      - name: Checkout repo at the tag
+        run: |
+          set -euo pipefail
+          rm -rf "${GITHUB_WORKSPACE}/.repo-clone" 2>/dev/null || true
+          git clone --depth 1 --branch "${{ github.event.inputs.tag || github.ref_name }}" \
+            "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
+            "${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Set up mutsu SSH (from MUTSU_SSH_KEY)
+        env:
+          MUTSU_SSH_KEY: ${{ secrets.MUTSU_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "${MUTSU_SSH_KEY:-}" ] || { echo "ERROR: MUTSU_SSH_KEY secret is empty; see docs/ci-secrets.md" >&2; exit 1; }
+          SSH_DIR="${GITHUB_WORKSPACE}/.ssh-mutsu"
+          rm -rf "$SSH_DIR"; mkdir -p "$SSH_DIR"; chmod 700 "$SSH_DIR"
+          ( umask 077; printf '%s\n' "$MUTSU_SSH_KEY" > "$SSH_DIR/id_mutsu" )
+          chmod 600 "$SSH_DIR/id_mutsu"
+          : > "$SSH_DIR/known_hosts"; chmod 600 "$SSH_DIR/known_hosts"
+          {
+            echo "Host mutsu-agent"
+            echo "  HostName 10.0.42.41"
+            echo "  User manitcor"
+            echo "  IdentityFile ${SSH_DIR}/id_mutsu"
+            echo "  IdentitiesOnly yes"
+            echo "  UserKnownHostsFile ${SSH_DIR}/known_hosts"
+            echo "  StrictHostKeyChecking accept-new"
+            echo "  BatchMode yes"
+          } > "$SSH_DIR/config"
+          chmod 600 "$SSH_DIR/config"
+          echo "SSH_CONFIG=${SSH_DIR}/config" >> "$GITHUB_ENV"
+
+      - name: Build + attach macOS .pkg/.dmg on mutsu
+        env:
+          GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+          GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+        run: |
+          set -euo pipefail
+          [ -n "${GITEA_TOKEN:-}" ] || { echo "ERROR: BUILD_REPO_TOKEN empty; see docs/ci-secrets.md" >&2; exit 1; }
+          VERSION="${{ needs.release.outputs.version }}"
+          echo "::group::macOS installer (.pkg + .dmg) for ${VERSION}"
+          bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/mutsu-package-macos.sh" \
+            --version "${VERSION}" \
+            --host mutsu-agent \
+            --ssh-config "${SSH_CONFIG}" \
+            --remote-dir "${MUTSU_CARBONYL_DIR}"
+          echo "::endgroup::"

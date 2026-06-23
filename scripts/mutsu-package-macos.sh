@@ -19,7 +19,8 @@
 # Usage:
 #   GITEA_TOKEN=<tok> [GH_MIRROR_TOKEN=<tok>] \
 #     bash scripts/mutsu-package-macos.sh --version 0.2.0-alpha.9 \
-#       [--host mutsu-agent] [--remote-dir /Volumes/build/carbonyl] [--gitea-only]
+#       [--host mutsu-agent] [--remote-dir /Volumes/build/carbonyl] \
+#       [--ssh-config FILE] [--gitea-only]
 #
 # Tokens are read from the environment (or GITEA_TOKEN from ~/.config/gitea/token
 # if unset). GH_MIRROR_TOKEN enables the GitHub mirror upload; without it the
@@ -33,6 +34,7 @@ branch="${MUTSU_BRANCH:-main}"
 version=""
 arch="arm64"
 gitea_only="false"
+ssh_config=""
 scratch_base="/Volumes/build/.carbonyl-scratch"
 
 GITEA_REPO="roctinam/carbonyl"
@@ -53,6 +55,8 @@ while [ $# -gt 0 ]; do
     --branch) branch="$2"; shift 2 ;;
     --branch=*) branch="${1#--branch=}"; shift ;;
     --gitea-only) gitea_only="true"; shift ;;
+    --ssh-config) ssh_config="$2"; shift 2 ;;
+    --ssh-config=*) ssh_config="${1#--ssh-config=}"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "ERROR: unknown arg: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -68,6 +72,7 @@ fi
 [ -n "${GITEA_TOKEN:-}" ] || { echo "ERROR: GITEA_TOKEN not set (and ~/.config/gitea/token absent)" >&2; exit 1; }
 
 ssh_args=(-o BatchMode=yes)
+[ -n "$ssh_config" ] && ssh_args+=(-F "$ssh_config")
 remote() { ssh "${ssh_args[@]}" "$host" "$@"; }
 
 printf -v rd_q '%q' "$remote_dir"
