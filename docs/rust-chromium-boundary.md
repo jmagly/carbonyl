@@ -128,6 +128,12 @@ Documented at each function's entry in the catalog. The ones that have bitten us
 - **`carbonyl_renderer_draw_bitmap`**: the `pixels_size` argument MUST equal `cells × (2, 4)` physical pixels, matching the renderer's 2×4 quadrant sampler. If the Chromium side hands a larger buffer, the renderer silently crops.
 - **Mutex inside the `carbonyl_renderer*` bridge** is re-entered across `get_size` and `draw_bitmap`. Never call one while holding the other; treat them as exclusive entries.
 - **Handler FFIs (eval #5, network #6) must stay dead-strippable.** Call `carbonyl_eval_javascript` / `carbonyl_set_network_callback` / `carbonyl_set_network_capture` only from the dormant `pub fn` wrappers — never from a retained `#[no_mangle]` function. A retained reference forces the symbols into every link unit, including the `v8_context_snapshot_generator` aux binary, which does **not** link the injected C++ handlers and so fails with undefined references (PR #151). The matching `BUILD.gn` must also keep the handler objects out of the aux-binary's sources.
+- **No panic may unwind across the C ABI (#243).** The crate builds with the default `panic = "unwind"`, so a panic escaping a `pub extern "C"` function into Chromium C++ is undefined behavior. Every exported entry point must therefore *validate and early-return*, never `.unwrap()` on attacker- or caller-controlled input:
+  - Lock the bridge through `lock_bridge(RendererPtr) -> Option<MutexGuard<..>>` (null-checks the pointer, returns `None` on a poisoned mutex) and `let Some(..) = .. else { return }`. Functions with a non-`()` return type return a neutral value instead (`get_size` → zero `CSize`, `capture_screenshot` → empty `CBuffer`).
+  - Convert C strings through `cstr_to_str(*const c_char) -> Option<&str>` (null + UTF-8 validation); drop invalid entries rather than panicking.
+  - Compute buffer lengths with `checked_mul` before `slice::from_raw_parts` (`draw_bitmap` bails on overflow or a null/zero-area buffer) so a malformed `pixels_size` can't wrap to a short slice that then over-reads.
+  - `carbonyl_bridge_main` maps an `Err` from `main()` to a logged `exit(1)`, not `.unwrap()`.
+  - Every `unsafe impl Send/Sync` and `unsafe` block in `bridge.rs` carries a `// SAFETY:` rationale tying the assertion to the Mutex-serialized / process-lifetime ownership model above.
 
 ---
 

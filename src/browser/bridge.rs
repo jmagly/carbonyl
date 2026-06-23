@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::sync::{mpsc, Mutex, MutexGuard};
 use std::{env, io, thread};
 
 use libc::{c_char, c_float, c_int, c_uchar, c_uint, c_void, size_t};
@@ -76,10 +76,41 @@ pub struct RendererBridge {
     last_frame: Option<(Vec<u8>, Size)>,
 }
 
+// SAFETY: a `RendererBridge` is only ever owned by the `Mutex` created in
+// `carbonyl_renderer_create` and reached through `RendererPtr`. Every field is
+// touched only while that `Mutex` is held, so sharing the pointer across the
+// Chromium UI, render, and input threads never produces concurrent
+// unsynchronized access. The `Send`/`Sync` impls assert exactly that contract.
 unsafe impl Send for RendererBridge {}
 unsafe impl Sync for RendererBridge {}
 
 pub type RendererPtr = *const Mutex<RendererBridge>;
+
+/// Validate a `RendererPtr` and lock the bridge, returning `None` on a null
+/// pointer or a poisoned mutex instead of panicking across the FFI boundary
+/// (#243). A Rust panic unwinding into Chromium C++ is undefined behavior, so
+/// every `extern "C"` entry point funnels its lock acquisition through here and
+/// early-returns on `None`.
+fn lock_bridge<'a>(bridge: RendererPtr) -> Option<MutexGuard<'a, RendererBridge>> {
+    // SAFETY: `bridge` is the pointer produced by `carbonyl_renderer_create`
+    // (`Box::into_raw(Box::new(Mutex::new(..)))`). That allocation is never
+    // freed for the lifetime of the process, so the referent outlives any guard
+    // handed back here. The null check happens inside `as_ref`.
+    let mutex: &'a Mutex<RendererBridge> = unsafe { bridge.as_ref()? };
+    mutex.lock().ok()
+}
+
+/// Validate a C string pointer and borrow it as `&str`, returning `None` on a
+/// null pointer or non-UTF-8 bytes instead of panicking across the FFI boundary
+/// (#243).
+fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
+    if ptr.is_null() {
+        return None;
+    }
+    // SAFETY: non-null checked above; the C++ caller guarantees a
+    // NUL-terminated byte buffer that stays valid for the duration of the call.
+    unsafe { CStr::from_ptr(ptr) }.to_str().ok()
+}
 
 impl<T: Copy> From<CPoint> for Point<T>
 where
@@ -192,8 +223,14 @@ fn main() -> io::Result<Option<i32>> {
 
 #[no_mangle]
 pub extern "C" fn carbonyl_bridge_main() {
-    if let Some(code) = main().unwrap() {
-        std::process::exit(code)
+    // Never let an `Err` unwind across the C ABI (UB). Surface it and exit(1).
+    match main() {
+        Ok(Some(code)) => std::process::exit(code),
+        Ok(None) => {}
+        Err(err) => {
+            log::error!("carbonyl_bridge_main: fatal error: {err}");
+            std::process::exit(1)
+        }
     }
 }
 
@@ -285,10 +322,11 @@ pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
     }
 
     {
-        let bridge = unsafe { bridge.as_ref() };
-        let mut bridge = bridge.unwrap().lock().unwrap();
+        let Some(mut guard) = lock_bridge(bridge) else {
+            return;
+        };
 
-        bridge.renderer.enable()
+        guard.renderer.enable()
     }
 
     carbonyl_renderer_resize(bridge);
@@ -296,8 +334,9 @@ pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
 
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_resize(bridge: RendererPtr) {
-    let bridge = unsafe { bridge.as_ref() };
-    let mut bridge = bridge.unwrap().lock().unwrap();
+    let Some(mut bridge) = lock_bridge(bridge) else {
+        return;
+    };
     let window = bridge.window.update();
     let cells = window.cells;
 
@@ -315,22 +354,34 @@ pub extern "C" fn carbonyl_renderer_push_nav(
     can_go_back: bool,
     can_go_forward: bool,
 ) {
-    let (bridge, url) = unsafe { (bridge.as_ref(), CStr::from_ptr(url)) };
-    let (mut bridge, url) = (bridge.unwrap().lock().unwrap(), url.to_owned());
+    let Some(url) = cstr_to_str(url) else {
+        return;
+    };
+    let url = url.to_owned();
+    let Some(mut bridge) = lock_bridge(bridge) else {
+        return;
+    };
 
     bridge.renderer.render(move |renderer| {
-        renderer.push_nav(url.to_str().unwrap(), can_go_back, can_go_forward)
+        renderer.push_nav(&url, can_go_back, can_go_forward)
     });
 }
 
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_set_title(bridge: RendererPtr, title: *const c_char) {
-    let (bridge, title) = unsafe { (bridge.as_ref(), CStr::from_ptr(title)) };
-    let (mut bridge, title) = (bridge.unwrap().lock().unwrap(), title.to_owned());
+    let Some(title) = cstr_to_str(title) else {
+        return;
+    };
+    let title = title.to_owned();
+    let Some(mut bridge) = lock_bridge(bridge) else {
+        return;
+    };
 
-    bridge
-        .renderer
-        .render(move |renderer| renderer.set_title(title.to_str().unwrap()).unwrap());
+    bridge.renderer.render(move |renderer| {
+        if let Err(err) = renderer.set_title(&title) {
+            log::debug!("set_title failed: {err}");
+        }
+    });
 }
 
 #[no_mangle]
@@ -339,19 +390,28 @@ pub extern "C" fn carbonyl_renderer_draw_text(
     text: *const CText,
     text_size: size_t,
 ) {
-    let (bridge, text) = unsafe { (bridge.as_ref(), std::slice::from_raw_parts(text, text_size)) };
-    let mut bridge = bridge.unwrap().lock().unwrap();
-    let mut vec = text
+    if text.is_null() {
+        return;
+    }
+    let Some(mut bridge) = lock_bridge(bridge) else {
+        return;
+    };
+    // SAFETY: `text` is non-null (checked above) and the C++ caller passes a
+    // `text_size`-element array of `CText` valid for the duration of this call.
+    let items = unsafe { std::slice::from_raw_parts(text, text_size) };
+    let mut vec = items
         .iter()
-        .map(|text| {
-            let str = unsafe { CStr::from_ptr(text.text) };
+        .filter_map(|text| {
+            // Drop any entry whose string pointer is null or not valid UTF-8
+            // rather than panicking across the FFI boundary (#243).
+            let str = cstr_to_str(text.text)?;
 
-            (
-                str.to_str().unwrap().to_owned(),
+            Some((
+                str.to_owned(),
                 text.rect.origin.into(),
                 text.rect.size.into(),
                 text.color.into(),
-            )
+            ))
         })
         .collect::<Vec<(String, Point, Size, Color)>>();
 
@@ -373,6 +433,10 @@ impl CallbackData {
     }
 }
 
+// SAFETY: `CallbackData` wraps an opaque `*const c_void` that Chromium owns and
+// keeps valid until the paired completion callback runs. The Rust side never
+// dereferences it — it is moved into the render closure and handed straight back
+// to that callback — so transferring the wrapper across threads is sound.
 unsafe impl Send for CallbackData {}
 unsafe impl Sync for CallbackData {}
 
@@ -385,10 +449,34 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
     callback: extern "C" fn(*const c_void),
     callback_data: *const c_void,
 ) {
-    let length = (pixels_size.width * pixels_size.height * 4) as usize;
-    let (bridge, pixels) = unsafe { (bridge.as_ref(), std::slice::from_raw_parts(pixels, length)) };
+    // Checked arithmetic: a malformed `pixels_size` must not wrap to a short
+    // length that then over-reads in `from_raw_parts`. Bail on overflow or an
+    // empty/null buffer instead of panicking or reading out of bounds (#243).
+    let length = match (pixels_size.width as usize)
+        .checked_mul(pixels_size.height as usize)
+        .and_then(|n| n.checked_mul(4))
+    {
+        Some(length) if length > 0 => length,
+        Some(_) => return, // zero-area frame: nothing to draw
+        None => {
+            log::warning!(
+                "draw_bitmap: pixel dimensions {}x{} overflow usize; dropping frame",
+                pixels_size.width,
+                pixels_size.height
+            );
+            return;
+        }
+    };
+    if pixels.is_null() {
+        return;
+    }
+    let Some(mut bridge) = lock_bridge(bridge) else {
+        return;
+    };
+    // SAFETY: `pixels` is non-null (checked) and `length` was computed with
+    // checked arithmetic to match the C++-provided BGRA buffer for this call.
+    let pixels = unsafe { std::slice::from_raw_parts(pixels, length) };
     let callback_data = CallbackData(callback_data);
-    let mut bridge = bridge.unwrap().lock().unwrap();
 
     // #125 cycle 2: additive framebuffer sink. Blit the same BGRA raster to the
     // device at full resolution while the terminal renderer keeps running
@@ -463,8 +551,9 @@ impl CBuffer {
 /// Disarming drops any retained frame so the memory isn't held.
 #[no_mangle]
 pub extern "C" fn carbonyl_set_screenshot_capture(bridge: RendererPtr, enabled: bool) {
-    let bridge = unsafe { bridge.as_ref() };
-    let mut bridge = bridge.unwrap().lock().unwrap();
+    let Some(mut bridge) = lock_bridge(bridge) else {
+        return;
+    };
 
     bridge.capture_enabled = enabled;
     if !enabled {
@@ -484,16 +573,16 @@ pub extern "C" fn carbonyl_capture_screenshot(
     format: *const c_char,
     _quality: u8,
 ) -> CBuffer {
-    let bridge = unsafe { bridge.as_ref() };
-    let bridge = bridge.unwrap().lock().unwrap();
+    let Some(bridge) = lock_bridge(bridge) else {
+        return CBuffer::empty();
+    };
 
     // Parse the requested format for forward-compatibility; PNG is the only
     // backend today, so the parsed value is intentionally unused.
     let _format = if format.is_null() {
         ScreenshotFormat::Png
     } else {
-        let s = unsafe { CStr::from_ptr(format) };
-        ScreenshotFormat::parse(s.to_str().unwrap_or("png"))
+        ScreenshotFormat::parse(cstr_to_str(format).unwrap_or("png"))
     };
 
     match &bridge.last_frame {
@@ -536,8 +625,15 @@ pub extern "C" fn carbonyl_free_screenshot(buffer: CBuffer) {
 ///   should provide an explicit viewport.
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_get_size(bridge: RendererPtr) -> CSize {
-    let bridge = unsafe { bridge.as_ref() };
-    let bridge = bridge.unwrap().lock().unwrap();
+    let Some(bridge) = lock_bridge(bridge) else {
+        // Null pointer or poisoned lock: report a zero viewport rather than
+        // panicking across the FFI boundary (#243). The caller treats a zero
+        // size as "not ready yet".
+        return CSize {
+            width: 0,
+            height: 0,
+        };
+    };
 
     log::debug!("terminal size: {:?}", bridge.window.browser);
 
@@ -607,11 +703,14 @@ fn dispatch_input_events(
                 NavigationAction::GoBack() => emit!(go_back()),
                 NavigationAction::GoForward() => emit!(go_forward()),
                 NavigationAction::Refresh() => emit!(refresh()),
-                NavigationAction::GoTo(url) => {
-                    let c_str = CString::new(url).unwrap();
-
-                    emit!(go_to(c_str.as_ptr()))
-                }
+                NavigationAction::GoTo(url) => match CString::new(url) {
+                    // Drop a URL with an interior NUL byte rather than panicking
+                    // (#243); `c_str` is owned by the emitted closure.
+                    Ok(c_str) => emit!(go_to(c_str.as_ptr())),
+                    Err(_) => {
+                        log::debug!("skipping navigation: URL contains interior NUL byte")
+                    }
+                },
             };
 
             false
@@ -668,6 +767,14 @@ fn dispatch_input_events(
 
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_listen(bridge: RendererPtr, delegate: *mut BrowserDelegate) {
+    if bridge.is_null() || delegate.is_null() {
+        log::warning!("carbonyl_renderer_listen: null bridge or delegate; input disabled");
+        return;
+    }
+    // SAFETY: both pointers are non-null (checked above). `bridge` is the
+    // process-lifetime leaked Box from `carbonyl_renderer_create`, so promoting
+    // its borrow to `'static` is sound; `delegate` points at a C++-owned
+    // `BrowserDelegate` valid for this call, which we copy out by value.
     let bridge: &'static Mutex<RendererBridge> = unsafe { &*bridge };
     let delegate = unsafe { *delegate };
 
@@ -676,7 +783,11 @@ pub extern "C" fn carbonyl_renderer_listen(bridge: RendererPtr, delegate: *mut B
     // Additive — the stdin listener below still runs, so input works whether the
     // session is a bare console or a controlling terminal/SSH. evdev failures
     // (no device / no permission) end this thread quietly and leave stdin input.
-    if bridge.lock().unwrap().cmd.framebuffer.is_some() {
+    let has_framebuffer = bridge
+        .lock()
+        .map(|b| b.cmd.framebuffer.is_some())
+        .unwrap_or(false);
+    if has_framebuffer {
         thread::spawn(move || {
             if let Err(err) =
                 input::listen_evdev(|events| dispatch_input_events(bridge, delegate, events))
