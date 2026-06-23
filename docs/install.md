@@ -60,8 +60,23 @@ If your system lacks FUSE, run with `--appimage-extract-and-run`.
 
 ## macOS (Apple Silicon)
 
-The macOS installer is **unsigned** (no Apple Developer ID yet), so Gatekeeper
-will warn on first launch. To install:
+Carbonyl ships two macOS artifacts: the **`.pkg` installer** (inside a `.dmg`)
+and the **raw runtime tarball** `carbonyl-<version>-aarch64-apple-darwin.tgz`.
+Both are **self-signed but not notarized** — there's no Apple Developer ID
+($99/year) behind these builds yet — so Gatekeeper warns on first launch.
+
+> **Why the warning, and why it's safe.** macOS shows the "developer cannot be
+> verified" / "Apple could not verify … is free of malware" dialog for *every*
+> non-notarized app — the same wall Homebrew Cask apps and most open-source macOS
+> binaries hit. It is not a malware finding. Verify the download against its
+> published `.sha256` and detached GPG signature ([Verifying
+> downloads](#verifying-downloads)) and you have the assurance notarization would
+> give you. The native arm64 binary is **ad-hoc-signed** by the linker at build
+> time and the tarball preserves that signature, so the only thing blocking it is
+> the quarantine flag — not a missing code signature. It will not be killed on
+> exec; it just needs the flag cleared.
+
+### Option A — `.pkg` installer (in `.dmg`)
 
 1. Open the `.dmg`, then double-click `carbonyl-<version>-macos-arm64.pkg`.
 2. When macOS blocks it, either:
@@ -69,10 +84,29 @@ will warn on first launch. To install:
      click **Open Anyway**, and re-open the `.pkg`; or
    - clear the quarantine flag in Terminal first:
      ```bash
-     xattr -d com.apple.quarantine ~/Downloads/carbonyl-*.pkg
+     xattr -dr com.apple.quarantine ~/Downloads/carbonyl-<version>-macos-arm64.pkg
      ```
 3. The installer places the runtime in `/usr/local/carbonyl` and symlinks
    `/usr/local/bin/carbonyl`. Ensure `/usr/local/bin` is on your `PATH`.
+
+### Option B — raw runtime tarball (no installer)
+
+For users who'd rather not run an installer. The tarball unpacks to a
+`aarch64-apple-darwin/` directory containing the `carbonyl` binary:
+
+```bash
+tar xzf carbonyl-<version>-aarch64-apple-darwin.tgz
+# clear quarantine on the extracted runtime, then run it directly:
+xattr -dr com.apple.quarantine aarch64-apple-darwin
+./aarch64-apple-darwin/carbonyl https://example.com
+```
+
+If `-dr` leaves a stubborn flag, `xattr -cr aarch64-apple-darwin` (clear *all*
+extended attributes) also works.
+
+> **Re-quarantine on upgrade.** macOS re-applies `com.apple.quarantine` every
+> time you re-download a build, so repeat the **Open Anyway** / `xattr` step
+> after each upgrade — it's not a one-time-per-machine action.
 
 A signed + notarized installer will replace the unsigned one once a Developer ID
 is available (see [ADR-003](adr-003-native-install-packages.md), issue #129).
