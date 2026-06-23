@@ -426,6 +426,43 @@ jobs:
           bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/smoke-packages.sh" "${args[@]}"
           rm -rf "${GITHUB_WORKSPACE}/.pkg-linux"
 
+      - name: Generate MD5 checksums + GPG signatures (#250)
+        env:
+          CARBONYL_RELEASE_GPG_PRIVATE_KEY: ${{ secrets.CARBONYL_RELEASE_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          cd "${STAGE}"
+          # MD5 alongside the existing per-asset .sha256 (download-integrity / legacy
+          # tooling only — collision-broken, not an authenticity guarantee). See docs/SIGNING.md.
+          for f in *; do
+            case "$f" in *.sha256|*.md5|*.asc) continue ;; esac
+            [ -f "$f" ] || continue
+            md5sum "$f" > "$f.md5"
+          done
+          # Detached GPG signatures (per-asset) with the dedicated release key.
+          # Per-asset rather than a single manifest: release assets arrive across
+          # multiple waves (this job, the package-macos job, async runtime re-dispatches),
+          # so each job signs what it stages. Soft-skip if the key/gpg are absent so a
+          # missing secret never breaks a release.
+          if [ -z "${CARBONYL_RELEASE_GPG_PRIVATE_KEY:-}" ]; then
+            echo "::warning::CARBONYL_RELEASE_GPG_PRIVATE_KEY not set — releasing WITHOUT GPG signatures"
+          elif ! command -v gpg >/dev/null 2>&1; then
+            echo "::warning::gpg not available on runner — releasing WITHOUT GPG signatures"
+          else
+            export GNUPGHOME="$(mktemp -d)"; chmod 700 "$GNUPGHOME"
+            printf '%s\n' "${CARBONYL_RELEASE_GPG_PRIVATE_KEY}" | gpg --batch --quiet --import
+            n=0
+            for f in *; do
+              case "$f" in *.sha256|*.md5|*.asc) continue ;; esac
+              [ -f "$f" ] || continue
+              gpg --batch --yes --pinentry-mode loopback --armor --detach-sign "$f"
+              n=$((n+1))
+            done
+            rm -rf "$GNUPGHOME"
+            echo "[release] GPG-signed ${n} artifacts (release key 2DE7DD0D3A8907C0)"
+          fi
+          ls -lh "${STAGE}"
+
       - name: Resolve release notes
         run: |
           # Release-note body, in precedence order:
@@ -638,11 +675,11 @@ jobs:
       # External-drive pin (mutsu system drive is too small).
       MUTSU_CARBONYL_DIR: /Volumes/build/carbonyl
     steps:
-      - name: Install ssh/git/curl/jq
+      - name: Install ssh/git/curl/jq/gnupg
         run: |
           set -euo pipefail
           apt-get update
-          apt-get install -y --no-install-recommends openssh-client git curl jq ca-certificates
+          apt-get install -y --no-install-recommends openssh-client git curl jq gnupg ca-certificates
 
       - name: Checkout repo at the tag
         run: |
@@ -680,6 +717,7 @@ jobs:
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
           GH_MIRROR_TOKEN: ${{ secrets.GH_MIRROR_TOKEN }}
+          CARBONYL_RELEASE_GPG_PRIVATE_KEY: ${{ secrets.CARBONYL_RELEASE_GPG_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           [ -n "${GITEA_TOKEN:-}" ] || { echo "ERROR: BUILD_REPO_TOKEN empty; see docs/ci-secrets.md" >&2; exit 1; }

@@ -21,19 +21,31 @@ key signs releases — keep it current when the key rotates.
 
 ## How releases are signed (CI)
 
-`release.yml` signs the checksums manifest (`SHA256SUMS` / `MD5SUMS`) — and/or
-per-asset `.asc` — with this key. The **private key lives only as the CI secret
-`CARBONYL_RELEASE_GPG_PRIVATE_KEY`** and is never committed. Signing implementation
-is tracked in roctinam/carbonyl#250.
+Every release artifact carries a **detached signature** `<artifact>.asc` plus per-asset
+`<artifact>.sha256` and `<artifact>.md5`. Signatures are **per-asset** (not a single
+manifest) because release assets arrive across multiple waves — the `release` job signs
+the Linux/runtime tarballs and native packages, and the `package-macos` job signs the
+macOS `.pkg`/`.dmg`. The **private key lives only as the CI secret
+`CARBONYL_RELEASE_GPG_PRIVATE_KEY`** and is never committed. (roctinam/carbonyl#250)
+
+MD5 is supplied for download-integrity / legacy-tooling compatibility only — it is
+collision-broken and is **not** an authenticity guarantee. SHA-256 + the GPG signature
+are the real integrity/authenticity controls.
 
 ## Verifying a release
 
 ```bash
-# import the key (from the site or this repo)
+# 1. import the key (from the site or this repo)
 curl -fsSL https://magly.net/keys/carbonyl-release.asc | gpg --import
-# verify the signed checksums, then check the asset
-gpg --verify SHA256SUMS.asc SHA256SUMS
-sha256sum -c SHA256SUMS
+#    (or, from a repo checkout:  gpg --import keys/carbonyl-release.asc)
+
+# 2. verify the artifact's detached signature
+gpg --verify carbonyl-<ver>-<triple>.tgz.asc carbonyl-<ver>-<triple>.tgz
+#    look for: Good signature from "Carbonyl Release Signing <release@magly.net>"
+
+# 3. (optional) confirm integrity against the published checksum
+sha256sum -c carbonyl-<ver>-<triple>.tgz.sha256
+#    md5sum -c carbonyl-<ver>-<triple>.tgz.md5   # legacy/integrity only
 ```
 
 ## Rotation
