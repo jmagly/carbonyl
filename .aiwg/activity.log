@@ -81,3 +81,5 @@
 ## [2026-06-23 01:57] update | found darwin build's REAL blocker: #169 dom_key=ui::DomKey::TAB missing dom_key.h include (green amd64 via transitive, fails macOS); fixed PR #246 (hash 1ffa→bc4c), macOS build re-dispatched to verify
 ## [2026-06-23 03:05] promote | cut v0.2.0-alpha.14 — FIRST release with macOS arm64 (aarch64-apple-darwin.tgz) + #169 dom_key.h build fix; release.yml staged all 3 runtimes (hash bc4c)
 ## [2026-06-23 03:19] promote | built+attached macOS .pkg/.dmg to v0.2.0-alpha.14 via mutsu-package-macos.sh (was the missing installer); filed auto-wire issue + updated #245
+## [2026-06-23 04:56] create | #247 auto-wire macOS pkg/dmg into release.yml (PR #248 merged: package-macos job + --ssh-config); smoke-test surfaced mirror-idempotency bug → #249; closed #247
+## [2026-06-23 04:58] create | filed MD5+GPG-signing issue on carbonyl + verification/keys-page issue on roctinam/magly.net (cross-linked)
