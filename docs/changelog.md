@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.14] - 2026-06-23
+
+### 🐛 Bug Fixes
+
+- Include dom_key.h in 0009 so ui::DomKey::TAB compiles on macOS
+
 ## [0.2.0-alpha.13] - 2026-06-22
 
 ### 🚀 Features
