@@ -1,16 +1,8 @@
 # security-audit.yml — supply-chain + secret scanning (#244)
 #
-# Four independent, REPORT-ONLY checks. Each runs its scanner with the scanner's
-# real exit code, so findings are visible as a failed step and in the run
-# summary — but every scan step is wrapped in `continue-on-error: true`, so the
-# workflow conclusion stays green. This is the deliberate "non-blocking report
-# first, promote to required once clean" rollout from #244. Nothing is
-# suppressed: findings appear in the step log and the job summary; only the GATE
-# is deferred.
-#
-# To promote a check to a required gate:
-#   1. drop its `continue-on-error: true`;
-#   2. add the job name (e.g. "cargo-audit") to the branch's required status checks.
+# Four independent required checks. Each scanner exits with its real status so
+# findings fail the job and block the PR/main gate. This is the phase-2
+# promotion from the original report-only rollout in #244.
 #
 # Tooling is fully pinned — gitleaks / cargo-audit / cargo-deny by version +
 # sha256, node by image digest. No Chromium builder image is needed: cargo-audit
@@ -24,24 +16,8 @@ name: Security Audit
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'deny.toml'
-      - '.gitleaks.toml'
-      - '.gitea/workflows/security-audit.yml'
   push:
     branches: [main]
-    paths:
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'deny.toml'
-      - '.gitleaks.toml'
-      - '.gitea/workflows/security-audit.yml'
   schedule:
     # Mondays 06:00 UTC — re-scan unchanged deps against the latest advisory DBs.
     - cron: '0 6 * * 1'
@@ -70,10 +46,7 @@ jobs:
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
 
-      # Report-only (#244): real exit code is preserved (findings show as a failed
-      # step) but does not block the workflow. Promote by removing this line.
       - name: gitleaks detect
-        continue-on-error: true
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.repo-clone"
@@ -89,11 +62,14 @@ jobs:
             --report-format json --report-path "$tmp/report.json"
           rc=$?
           set -e
-          n=0; [ -f "$tmp/report.json" ] && n=$(grep -o '"RuleID"' "$tmp/report.json" | wc -l | tr -d ' ')
+          n=0
+          if [ -f "$tmp/report.json" ]; then
+            n=$( (grep -o '"RuleID"' "$tmp/report.json" 2>/dev/null || true) | wc -l | tr -d ' ')
+          fi
           {
             echo "### gitleaks ${GITLEAKS_VERSION}"
             if [ "$rc" -eq 0 ]; then echo "✅ No leaks found."
-            else echo "⚠️ ${n} potential leak(s) — see step log. Report-only (#244)."; fi
+            else echo "❌ ${n} potential leak(s) — see step log."; fi
           } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
           exit "$rc"
 
@@ -109,9 +85,7 @@ jobs:
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
 
-      # Report-only (#244). Promote by removing this line.
       - name: cargo audit
-        continue-on-error: true
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.repo-clone"
@@ -128,7 +102,7 @@ jobs:
           {
             echo "### cargo-audit ${CARGO_AUDIT_VERSION}"
             if [ "$rc" -eq 0 ]; then echo "✅ No RustSec advisories."
-            else echo "⚠️ Advisories found — see step log. Report-only (#244)."; fi
+            else echo "❌ Advisories found — see step log."; fi
           } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
           exit "$rc"
 
@@ -144,9 +118,8 @@ jobs:
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
 
-      # Report-only (#244). advisories+bans+licenses+sources, per deny.toml.
+      # advisories+bans+licenses+sources, per deny.toml.
       - name: cargo deny check
-        continue-on-error: true
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}/.repo-clone"
@@ -163,7 +136,7 @@ jobs:
           {
             echo "### cargo-deny ${CARGO_DENY_VERSION}"
             if [ "$rc" -eq 0 ]; then echo "✅ Supply-chain policy clean."
-            else echo "⚠️ Policy findings — see step log. Report-only (#244)."; fi
+            else echo "❌ Policy findings — see step log."; fi
           } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
           exit "$rc"
 
@@ -179,9 +152,8 @@ jobs:
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
 
-      # Report-only (#244). Runs in a digest-pinned node image.
+      # Runs in a digest-pinned node image.
       - name: npm audit
-        continue-on-error: true
         run: |
           set -euo pipefail
           CLONE="${GITHUB_WORKSPACE}/.repo-clone"
@@ -198,6 +170,6 @@ jobs:
           {
             echo "### npm audit"
             if [ "$rc" -eq 0 ]; then echo "✅ No npm advisories."
-            else echo "⚠️ Advisories — see step log. Report-only (#244)."; fi
+            else echo "❌ Advisories — see step log."; fi
           } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
           exit "$rc"
