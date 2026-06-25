@@ -669,6 +669,7 @@ fn dispatch_input_events(
     mut events: Vec<input::Event>,
 ) {
     use input::*;
+    let tab_focus = bridge.lock().map(|b| b.cmd.tab_focus).unwrap_or(false);
 
     macro_rules! emit {
         ($event:ident($($args:expr),*) => $closure:expr) => {{
@@ -728,6 +729,9 @@ fn dispatch_input_events(
                 }
                 KeyPress { key } => {
                     if dispatch(renderer.keypress(&key).unwrap()) {
+                        if key.is_tab() && !tab_focus {
+                            continue;
+                        }
                         // Carry the modifier mask alongside the codepoint so
                         // Shift+Tab / Ctrl/Alt/Meta combos reach the page (#237).
                         // The renderer still intercepts the invert-color shortcut

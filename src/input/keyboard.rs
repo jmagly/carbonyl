@@ -85,6 +85,10 @@ impl From<u8> for Key {
 }
 
 impl Key {
+    pub fn is_tab(&self) -> bool {
+        self.char == 0x09
+    }
+
     /// Shift+Tab as a terminal back-tab (CSI Z, terminfo `kcbt`): Tab keycode
     /// with the shift modifier set. xterm sends a bare `ESC [ Z` for Shift+Tab,
     /// carrying no numeric modifier code, so shift is intrinsic here. Forwarding
@@ -201,12 +205,19 @@ mod tests {
     fn back_tab_is_tab_with_shift() {
         let k = Key::back_tab();
         assert_eq!(k.char, 0x09);
+        assert!(k.is_tab());
         assert!(k.modifiers.shift);
         assert!(!k.modifiers.control);
         assert!(!k.modifiers.alt);
         assert!(!k.modifiers.meta);
         // The FFI mask the bridge forwards for Shift+Tab.
         assert_eq!(k.modifiers.mask(), 0b0001);
+    }
+
+    #[test]
+    fn plain_tab_is_tab_key() {
+        assert!(Key::from(0x09).is_tab());
+        assert!(!Key::from(b'a').is_tab());
     }
 
     #[test]

@@ -39,6 +39,10 @@ pub struct CommandLine {
     /// the automation / screenshot path. Set via `--page-height=N` or
     /// `CARBONYL_PAGE_HEIGHT=N`; `0`/malformed values are ignored.
     pub page_height: Option<u32>,
+    /// Whether Tab / Shift+Tab should be forwarded to Chromium for focus
+    /// traversal. Default is false so Tab stays out of the page unless the
+    /// operator opts in with `--tab-focus` / `--enable-tab-nav` (#242).
+    pub tab_focus: bool,
 }
 
 pub enum EnvVar {
@@ -88,6 +92,7 @@ impl CommandLine {
         let mut chrome_rows: u32 = 1;
         let mut framebuffer: Option<String> = None;
         let mut page_height: Option<u32> = None;
+        let mut tab_focus = false;
         let mut program = CommandLineProgram::Main;
         // --dump-text scaffolding — collected during the loop and folded into
         // `program` after, so it composes with `--help` / `--version` /
@@ -153,6 +158,7 @@ impl CommandLine {
                         }
                     }
                 }
+                "--tab-focus" | "--enable-tab-nav" => tab_focus = true,
 
                 "--dump-text" => {
                     dump_text_requested = true;
@@ -211,6 +217,10 @@ impl CommandLine {
             if let Ok(value) = env::var("CARBONYL_PAGE_HEIGHT") {
                 page_height = parse_page_height(&value);
             }
+        }
+
+        if let Ok(value) = env::var("CARBONYL_TAB_FOCUS") {
+            tab_focus = parse_bool_env(&value);
         }
 
         if !dump_text_requested {
@@ -275,6 +285,7 @@ impl CommandLine {
             chrome_rows,
             framebuffer,
             page_height,
+            tab_focus,
         }
     }
 }
@@ -307,6 +318,13 @@ fn parse_viewport(value: &str) -> Option<(u32, u32)> {
         return None;
     }
     Some((w, h))
+}
+
+fn parse_bool_env(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
 }
 
 /// Parse the `--dump-text=<mode>` value. Returns None on unrecognized input,
@@ -374,6 +392,36 @@ mod tests {
         assert_eq!(parse_page_height("-1"), None);
         assert_eq!(parse_page_height("1280x800"), None);
         assert_eq!(parse_page_height("abc"), None);
+    }
+
+    #[test]
+    fn tab_focus_defaults_off_and_cli_enables_it() {
+        let original = std::env::var("CARBONYL_TAB_FOCUS").ok();
+        std::env::remove_var("CARBONYL_TAB_FOCUS");
+
+        let cmd = CommandLine::parse_args(vec!["https://example.com".to_string()]);
+        assert!(!cmd.tab_focus);
+
+        let cmd = CommandLine::parse_args(vec!["--tab-focus".to_string()]);
+        assert!(cmd.tab_focus);
+
+        let cmd = CommandLine::parse_args(vec!["--enable-tab-nav".to_string()]);
+        assert!(cmd.tab_focus);
+
+        if let Some(value) = original {
+            std::env::set_var("CARBONYL_TAB_FOCUS", value);
+        }
+    }
+
+    #[test]
+    fn bool_env_parsing() {
+        assert!(parse_bool_env("1"));
+        assert!(parse_bool_env("true"));
+        assert!(parse_bool_env("YES"));
+        assert!(parse_bool_env("on"));
+        assert!(!parse_bool_env("0"));
+        assert!(!parse_bool_env("false"));
+        assert!(!parse_bool_env(""));
     }
 
     // Issue #188 / upstream fathyb#148: "Provide a way to pass flags to
