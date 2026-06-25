@@ -154,23 +154,45 @@ mod tests {
         // bit0 shift, bit1 control, bit2 alt, bit3 meta.
         assert_eq!(KeyModifiers::default().mask(), 0);
         assert_eq!(
-            KeyModifiers { shift: true, ..Default::default() }.mask(),
+            KeyModifiers {
+                shift: true,
+                ..Default::default()
+            }
+            .mask(),
             0b0001
         );
         assert_eq!(
-            KeyModifiers { control: true, ..Default::default() }.mask(),
+            KeyModifiers {
+                control: true,
+                ..Default::default()
+            }
+            .mask(),
             0b0010
         );
         assert_eq!(
-            KeyModifiers { alt: true, ..Default::default() }.mask(),
+            KeyModifiers {
+                alt: true,
+                ..Default::default()
+            }
+            .mask(),
             0b0100
         );
         assert_eq!(
-            KeyModifiers { meta: true, ..Default::default() }.mask(),
+            KeyModifiers {
+                meta: true,
+                ..Default::default()
+            }
+            .mask(),
             0b1000
         );
         assert_eq!(
-            KeyModifiers { shift: true, control: true, alt: true, meta: true }.mask(),
+            KeyModifiers {
+                shift: true,
+                control: true,
+                alt: true,
+                meta: true
+            }
+            .mask(),
             0b1111
         );
     }

@@ -362,9 +362,9 @@ pub extern "C" fn carbonyl_renderer_push_nav(
         return;
     };
 
-    bridge.renderer.render(move |renderer| {
-        renderer.push_nav(&url, can_go_back, can_go_forward)
-    });
+    bridge
+        .renderer
+        .render(move |renderer| renderer.push_nav(&url, can_go_back, can_go_forward));
 }
 
 #[no_mangle]

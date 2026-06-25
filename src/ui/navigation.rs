@@ -299,7 +299,10 @@ mod tests {
             "macos" => modifiers.meta = true,
             _ => modifiers.alt = true,
         }
-        Key { char: char.into(), modifiers }
+        Key {
+            char: char.into(),
+            modifiers,
+        }
     }
 
     #[test]
