@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
@@ -95,6 +96,12 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
   void OnIdleElapsed();
   void OnMaxWaitElapsed();
   void OnJavaScriptResult(base::Value result);
+  bool TryFetchEmbeddedPdfs(const std::string& page_text);
+  void OnEmbeddedPdfUrlsResult(base::Value result);
+  void FetchNextEmbeddedPdf();
+  void OnEmbeddedPdfDownloaded(
+      std::unique_ptr<network::SimpleURLLoader> loader,
+      std::optional<std::string> body);
   bool TryFetchPdfOnTimeout();
   void OnPdfDownloaded(std::unique_ptr<network::SimpleURLLoader> loader,
                        std::optional<std::string> body);
@@ -119,6 +126,10 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
   // exit code 6 instead of 0.
   bool nav_failed_ = false;
   int nav_error_code_ = 0;  // net::Error (negative on failure, 0 = net::OK)
+
+  std::string pending_text_;
+  std::vector<std::string> pending_pdf_urls_;
+  size_t pending_pdf_index_ = 0;
 
   base::OneShotTimer idle_timer_;
   base::OneShotTimer max_wait_timer_;

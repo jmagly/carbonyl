@@ -218,9 +218,13 @@ def main() -> int:
                 print(wrapper.innertext.stderr_tail)
             return 2
 
-        if contains_pdf_text(wrapper) or contains_pdf_text(direct):
-            print("PASS: PDF fixture text is visible through Carbonyl output.")
+        if contains_pdf_text(wrapper):
+            print("PASS: embedded PDF fixture text is visible through Carbonyl output.")
             return 0
+
+        if contains_pdf_text(direct):
+            print("FAIL: direct PDF text is visible, but embedded PDF text is not.")
+            return 1
 
         print("FAIL: wrapper HTML loaded, but PDF fixture text is not visible.")
         return 1

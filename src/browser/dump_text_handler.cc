@@ -20,6 +20,7 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -121,6 +122,24 @@ const char* ScriptForMode(DumpTextHandler::Mode mode) {
       return "''";
   }
   return "''";
+}
+
+const char* EmbeddedPdfUrlsScript() {
+  return
+      "Array.from(document.querySelectorAll("
+      "  'iframe[src], embed[src], object[data]'"
+      ")).map((element) => {"
+      "  const raw = element.getAttribute('src') ||"
+      "      element.getAttribute('data') || '';"
+      "  if (!raw) return '';"
+      "  let href = '';"
+      "  try { href = new URL(raw, document.baseURI).href; }"
+      "  catch (_) { return ''; }"
+      "  const type = (element.getAttribute('type') || '').toLowerCase();"
+      "  const path = new URL(href).pathname.toLowerCase();"
+      "  return (type === 'application/pdf' || path.endsWith('.pdf'))"
+      "      ? href : '';"
+      "}).filter(Boolean).join('\\n')";
 }
 
 bool LooksLikePdfUrl(const GURL& url) {
@@ -356,7 +375,130 @@ void DumpTextHandler::OnJavaScriptResult(base::Value result) {
     // global state interfered. Stringify defensively.
     text = result.DebugString();
   }
+  if (TryFetchEmbeddedPdfs(text)) {
+    return;
+  }
   EmitAndExit(text, 0);
+}
+
+bool DumpTextHandler::TryFetchEmbeddedPdfs(const std::string& page_text) {
+  if (mode_ == Mode::kAccessibility || !web_contents()) {
+    return false;
+  }
+
+  auto* rfh = web_contents()->GetPrimaryMainFrame();
+  if (!rfh) {
+    return false;
+  }
+
+  pending_text_ = page_text;
+  pending_pdf_urls_.clear();
+  pending_pdf_index_ = 0;
+  max_wait_timer_.Stop();
+
+  rfh->ExecuteJavaScriptInIsolatedWorld(
+      base::UTF8ToUTF16(EmbeddedPdfUrlsScript()),
+      base::BindOnce(&DumpTextHandler::OnEmbeddedPdfUrlsResult,
+                     base::Unretained(this)),
+      kCarbonylDumpTextWorldId);
+  return true;
+}
+
+void DumpTextHandler::OnEmbeddedPdfUrlsResult(base::Value result) {
+  if (finished_) {
+    return;
+  }
+
+  if (result.is_string()) {
+    for (const auto& line : base::SplitString(
+             result.GetString(), "\n", base::TRIM_WHITESPACE,
+             base::SPLIT_WANT_NONEMPTY)) {
+      GURL url(line);
+      if (LooksLikePdfUrl(url)) {
+        pending_pdf_urls_.push_back(url.spec());
+      }
+    }
+  }
+
+  FetchNextEmbeddedPdf();
+}
+
+void DumpTextHandler::FetchNextEmbeddedPdf() {
+  if (finished_) {
+    return;
+  }
+  if (pending_pdf_index_ >= pending_pdf_urls_.size()) {
+    EmitAndExit(pending_text_, 0);
+    return;
+  }
+
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = GURL(pending_pdf_urls_[pending_pdf_index_]);
+  request->load_flags = net::LOAD_DISABLE_CACHE;
+  auto loader = network::SimpleURLLoader::Create(
+      std::move(request), net::DefineNetworkTrafficAnnotation(
+                              "carbonyl_dump_text_embedded_pdf",
+                              R"(
+        semantics {
+          sender: "Carbonyl dump-text embedded PDF fallback"
+          description:
+            "Fetches PDF URLs embedded in the current document so Carbonyl can "
+            "extract PDF text when Chromium headless does not render those "
+            "iframes or objects into terminal-visible content."
+          trigger:
+            "The user invoked carbonyl --dump-text on a document containing "
+            "iframe, embed, or object elements that reference PDF URLs."
+          data: "The requested embedded PDF response body."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "The active Chromium profile cookie jar."
+          setting:
+            "No separate setting. This only runs for an explicit user "
+            "--dump-text navigation."
+          policy_exception_justification:
+            "Carbonyl is a command-line browser. Enterprise policy is not "
+            "implemented for this Carbonyl-specific diagnostic path."
+        })"));
+  network::SimpleURLLoader* loader_ptr = loader.get();
+  loader_ptr->DownloadToString(
+      web_contents()
+          ->GetBrowserContext()
+          ->GetDefaultStoragePartition()
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get(),
+      base::BindOnce(&DumpTextHandler::OnEmbeddedPdfDownloaded,
+                     base::Unretained(this), std::move(loader)),
+      kMaxPdfBytes);
+}
+
+void DumpTextHandler::OnEmbeddedPdfDownloaded(
+    std::unique_ptr<network::SimpleURLLoader> loader,
+    std::optional<std::string> body) {
+  if (finished_) {
+    return;
+  }
+  if (body) {
+    const std::string text = ExtractPdfText(base::as_byte_span(*body));
+    if (!text.empty()) {
+      if (!pending_text_.empty() && pending_text_.back() != '\n') {
+        pending_text_.push_back('\n');
+      }
+      pending_text_ += text;
+    } else {
+      LOG(WARNING)
+          << "carbonyl --dump-text: embedded PDF fallback extracted no text from "
+          << pending_pdf_urls_[pending_pdf_index_];
+    }
+  } else {
+    LOG(WARNING) << "carbonyl --dump-text: embedded PDF fallback failed to fetch "
+                 << pending_pdf_urls_[pending_pdf_index_] << " (net "
+                 << loader->NetError() << ")";
+  }
+
+  ++pending_pdf_index_;
+  FetchNextEmbeddedPdf();
 }
 
 bool DumpTextHandler::TryFetchPdfOnTimeout() {

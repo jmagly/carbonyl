@@ -24,6 +24,12 @@ other browser PDF viewer target in the headless runtime graph. The printing
 path exists for browser-driven print/PDF output, but that is not the same as
 rendering an arbitrary `application/pdf` response inside a web page or iframe.
 
+Carbonyl does provide a dump-text fallback for automation: direct PDF URLs and
+PDF URLs embedded with `iframe`, `embed`, or `object` are fetched through the
+active browser context and their text is extracted with PDFium. This makes PDF
+content visible to `--dump-text`, but it is not an interactive visual PDF
+viewer.
+
 ## Why Overleaf Is Affected
 
 Overleaf's normal preview pane serves compiled PDFs through browser PDF viewing
@@ -37,8 +43,8 @@ Treat PDF viewing as an explicit Carbonyl feature, not a one-line GN flag:
 
 1. Keep `enable_pdf=true` and `enable_printing=true`; they are already enabled
    in the current GN config.
-2. Use #182 download support as the immediate escape hatch for `application/pdf`
-   responses.
+2. Use #182 download support and the `--dump-text` PDF extraction path as the
+   immediate automation escape hatches for `application/pdf` responses.
 3. For interactive PDF viewing, add a dedicated PDF document path:
    - either integrate a PDFium-backed raster/text extraction flow into
      Carbonyl's renderer, or
