@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.16] - 2026-06-25
+
+### 🚀 Features
+
+- Gate TAB focus traversal behind opt-in flag ([#242](https://github.com/jmagly/carbonyl/issues/242))
+- Add PNG frame dump mode ([#206](https://github.com/jmagly/carbonyl/issues/206))
+
+### 📖 Documentation
+
+- Sixel/terminal image-protocol research spike ([#241](https://github.com/jmagly/carbonyl/issues/241))
+
+### 🔐 Security
+
+- Promote audit checks to required gates ([#244](https://github.com/jmagly/carbonyl/issues/244))
+
 ## [0.2.0-alpha.15] - 2026-06-23
 
 ### 🚀 Features
@@ -470,5 +485,4 @@ All notable changes to this project will be documented in this file.
 ### Build
 
 - Various build system fixes ([#20](https://github.com/jmagly/carbonyl/issues/20))
-
 
