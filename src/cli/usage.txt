@@ -35,9 +35,14 @@ Options:
                                accessibility (falls back to innertext until
                                #4 lands), raw-dom. Also via CARBONYL_DUMP_TEXT
                                env var. See docs/runtime-modes.md Mode 4.
+    --dump[=png],              skip the terminal renderer entirely; load the
+    --screenshot[=png]         URL, wait for compositor frames to stop changing,
+                               write the current frame as PNG to stdout, and
+                               exit. Also via CARBONYL_DUMP_FRAME=1.
     --idle=<ms>                with --dump-text: wait <ms> after the load
-                               event before extracting (default: 500).
-    --max-wait=<ms>            with --dump-text: hard timeout in ms
+                               event before extracting; with --dump: wait <ms>
+                               after the last compositor frame (default: 500).
+    --max-wait=<ms>            with dump modes: hard timeout in ms
                                (default: 30000).
     -b, --bitmap               render text as bitmaps
     -d, --debug                enable debug logs
@@ -60,6 +65,7 @@ Environment variables:
     CARBONYL_ENV_BITMAP=1      same as --bitmap
     CARBONYL_DUMP_TEXT=<mode>  same as --dump-text (empty / "1" implies
                                default mode); CLI flag wins if both set
+    CARBONYL_DUMP_FRAME=1      same as --dump=png
     CARBONYL_DUMP_IDLE_MS=<ms> same as --idle
     CARBONYL_DUMP_MAX_WAIT_MS=<ms>
                                same as --max-wait
@@ -82,3 +88,5 @@ Runtime modes (see docs/runtime-modes.md for the full operator guide):
     x11 + visual capture       CARBONYL_X_MIRROR=1 carbonyl --ozone-platform=x11 <url>
     dump-text                  carbonyl --dump-text <url>
        (text-only extraction)  (see docs/runtime-modes.md Mode 4)
+    dump-frame                 carbonyl --dump --viewport=1280x800 <url> > page.png
+       (PNG frame capture)     (see docs/runtime-modes.md Mode 5)

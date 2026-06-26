@@ -1,6 +1,6 @@
 # Carbonyl runtime modes
 
-Carbonyl ships one binary that supports three deployment modes. The mode
+Carbonyl ships one binary that supports multiple deployment modes. The mode
 is chosen at runtime via the underlying Chromium ozone platform plus a
 small set of Carbonyl-specific environment variables — there is no
 "x11 build" vs "headless build" distinction at the asset level (a
@@ -20,6 +20,7 @@ notes before switching modes mid-engagement.
 | Automation against bot-detecting sites | **x11 + uinput** | kernel uinput → Xorg → Chromium (`isTrusted=true`) | none (X window stays blank) | full |
 | Automation **and** screenshot/video capture | **x11 + uinput + X-mirror** | same as above | `scrot`, `ffmpeg`, `x11vnc` against `$DISPLAY` | full |
 | Text-only extraction (scraping, LLM pipes) | **`--dump-text`** | none — single-shot navigation | none — bypasses renderer | full |
+| Visual frame dump (screenshots, mailcap filters) | **`--dump`** | none — single-shot navigation | none — bypasses terminal renderer | full compositor frame |
 
 **Rule of thumb:** if you don't need bot-detection-resistant input, stay
 in terminal-only mode — it has the smallest dependency surface and the
@@ -193,6 +194,40 @@ length, since a real page can legitimately have an empty `innerText`.
 
 ---
 
+## Mode 5 — `--dump` / `--screenshot` (PNG frame dump, no terminal renderer)
+
+`--dump[=png]` loads the URL, watches compositor frames, waits until the frame
+has stopped changing for the idle window, writes the current frame as PNG bytes
+to stdout, and exits. The terminal renderer is not started, so stdout contains
+only the PNG payload.
+
+```bash
+carbonyl --dump --viewport=1280x800 https://example.com > page.png
+carbonyl --screenshot=png --page-height=4000 https://example.com > full-page.png
+```
+
+The mode uses the same BGRA frame cache and PNG encoder as the screenshot FFI,
+but it is CLI-first and single-shot. It is intentionally separate from
+`--dump-text=raw-dom`: raw DOM returns post-JavaScript HTML, while `--dump`
+returns the visual compositor frame.
+
+**Timing flags:**
+
+- `--idle=<ms>` — wait this long after the latest compositor frame before
+  writing the PNG (default: 500).
+- `--max-wait=<ms>` — hard timeout waiting for a frame / idle window
+  (default: 30000).
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| `0`  | PNG frame written to stdout |
+| `1`  | internal write/bridge failure |
+| `6`  | no encodable frame arrived before `--max-wait` |
+
+---
+
 ## CLI options reference
 
 ```
@@ -205,6 +240,8 @@ carbonyl [options] [url]
   -b, --bitmap               render text as quadrant bitmaps (default)
   --chrome-rows=<N>          stack the URL/chrome bar across N terminal rows
                              (default 1)
+  --dump[=png],
+  --screenshot[=png]         dump the current compositor frame as PNG
   -d, --debug                enable debug logs (also CARBONYL_ENV_DEBUG=1)
   -h, --help                 print usage
   -v, --version              print version

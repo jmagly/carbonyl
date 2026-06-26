@@ -10,6 +10,12 @@ pub enum DumpTextMode {
     RawDom,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DumpFrameFormat {
+    /// PNG image encoded from the latest compositor frame.
+    Png,
+}
+
 #[derive(Clone, Debug)]
 pub enum CommandLineProgram {
     Main,
@@ -19,6 +25,14 @@ pub enum CommandLineProgram {
     /// stdout, exit. Bypasses the terminal renderer entirely. See #88.
     DumpText {
         mode: DumpTextMode,
+        idle_ms: u64,
+        max_wait_ms: u64,
+    },
+    /// `--dump[=png]` / `--screenshot[=png]` — load the URL, wait for
+    /// compositor frames to settle, emit the current frame as PNG on stdout,
+    /// and exit. Bypasses the terminal renderer entirely. See #206.
+    DumpFrame {
+        format: DumpFrameFormat,
         idle_ms: u64,
         max_wait_ms: u64,
     },
@@ -63,6 +77,12 @@ impl CommandLineProgram {
                 // `bridge.rs::main()` appends to argv before chromium init.
                 // Implementation lives in:
                 //   chromium/src/carbonyl/src/browser/dump_text_handler.cc
+                return Some(cmd);
+            }
+            CommandLineProgram::DumpFrame { .. } => {
+                // Returning to the caller lets chromium proceed in-process with
+                // stdout still connected to the user's pipe. The Rust bridge
+                // owns frame-idle detection and PNG emission.
                 return Some(cmd);
             }
         }

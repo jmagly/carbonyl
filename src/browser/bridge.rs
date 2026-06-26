@@ -13,11 +13,12 @@ use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::process::{Command, Stdio};
 use std::sync::{mpsc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 use std::{env, io, thread};
 
 use libc::{c_char, c_float, c_int, c_uchar, c_uint, c_void, size_t};
 
-use crate::cli::{CommandLine, CommandLineProgram, EnvVar};
+use crate::cli::{CommandLine, CommandLineProgram, DumpFrameFormat, EnvVar};
 use crate::gfx::{Cast, Color, Point, Rect, Size};
 use crate::output::{encode_png, Framebuffer, RenderThread, ScreenshotFormat, Window};
 use crate::ui::navigation::NavigationAction;
@@ -74,6 +75,7 @@ pub struct RendererBridge {
     /// per-frame copy cost — embedders (e.g. carbonyl-fleet) arm it explicitly.
     capture_enabled: bool,
     last_frame: Option<(Vec<u8>, Size)>,
+    last_frame_at: Option<Instant>,
 }
 
 // SAFETY: a `RendererBridge` is only ever owned by the `Mutex` created in
@@ -164,19 +166,19 @@ fn main() -> io::Result<Option<i32>> {
         Some(cmd) => cmd,
     };
 
-    // --dump-text mode (issue #88): bypass the shell-mode fork. The
+    // Dump modes (#88, #206): bypass the shell-mode fork. The
     // chromium process writes the extracted page text directly to its
-    // own stdout via `carbonyl::DumpTextHandler` (browser-side C++,
-    // installed by patch 0027). The handler reads `--dump-text`,
-    // `--idle`, and `--max-wait` directly from chromium's
-    // `base::CommandLine` — those switches are already on argv because
-    // the user typed them, so no argv mutation is needed here.
+    // own stdout for `--dump-text`; the Rust bridge writes PNG bytes directly
+    // for `--dump`. Both need stdout free of terminal ANSI output.
     //
     // Returning Ok(None) makes carbonyl_bridge_main fall through to
     // chromium init in this same process — there is no child to spawn
     // and no terminal to set up; stdout already points at the user's
     // pipe.
-    if matches!(cmd.program, CommandLineProgram::DumpText { .. }) {
+    if matches!(
+        cmd.program,
+        CommandLineProgram::DumpText { .. } | CommandLineProgram::DumpFrame { .. }
+    ) {
         // Set CARBONYL_ENV_SHELL_MODE=1 in our env so chromium subprocesses
         // (zygote, gpu, renderer, ...) inherit it. Without this, each
         // subprocess re-enters Rust main() with the chromium-stripped argv
@@ -291,6 +293,7 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
         framebuffer,
         capture_enabled: false,
         last_frame: None,
+        last_frame_at: None,
     };
 
     // NOTE: the network-event sink is registered lazily in `set_network_capture`
@@ -309,15 +312,21 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
 
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
-    // --dump-text (#88): the C++-side DumpTextHandler writes the
-    // extracted page text directly to stdout. Enabling the terminal
-    // renderer would interleave its ANSI escape sequences and chrome
-    // bar into the same fd, corrupting the dump output. Skip the
-    // render-thread spin-up in this mode.
-    if matches!(
-        CommandLine::parse().program,
-        CommandLineProgram::DumpText { .. }
-    ) {
+    let program = CommandLine::parse().program;
+
+    // Dump modes (#88, #206): stdout belongs to the dump payload. Enabling the
+    // terminal renderer would interleave ANSI escapes and chrome into the same
+    // fd, corrupting the output.
+    if matches!(program, CommandLineProgram::DumpText { .. }) {
+        return;
+    }
+    if let CommandLineProgram::DumpFrame {
+        format,
+        idle_ms,
+        max_wait_ms,
+    } = program
+    {
+        start_dump_frame_monitor(bridge, format, idle_ms, max_wait_ms);
         return;
     }
 
@@ -330,6 +339,59 @@ pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
     }
 
     carbonyl_renderer_resize(bridge);
+}
+
+fn start_dump_frame_monitor(
+    bridge: RendererPtr,
+    format: DumpFrameFormat,
+    idle_ms: u64,
+    max_wait_ms: u64,
+) {
+    let bridge_addr = bridge as usize;
+    thread::spawn(move || {
+        let bridge = bridge_addr as RendererPtr;
+        let started_at = Instant::now();
+        let idle = Duration::from_millis(idle_ms);
+        let max_wait = Duration::from_millis(max_wait_ms);
+
+        loop {
+            thread::sleep(Duration::from_millis(50));
+            let now = Instant::now();
+            let timed_out = now.duration_since(started_at) >= max_wait;
+            let frame = {
+                let Some(bridge) = lock_bridge(bridge) else {
+                    std::process::exit(1);
+                };
+
+                match (&bridge.last_frame, bridge.last_frame_at) {
+                    (Some((bgra, size)), Some(last_frame_at))
+                        if timed_out || now.duration_since(last_frame_at) >= idle =>
+                    {
+                        match format {
+                            DumpFrameFormat::Png => encode_png(bgra, *size),
+                        }
+                    }
+                    _ if timed_out => None,
+                    _ => continue,
+                }
+            };
+
+            match frame {
+                Some(bytes) => {
+                    let mut stdout = io::stdout();
+                    if stdout
+                        .write_all(&bytes)
+                        .and_then(|_| stdout.flush())
+                        .is_ok()
+                    {
+                        std::process::exit(0);
+                    }
+                    std::process::exit(1);
+                }
+                None => std::process::exit(6),
+            }
+        }
+    });
 }
 
 #[no_mangle]
@@ -497,8 +559,15 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
     // carbonyl_capture_screenshot can encode it on demand. Gated on
     // capture_enabled — the per-frame copy is only paid when an embedder
     // actually wants screenshots.
-    if bridge.capture_enabled {
+    if bridge.capture_enabled || matches!(bridge.cmd.program, CommandLineProgram::DumpFrame { .. })
+    {
         bridge.last_frame = Some((pixels.to_vec(), pixels_size.into()));
+        bridge.last_frame_at = Some(Instant::now());
+    }
+
+    if matches!(bridge.cmd.program, CommandLineProgram::DumpFrame { .. }) {
+        callback(callback_data.as_ptr());
+        return;
     }
 
     bridge.renderer.render(move |renderer| {
@@ -558,6 +627,7 @@ pub extern "C" fn carbonyl_set_screenshot_capture(bridge: RendererPtr, enabled: 
     bridge.capture_enabled = enabled;
     if !enabled {
         bridge.last_frame = None;
+        bridge.last_frame_at = None;
     }
 }
 

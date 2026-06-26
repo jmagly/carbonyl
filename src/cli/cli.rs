@@ -1,6 +1,6 @@
 use std::{env, ffi::OsStr};
 
-use super::{CommandLineProgram, DumpTextMode};
+use super::{CommandLineProgram, DumpFrameFormat, DumpTextMode};
 
 #[derive(Clone, Debug)]
 pub struct CommandLine {
@@ -94,13 +94,15 @@ impl CommandLine {
         let mut page_height: Option<u32> = None;
         let mut tab_focus = false;
         let mut program = CommandLineProgram::Main;
-        // --dump-text scaffolding — collected during the loop and folded into
+        // Dump-mode scaffolding — collected during the loop and folded into
         // `program` after, so it composes with `--help` / `--version` /
         // `CARBONYL_DUMP_TEXT` env-var precedence. See #88.
         let mut dump_text_requested = false;
         let mut dump_text_mode = DumpTextMode::InnerText;
-        let mut dump_text_idle_ms: u64 = 500;
-        let mut dump_text_max_wait_ms: u64 = 30_000;
+        let mut dump_frame_requested = false;
+        let mut dump_frame_format = DumpFrameFormat::Png;
+        let mut dump_idle_ms: u64 = 500;
+        let mut dump_max_wait_ms: u64 = 30_000;
 
         for arg in &args {
             let split: Vec<&str> = arg.split("=").collect();
@@ -168,10 +170,18 @@ impl CommandLine {
                         }
                     }
                 }
+                "--dump" | "--screenshot" => {
+                    dump_frame_requested = true;
+                    if let Some(value) = value {
+                        if let Some(format) = parse_dump_frame_format(value) {
+                            dump_frame_format = format;
+                        }
+                    }
+                }
                 "--idle" => {
                     if let Some(value) = value {
                         if let Ok(ms) = value.parse::<u64>() {
-                            dump_text_idle_ms = ms;
+                            dump_idle_ms = ms;
                         }
                     }
                 }
@@ -179,7 +189,7 @@ impl CommandLine {
                     if let Some(value) = value {
                         if let Ok(ms) = value.parse::<u64>() {
                             if ms > 0 {
-                                dump_text_max_wait_ms = ms;
+                                dump_max_wait_ms = ms;
                             }
                         }
                     }
@@ -238,14 +248,26 @@ impl CommandLine {
 
         if let Ok(value) = env::var("CARBONYL_DUMP_IDLE_MS") {
             if let Ok(ms) = value.parse::<u64>() {
-                dump_text_idle_ms = ms;
+                dump_idle_ms = ms;
             }
         }
 
         if let Ok(value) = env::var("CARBONYL_DUMP_MAX_WAIT_MS") {
             if let Ok(ms) = value.parse::<u64>() {
                 if ms > 0 {
-                    dump_text_max_wait_ms = ms;
+                    dump_max_wait_ms = ms;
+                }
+            }
+        }
+
+        if !dump_frame_requested {
+            if let Ok(value) = env::var("CARBONYL_DUMP_FRAME") {
+                dump_frame_requested = parse_bool_env(&value);
+                if !value.is_empty() && value != "1" {
+                    if let Some(format) = parse_dump_frame_format(&value) {
+                        dump_frame_requested = true;
+                        dump_frame_format = format;
+                    }
                 }
             }
         }
@@ -256,8 +278,14 @@ impl CommandLine {
         if dump_text_requested && matches!(program, CommandLineProgram::Main) {
             program = CommandLineProgram::DumpText {
                 mode: dump_text_mode,
-                idle_ms: dump_text_idle_ms,
-                max_wait_ms: dump_text_max_wait_ms,
+                idle_ms: dump_idle_ms,
+                max_wait_ms: dump_max_wait_ms,
+            };
+        } else if dump_frame_requested && matches!(program, CommandLineProgram::Main) {
+            program = CommandLineProgram::DumpFrame {
+                format: dump_frame_format,
+                idle_ms: dump_idle_ms,
+                max_wait_ms: dump_max_wait_ms,
             };
         }
 
@@ -338,6 +366,15 @@ fn parse_dump_text_mode(value: &str) -> Option<DumpTextMode> {
     }
 }
 
+/// Parse the `--dump=<format>` / `--screenshot=<format>` value. Only PNG is
+/// implemented today; aliases are accepted so the CLI has room to grow.
+fn parse_dump_frame_format(value: &str) -> Option<DumpFrameFormat> {
+    match value.to_ascii_lowercase().as_str() {
+        "" | "1" | "png" | "image/png" => Some(DumpFrameFormat::Png),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,6 +403,63 @@ mod tests {
             Some(DumpTextMode::RawDom)
         );
         assert_eq!(parse_dump_text_mode("nope"), None);
+    }
+
+    #[test]
+    fn dump_frame_format_aliases() {
+        assert_eq!(parse_dump_frame_format(""), Some(DumpFrameFormat::Png));
+        assert_eq!(parse_dump_frame_format("png"), Some(DumpFrameFormat::Png));
+        assert_eq!(
+            parse_dump_frame_format("IMAGE/PNG"),
+            Some(DumpFrameFormat::Png)
+        );
+        assert_eq!(parse_dump_frame_format("jpeg"), None);
+    }
+
+    #[test]
+    fn dump_frame_cli_selects_program() {
+        let original = std::env::var("CARBONYL_DUMP_FRAME").ok();
+        std::env::remove_var("CARBONYL_DUMP_FRAME");
+
+        let cmd = CommandLine::parse_args(vec!["--dump".to_string()]);
+        assert!(matches!(
+            cmd.program,
+            CommandLineProgram::DumpFrame {
+                format: DumpFrameFormat::Png,
+                idle_ms: 500,
+                max_wait_ms: 30_000
+            }
+        ));
+
+        let cmd = CommandLine::parse_args(vec![
+            "--screenshot=png".to_string(),
+            "--idle=750".to_string(),
+            "--max-wait=9000".to_string(),
+        ]);
+        assert!(matches!(
+            cmd.program,
+            CommandLineProgram::DumpFrame {
+                format: DumpFrameFormat::Png,
+                idle_ms: 750,
+                max_wait_ms: 9000
+            }
+        ));
+
+        if let Some(value) = original {
+            std::env::set_var("CARBONYL_DUMP_FRAME", value);
+        }
+    }
+
+    #[test]
+    fn dump_text_takes_precedence_over_dump_frame() {
+        let cmd = CommandLine::parse_args(vec!["--dump".to_string(), "--dump-text".to_string()]);
+        assert!(matches!(
+            cmd.program,
+            CommandLineProgram::DumpText {
+                mode: DumpTextMode::InnerText,
+                ..
+            }
+        ));
     }
 
     #[test]
