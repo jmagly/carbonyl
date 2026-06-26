@@ -6,6 +6,7 @@
 #define CARBONYL_SRC_BROWSER_DUMP_TEXT_HANDLER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/memory/raw_ptr.h"
@@ -20,6 +21,10 @@ class WebContents;
 
 namespace headless {
 class HeadlessBrowser;
+}
+
+namespace network {
+class SimpleURLLoader;
 }
 
 namespace carbonyl {
@@ -90,6 +95,9 @@ class CARBONYL_BRIDGE_EXPORT DumpTextHandler
   void OnIdleElapsed();
   void OnMaxWaitElapsed();
   void OnJavaScriptResult(base::Value result);
+  bool TryFetchPdfOnTimeout();
+  void OnPdfDownloaded(std::unique_ptr<network::SimpleURLLoader> loader,
+                       std::optional<std::string> body);
   void EmitAndExit(const std::string& text, int exit_code);
 
   // RAW_PTR_EXCLUSION: HeadlessBrowser lifetime is owned by chromium's

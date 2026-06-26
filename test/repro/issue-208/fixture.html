@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>FD:init</title>
+    <style>
+      html, body {
+        margin: 0;
+        width: 100vw;
+        height: 100vh;
+        font-family: sans-serif;
+      }
+
+      button {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 28vh;
+        font-size: 24px;
+      }
+    </style>
+    <script>
+      function setState(value) {
+        document.title = value;
+      }
+
+      window.addEventListener("load", () => {
+        setState("FD:ready");
+        const button = document.getElementById("pick");
+        button.addEventListener("mousedown", () => setState("FD:md"));
+        button.addEventListener("click", async () => {
+          setState("FD:clicked");
+          try {
+            const handles = await window.showOpenFilePicker();
+            setState(`FD:selected:${handles[0].name}`);
+          } catch (error) {
+            setState(`FD:error:${error.name}`);
+          }
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <button id="pick" type="button">Pick fixture file</button>
+  </body>
+</html>

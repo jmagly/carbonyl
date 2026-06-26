@@ -2,11 +2,13 @@
 name = "carbonyl"
 version = "0.2.0-alpha.16"
 edition = "2021"
+license = "BSD-3-Clause"
 
 [dependencies]
 libc = "0.2"
 unicode-width = "0.1.10"
 unicode-segmentation = "1.10.0"
+unicode-bidi = "0.3.18"
 chrono = "0.4.40"
 png = "0.17"
 

@@ -11,24 +11,36 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "carbonyl/src/browser/accessibility_handler.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "headless/lib/browser/headless_browser_impl.h"
+#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/simple_url_loader.h"
+#include "third_party/pdfium/public/fpdf_text.h"
+#include "third_party/pdfium/public/fpdfview.h"
+#include "url/gurl.h"
 
 namespace carbonyl {
 
@@ -45,6 +57,8 @@ constexpr char kSwitchDumpMaxWait[] = "max-wait";
 // Default timings — match the Rust CLI defaults in src/cli/cli.rs.
 constexpr int kDefaultIdleMs = 500;
 constexpr int kDefaultMaxWaitMs = 30000;
+constexpr size_t kMaxPdfBytes =
+    network::SimpleURLLoader::kMaxBoundedStringDownloadSize;
 
 // Isolated-world ID for the extraction script. The content layer caps
 // embedder world IDs at `ISOLATED_WORLD_ID_MAX = 11` (private constant in
@@ -107,6 +121,54 @@ const char* ScriptForMode(DumpTextHandler::Mode mode) {
       return "''";
   }
   return "''";
+}
+
+bool LooksLikePdfUrl(const GURL& url) {
+  return url.is_valid() && url.SchemeIsHTTPOrHTTPS() &&
+         base::EndsWith(url.ExtractFileName(), ".pdf",
+                        base::CompareCase::INSENSITIVE_ASCII);
+}
+
+std::string ExtractPdfText(base::span<const uint8_t> pdf_data) {
+  FPDF_InitLibrary();
+  FPDF_DOCUMENT document =
+      FPDF_LoadMemDocument64(pdf_data.data(), pdf_data.size(), nullptr);
+  std::u16string text;
+  if (document) {
+    const int page_count = FPDF_GetPageCount(document);
+    for (int page_index = 0; page_index < page_count; ++page_index) {
+      FPDF_PAGE page = FPDF_LoadPage(document, page_index);
+      if (!page) {
+        continue;
+      }
+      FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+      if (!text_page) {
+        FPDF_ClosePage(page);
+        continue;
+      }
+      const int char_count = FPDFText_CountChars(text_page);
+      if (char_count <= 0) {
+        FPDFText_ClosePage(text_page);
+        FPDF_ClosePage(page);
+        continue;
+      }
+      if (!text.empty() && text.back() != u'\n') {
+        text.push_back(u'\n');
+      }
+      text.reserve(text.size() + char_count);
+      for (int i = 0; i < char_count; ++i) {
+        const unsigned int char_code = FPDFText_GetUnicode(text_page, i);
+        if (char_code) {
+          text.push_back(static_cast<char16_t>(char_code));
+        }
+      }
+      FPDFText_ClosePage(text_page);
+      FPDF_ClosePage(page);
+    }
+    FPDF_CloseDocument(document);
+  }
+  FPDF_DestroyLibrary();
+  return base::UTF16ToUTF8(text);
 }
 
 }  // namespace
@@ -274,6 +336,9 @@ void DumpTextHandler::OnMaxWaitElapsed() {
   if (finished_) {
     return;
   }
+  if (TryFetchPdfOnTimeout()) {
+    return;
+  }
   LOG(ERROR) << "carbonyl --dump-text: --max-wait elapsed (" << max_wait_ms_
              << " ms); page never finished loading";
   EmitAndExit(std::string(), 5);
@@ -290,6 +355,80 @@ void DumpTextHandler::OnJavaScriptResult(base::Value result) {
     // Mode scripts always return strings; anything else means the page's
     // global state interfered. Stringify defensively.
     text = result.DebugString();
+  }
+  EmitAndExit(text, 0);
+}
+
+bool DumpTextHandler::TryFetchPdfOnTimeout() {
+  if (mode_ == Mode::kAccessibility || !web_contents()) {
+    return false;
+  }
+  const GURL url = web_contents()->GetVisibleURL();
+  if (!LooksLikePdfUrl(url)) {
+    return false;
+  }
+
+  auto request = std::make_unique<network::ResourceRequest>();
+  request->url = url;
+  request->load_flags = net::LOAD_DISABLE_CACHE;
+  auto loader = network::SimpleURLLoader::Create(
+      std::move(request), net::DefineNetworkTrafficAnnotation(
+                              "carbonyl_dump_text_pdf",
+                              R"(
+        semantics {
+          sender: "Carbonyl dump-text PDF fallback"
+          description:
+            "Fetches the direct PDF URL currently being loaded so Carbonyl can "
+            "extract text through PDFium when Chromium headless does not "
+            "commit an in-browser PDF viewer document."
+          trigger:
+            "The user invoked carbonyl --dump-text on a URL whose path ends "
+            "in .pdf, and the normal page load timed out."
+          data: "The requested PDF response body."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: YES
+          cookies_store: "The active Chromium profile cookie jar."
+          setting:
+            "No separate setting. This only runs for an explicit user "
+            "--dump-text navigation."
+          policy_exception_justification:
+            "Carbonyl is a command-line browser. Enterprise policy is not "
+            "implemented for this Carbonyl-specific diagnostic path."
+        })"));
+  network::SimpleURLLoader* loader_ptr = loader.get();
+  loader_ptr->DownloadToString(
+      web_contents()
+          ->GetBrowserContext()
+          ->GetDefaultStoragePartition()
+          ->GetURLLoaderFactoryForBrowserProcess()
+          .get(),
+      base::BindOnce(&DumpTextHandler::OnPdfDownloaded, base::Unretained(this),
+                     std::move(loader)),
+      kMaxPdfBytes);
+  return true;
+}
+
+void DumpTextHandler::OnPdfDownloaded(
+    std::unique_ptr<network::SimpleURLLoader> loader,
+    std::optional<std::string> body) {
+  if (finished_) {
+    return;
+  }
+  if (!body) {
+    LOG(ERROR) << "carbonyl --dump-text: direct PDF fallback failed to fetch "
+               << web_contents()->GetVisibleURL() << " (net "
+               << loader->NetError() << ")";
+    EmitAndExit(std::string(), 5);
+    return;
+  }
+
+  const std::string text = ExtractPdfText(base::as_byte_span(*body));
+  if (text.empty()) {
+    LOG(ERROR) << "carbonyl --dump-text: direct PDF fallback extracted no text";
+    EmitAndExit(std::string(), 5);
+    return;
   }
   EmitAndExit(text, 0);
 }

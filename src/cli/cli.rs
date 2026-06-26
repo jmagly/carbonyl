@@ -43,6 +43,18 @@ pub struct CommandLine {
     /// traversal. Default is false so Tab stays out of the page unless the
     /// operator opts in with `--tab-focus` / `--enable-tab-nav` (#242).
     pub tab_focus: bool,
+    /// Optional Basic Auth credential (`user:pass`) used to rewrite the first
+    /// top-level HTTP(S) URL before spawning Chromium (#171). The credential is
+    /// not forwarded as a Chromium switch.
+    pub basic_auth: Option<String>,
+    /// Optional headless download directory (#182). `--download-dir` is
+    /// preserved as a Chromium switch; `CARBONYL_DOWNLOAD_DIR` appends that
+    /// switch when the CLI did not specify one.
+    pub download_dir: Option<String>,
+    /// Optional non-GUI file picker response path (#208). `--file-dialog-path`
+    /// is preserved as a Chromium switch; `CARBONYL_FILE_DIALOG_PATH` appends
+    /// that switch when the CLI did not specify one.
+    pub file_dialog_path: Option<String>,
 }
 
 pub enum EnvVar {
@@ -93,6 +105,9 @@ impl CommandLine {
         let mut framebuffer: Option<String> = None;
         let mut page_height: Option<u32> = None;
         let mut tab_focus = false;
+        let mut basic_auth: Option<String> = None;
+        let mut download_dir: Option<String> = None;
+        let mut file_dialog_path: Option<String> = None;
         let mut program = CommandLineProgram::Main;
         // Dump-mode scaffolding — collected during the loop and folded into
         // `program` after, so it composes with `--help` / `--version` /
@@ -161,6 +176,25 @@ impl CommandLine {
                     }
                 }
                 "--tab-focus" | "--enable-tab-nav" => tab_focus = true,
+                "--basic-auth" => {
+                    if let Some(value) = basic_auth_value(arg) {
+                        basic_auth = Some(value.to_string());
+                    }
+                }
+                "--download-dir" => {
+                    if let Some(value) = value {
+                        if !value.is_empty() {
+                            download_dir = Some(value.to_string());
+                        }
+                    }
+                }
+                "--file-dialog-path" => {
+                    if let Some(value) = value {
+                        if !value.is_empty() {
+                            file_dialog_path = Some(value.to_string());
+                        }
+                    }
+                }
 
                 "--dump-text" => {
                     dump_text_requested = true;
@@ -232,6 +266,35 @@ impl CommandLine {
         if let Ok(value) = env::var("CARBONYL_TAB_FOCUS") {
             tab_focus = parse_bool_env(&value);
         }
+
+        if basic_auth.is_none() {
+            if let Ok(value) = env::var("CARBONYL_BASIC_AUTH") {
+                if valid_basic_auth(&value) {
+                    basic_auth = Some(value);
+                }
+            }
+        }
+
+        if download_dir.is_none() {
+            if let Ok(value) = env::var("CARBONYL_DOWNLOAD_DIR") {
+                if !value.is_empty() {
+                    download_dir = Some(value);
+                }
+            }
+        }
+
+        if file_dialog_path.is_none() {
+            if let Ok(value) = env::var("CARBONYL_FILE_DIALOG_PATH") {
+                if !value.is_empty() {
+                    file_dialog_path = Some(value);
+                }
+            }
+        }
+
+        let args = apply_file_dialog_path(
+            apply_download_dir(apply_basic_auth(args, basic_auth.as_deref()), &download_dir),
+            &file_dialog_path,
+        );
 
         if !dump_text_requested {
             if let Ok(value) = env::var("CARBONYL_DUMP_TEXT") {
@@ -314,8 +377,110 @@ impl CommandLine {
             framebuffer,
             page_height,
             tab_focus,
+            basic_auth,
+            download_dir,
+            file_dialog_path,
         }
     }
+}
+
+fn basic_auth_value(arg: &str) -> Option<&str> {
+    let value = arg.strip_prefix("--basic-auth=")?;
+    valid_basic_auth(value).then_some(value)
+}
+
+fn valid_basic_auth(value: &str) -> bool {
+    match value.split_once(':') {
+        Some((user, pass)) => !user.is_empty() && !pass.is_empty(),
+        None => false,
+    }
+}
+
+fn apply_basic_auth(args: Vec<String>, credential: Option<&str>) -> Vec<String> {
+    let Some(credential) = credential else {
+        return args;
+    };
+
+    let mut rewritten = false;
+    args.into_iter()
+        .filter_map(|arg| {
+            if arg == "--basic-auth" || arg.starts_with("--basic-auth=") {
+                return None;
+            }
+
+            if !rewritten && !arg.starts_with('-') {
+                rewritten = true;
+                return Some(embed_basic_auth(&arg, credential).unwrap_or(arg));
+            }
+
+            Some(arg)
+        })
+        .collect()
+}
+
+fn embed_basic_auth(url: &str, credential: &str) -> Option<String> {
+    let (scheme, rest) = url
+        .strip_prefix("https://")
+        .map(|rest| ("https://", rest))
+        .or_else(|| url.strip_prefix("http://").map(|rest| ("http://", rest)))?;
+
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, suffix) = rest.split_at(authority_end);
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+
+    let (user, pass) = credential.split_once(':')?;
+    Some(format!(
+        "{scheme}{}:{}@{authority}{suffix}",
+        percent_encode_userinfo(user),
+        percent_encode_userinfo(pass)
+    ))
+}
+
+fn percent_encode_userinfo(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    encoded
+}
+
+fn apply_download_dir(mut args: Vec<String>, download_dir: &Option<String>) -> Vec<String> {
+    let Some(download_dir) = download_dir else {
+        return args;
+    };
+
+    if args
+        .iter()
+        .any(|arg| arg == "--download-dir" || arg.starts_with("--download-dir="))
+    {
+        return args;
+    }
+
+    args.insert(0, format!("--download-dir={download_dir}"));
+    args
+}
+
+fn apply_file_dialog_path(mut args: Vec<String>, file_dialog_path: &Option<String>) -> Vec<String> {
+    let Some(file_dialog_path) = file_dialog_path else {
+        return args;
+    };
+
+    if args
+        .iter()
+        .any(|arg| arg == "--file-dialog-path" || arg.starts_with("--file-dialog-path="))
+    {
+        return args;
+    }
+
+    args.insert(0, format!("--file-dialog-path={file_dialog_path}"));
+    args
 }
 
 /// Resolve the framebuffer device path from an optional `=VALUE`. An empty or
@@ -505,6 +670,154 @@ mod tests {
         if let Some(value) = original {
             std::env::set_var("CARBONYL_TAB_FOCUS", value);
         }
+    }
+
+    #[test]
+    fn basic_auth_rewrites_first_http_url_and_consumes_flag() {
+        let argv = vec![
+            "--basic-auth=user:pass".to_string(),
+            "--user-agent=Custom UA 1.0".to_string(),
+            "https://example.com/path?q=1".to_string(),
+        ];
+        let cmd = CommandLine::parse_args(argv);
+
+        assert_eq!(cmd.basic_auth.as_deref(), Some("user:pass"));
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--user-agent=Custom UA 1.0".to_string(),
+                "https://user:pass@example.com/path?q=1".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn basic_auth_percent_encodes_userinfo() {
+        let argv = vec![
+            "--basic-auth=user name:p@ss:word".to_string(),
+            "http://example.com".to_string(),
+        ];
+        let cmd = CommandLine::parse_args(argv);
+
+        assert_eq!(
+            cmd.args,
+            vec!["http://user%20name:p%40ss%3Aword@example.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn basic_auth_does_not_rewrite_existing_userinfo_or_non_http_urls() {
+        let cmd = CommandLine::parse_args(vec![
+            "--basic-auth=user:pass".to_string(),
+            "https://already:there@example.com".to_string(),
+        ]);
+        assert_eq!(cmd.args, vec!["https://already:there@example.com"]);
+
+        let cmd = CommandLine::parse_args(vec![
+            "--basic-auth=user:pass".to_string(),
+            "file:///tmp/page.html".to_string(),
+        ]);
+        assert_eq!(cmd.args, vec!["file:///tmp/page.html"]);
+    }
+
+    #[test]
+    fn download_dir_cli_is_preserved_as_chromium_switch() {
+        let cmd = CommandLine::parse_args(vec![
+            "--download-dir=/tmp/carbonyl-downloads".to_string(),
+            "https://example.com".to_string(),
+        ]);
+
+        assert_eq!(cmd.download_dir.as_deref(), Some("/tmp/carbonyl-downloads"));
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--download-dir=/tmp/carbonyl-downloads".to_string(),
+                "https://example.com".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn download_dir_helper_appends_switch_when_cli_absent() {
+        let args = apply_download_dir(
+            vec!["https://example.com".to_string()],
+            &Some("/tmp/from-env".to_string()),
+        );
+        assert_eq!(
+            args,
+            vec![
+                "--download-dir=/tmp/from-env".to_string(),
+                "https://example.com".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn download_dir_helper_keeps_existing_cli_switch() {
+        let args = apply_download_dir(
+            vec![
+                "--download-dir=/tmp/from-cli".to_string(),
+                "https://example.com".to_string(),
+            ],
+            &Some("/tmp/from-env".to_string()),
+        );
+        assert_eq!(
+            args,
+            vec![
+                "--download-dir=/tmp/from-cli".to_string(),
+                "https://example.com".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn file_dialog_path_cli_is_preserved_as_chromium_switch() {
+        let cmd = CommandLine::parse_args(vec![
+            "--file-dialog-path=/tmp/upload.txt".to_string(),
+            "https://example.com".to_string(),
+        ]);
+
+        assert_eq!(cmd.file_dialog_path.as_deref(), Some("/tmp/upload.txt"));
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--file-dialog-path=/tmp/upload.txt".to_string(),
+                "https://example.com".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn file_dialog_path_helper_appends_switch_when_cli_absent() {
+        let args = apply_file_dialog_path(
+            vec!["https://example.com".to_string()],
+            &Some("/tmp/from-env.txt".to_string()),
+        );
+        assert_eq!(
+            args,
+            vec![
+                "--file-dialog-path=/tmp/from-env.txt".to_string(),
+                "https://example.com".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn file_dialog_path_helper_keeps_existing_cli_switch() {
+        let args = apply_file_dialog_path(
+            vec![
+                "--file-dialog-path=/tmp/from-cli.txt".to_string(),
+                "https://example.com".to_string(),
+            ],
+            &Some("/tmp/from-env.txt".to_string()),
+        );
+        assert_eq!(
+            args,
+            vec![
+                "--file-dialog-path=/tmp/from-cli.txt".to_string(),
+                "https://example.com".to_string()
+            ]
+        );
     }
 
     #[test]

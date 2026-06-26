@@ -1,5 +1,5 @@
 // Copyright 2026 The Carbonyl Authors. All rights reserved.
-// Use of this source code is governed by an MIT-style license that can be
+// Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 // This file is a real blink translation unit. It is compiled with

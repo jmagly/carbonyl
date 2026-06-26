@@ -29,6 +29,15 @@ Options:
     --tab-focus                forward Tab and Shift+Tab to Chromium for page
                                focus traversal (default: disabled; alias:
                                --enable-tab-nav; also via CARBONYL_TAB_FOCUS=1).
+    --basic-auth=<user:pass>   add Basic Auth userinfo to the first HTTP(S) URL
+                               before launching Chromium. The flag is consumed
+                               by Carbonyl and is not forwarded to Chromium.
+                               Also via CARBONYL_BASIC_AUTH=user:pass.
+    --download-dir=<PATH>      set the headless download target directory
+                               (also via CARBONYL_DOWNLOAD_DIR env var).
+    --file-dialog-path=<PATH>  answer headless file/folder picker prompts with
+                               PATH (also via CARBONYL_FILE_DIALOG_PATH env
+                               var). Without it, headless pickers cancel.
     --dump-text[=<mode>]       skip the terminal renderer entirely; load the
                                URL, wait for the page, dump page text to
                                stdout, and exit. Modes: innertext (default),
@@ -61,6 +70,14 @@ Environment variables:
     CARBONYL_PAGE_HEIGHT=N     same as --page-height
     CARBONYL_CHROME_ROWS=N     same as --chrome-rows
     CARBONYL_TAB_FOCUS=1       same as --tab-focus
+    CARBONYL_BASIC_AUTH=u:p    same as --basic-auth; removed from the spawned
+                               Chromium child environment
+    CARBONYL_DOWNLOAD_DIR=PATH same as --download-dir when the CLI flag is
+                               absent
+    CARBONYL_FILE_DIALOG_PATH=PATH
+                               same as --file-dialog-path when the CLI flag is
+                               absent; removed from the spawned Chromium child
+                               environment
     CARBONYL_ENV_DEBUG=1       same as --debug
     CARBONYL_ENV_BITMAP=1      same as --bitmap
     CARBONYL_DUMP_TEXT=<mode>  same as --dump-text (empty / "1" implies

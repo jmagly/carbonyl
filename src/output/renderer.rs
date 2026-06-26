@@ -1,8 +1,10 @@
 use std::{
+    borrow::Cow,
     io::{self, Write},
     rc::Rc,
 };
 
+use unicode_bidi::BidiInfo;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -281,40 +283,124 @@ impl Renderer {
         } else {
             // Compute the buffer index based on the position
             let index = origin.x / 2 + (origin.y + 1) / 4 * (viewport.width as i32);
-            let mut iter = self.cells[len.min(index as usize)..].iter_mut();
+            if index < 0 || viewport.width == 0 {
+                return;
+            }
+
+            let mut cursor = len.min(index as usize);
+            let row_end = len.min((cursor / viewport.width + 1) * viewport.width);
+
+            let visual_text = visual_order(string);
 
             // Get every Unicode grapheme in the input string
-            for grapheme in UnicodeSegmentation::graphemes(string, true) {
+            for grapheme in UnicodeSegmentation::graphemes(visual_text.as_ref(), true) {
                 let width = grapheme.width();
+                if width == 0 {
+                    continue;
+                }
+
+                if cursor + width > row_end {
+                    return;
+                }
 
                 for index in 0..width {
-                    // Get the next terminal cell at the given position
-                    match iter.next() {
-                        // Stop if we're at the end of the buffer
-                        None => return,
-                        // Set the cell to the current grapheme
-                        Some((_, cell)) => {
-                            let next = Grapheme {
-                                // Create a new shared reference to the text
-                                color,
-                                index,
-                                width,
-                                // Export the set of unicode code points for this graphene into an UTF-8 string
-                                char: grapheme.to_string(),
-                            };
+                    let (_, cell) = &mut self.cells[cursor + index];
+                    let next = Grapheme {
+                        // Create a new shared reference to the text
+                        color,
+                        index,
+                        width,
+                        // Export the set of unicode code points for this graphene into an UTF-8 string
+                        char: grapheme.to_string(),
+                    };
 
-                            if match cell.grapheme {
-                                None => true,
-                                Some(ref previous) => {
-                                    previous.color != next.color || previous.char != next.char
-                                }
-                            } {
-                                cell.grapheme = Some(Rc::new(next))
-                            }
+                    if match cell.grapheme {
+                        None => true,
+                        Some(ref previous) => {
+                            previous.color != next.color || previous.char != next.char
                         }
+                    } {
+                        cell.grapheme = Some(Rc::new(next))
                     }
                 }
+
+                cursor += width;
             }
         }
+    }
+}
+
+fn visual_order(text: &str) -> Cow<'_, str> {
+    let bidi = BidiInfo::new(text, None);
+    let Some(paragraph) = bidi.paragraphs.first() else {
+        return Cow::Borrowed(text);
+    };
+    let reordered = bidi.reorder_line(paragraph, paragraph.range.clone());
+
+    if reordered == text {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(reordered.into_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn text_at(renderer: &Renderer, row: usize, col: usize) -> Option<&str> {
+        renderer.cells[row * renderer.size.width as usize + col]
+            .1
+            .grapheme
+            .as_ref()
+            .map(|grapheme| grapheme.char.as_str())
+    }
+
+    #[test]
+    fn wide_grapheme_at_right_edge_does_not_bleed_to_next_row() {
+        let mut renderer = Renderer::new();
+        renderer.set_size(Size::new(4, 4));
+
+        // Cell row 1, col 3: a width-2 CJK grapheme does not fit on this row.
+        renderer.draw_text("界", Point::new(6, 3), Size::splat(0), Color::splat(255));
+
+        assert_eq!(text_at(&renderer, 1, 3), None);
+        assert_eq!(text_at(&renderer, 2, 0), None);
+    }
+
+    #[test]
+    fn wide_grapheme_fits_when_two_cells_remain() {
+        let mut renderer = Renderer::new();
+        renderer.set_size(Size::new(4, 4));
+
+        renderer.draw_text("界", Point::new(4, 3), Size::splat(0), Color::splat(255));
+
+        assert_eq!(text_at(&renderer, 1, 2), Some("界"));
+        assert_eq!(text_at(&renderer, 1, 3), Some("界"));
+        assert_eq!(text_at(&renderer, 2, 0), None);
+    }
+
+    #[test]
+    fn pure_rtl_text_is_drawn_in_visual_order() {
+        let mut renderer = Renderer::new();
+        renderer.set_size(Size::new(8, 4));
+
+        renderer.draw_text("אבג", Point::new(0, 3), Size::splat(0), Color::splat(255));
+
+        assert_eq!(text_at(&renderer, 1, 0), Some("ג"));
+        assert_eq!(text_at(&renderer, 1, 1), Some("ב"));
+        assert_eq!(text_at(&renderer, 1, 2), Some("א"));
+    }
+
+    #[test]
+    fn ltr_text_stays_in_logical_order() {
+        let mut renderer = Renderer::new();
+        renderer.set_size(Size::new(8, 4));
+
+        renderer.draw_text("abc", Point::new(0, 3), Size::splat(0), Color::splat(255));
+
+        assert_eq!(text_at(&renderer, 1, 0), Some("a"));
+        assert_eq!(text_at(&renderer, 1, 1), Some("b"));
+        assert_eq!(text_at(&renderer, 1, 2), Some("c"));
     }
 }

@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DD:init</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+      font: 24px sans-serif;
+    }
+
+    button,
+    select {
+      position: absolute;
+      left: 0;
+      width: 100vw;
+      height: 28vh;
+      font: inherit;
+    }
+
+    #plain-click {
+      top: 0;
+    }
+
+    #native-select {
+      top: 36vh;
+    }
+  </style>
+</head>
+<body>
+  <button id="plain-click" type="button">plain click target</button>
+  <select id="native-select">
+    <option value="alpha">alpha</option>
+    <option value="beta">beta</option>
+    <option value="gamma">gamma</option>
+  </select>
+
+  <script>
+    const select = document.getElementById('native-select');
+    const button = document.getElementById('plain-click');
+
+    function t(value) {
+      document.title = value;
+    }
+
+    button.addEventListener('click', () => t('DD:button:click'));
+    select.addEventListener('mousedown', () => t('DD:select:md'));
+    select.addEventListener('focus', () => t('DD:select:focus'));
+    select.addEventListener('change', () => t('DD:select:change:' + select.value));
+
+    window.addEventListener('load', () => t('DD:ready'));
+  </script>
+</body>
+</html>

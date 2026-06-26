@@ -48,6 +48,8 @@ component("dump_text") {
     # net::Error + net::ErrorToString (per #91, navigation-failure
     # detection in DidFinishNavigation).
     "//net",
+    "//services/network/public/cpp",
+    "//third_party/pdfium",
   ]
 }
 

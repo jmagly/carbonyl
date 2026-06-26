@@ -1,0 +1,312 @@
+From 1a163de0e5fb3e13c89210395e3a2f20e91c7ad7 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.dev>
+Date: Fri, 26 Jun 2026 00:00:00 +0000
+Subject: [PATCH 33/33] carbonyl: enable promptless headless downloads
+
+Install a headless DownloadManagerDelegate so downloads have a concrete target
+path instead of being dropped by the default null delegate. The delegate honors
+Chromium's --download-dir switch and falls back to a Downloads directory under
+the browser context path when the switch is absent.
+
+---
+ headless/BUILD.gn                             |   3 +
+ .../headless_browser_context_impl.cc          |   8 +-
+ .../headless_browser_context_impl.h           |   1 +
+ .../headless_download_manager_delegate.cc     | 138 ++++++++++++++++++
+ .../headless_download_manager_delegate.h      |  73 ++++++++++
+ 5 files changed, 222 insertions(+), 1 deletion(-)
+ create mode 100644 headless/lib/browser/headless_download_manager_delegate.cc
+ create mode 100644 headless/lib/browser/headless_download_manager_delegate.h
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index 28d25d86087a9..9ca43033ec23f 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -327,6 +327,8 @@ source_set("headless_browser") {
+     "lib/browser/headless_client_hints_controller_delegate.h",
+     "lib/browser/headless_content_browser_client.cc",
+     "lib/browser/headless_content_browser_client.h",
++    "lib/browser/headless_download_manager_delegate.cc",
++    "lib/browser/headless_download_manager_delegate.h",
+     "lib/browser/headless_devtools.cc",
+     "lib/browser/headless_devtools.h",
+     "lib/browser/headless_devtools_manager_delegate.cc",
+@@ -385,6 +387,7 @@ source_set("headless_browser") {
+     "//carbonyl/src/browser:bridge",
+     "//carbonyl/src/browser:renderer",
+     "//components/cookie_config",
++    "//components/download/public/common:public",
+     "//components/embedder_support",
+     "//components/embedder_support:user_agent",
+     "//components/headless/clipboard",
+diff --git a/headless/lib/browser/headless_browser_context_impl.cc b/headless/lib/browser/headless_browser_context_impl.cc
+index f664e9994a3c3..4c2ff3f359764 100644
+--- a/headless/lib/browser/headless_browser_context_impl.cc
++++ b/headless/lib/browser/headless_browser_context_impl.cc
+@@ -22,6 +22,7 @@
+ #include "content/public/browser/render_process_host.h"
+ #include "content/public/browser/storage_partition.h"
+ #include "headless/lib/browser/headless_browser_context_options.h"
++#include "headless/lib/browser/headless_download_manager_delegate.h"
+ #include "headless/lib/browser/headless_browser_impl.h"
+ #include "headless/lib/browser/headless_browser_main_parts.h"
+ #include "headless/lib/browser/headless_client_hints_controller_delegate.h"
+@@ -185,7 +186,12 @@ bool HeadlessBrowserContextImpl::IsOffTheRecord() {
+
+ content::DownloadManagerDelegate*
+ HeadlessBrowserContextImpl::GetDownloadManagerDelegate() {
+-  return nullptr;
++  if (!download_manager_delegate_) {
++    download_manager_delegate_ =
++        std::make_unique<HeadlessDownloadManagerDelegate>(
++            GetDownloadManager());
++  }
++  return download_manager_delegate_.get();
+ }
+
+ content::BrowserPluginGuestManager*
+diff --git a/headless/lib/browser/headless_browser_context_impl.h b/headless/lib/browser/headless_browser_context_impl.h
+index 88e67a02160c2..84178a921e898 100644
+--- a/headless/lib/browser/headless_browser_context_impl.h
++++ b/headless/lib/browser/headless_browser_context_impl.h
+@@ -29,6 +29,7 @@ namespace content {
+ namespace headless {
+ class HeadlessBrowserImpl;
+ class HeadlessClientHintsControllerDelegate;
++class HeadlessDownloadManagerDelegate;
+ class HeadlessWebContentsImpl;
+
+ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+@@ -125,6 +125,7 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+       origin_trials_controller_delegate_;
+
+   std::unique_ptr<HeadlessClientHintsControllerDelegate> hints_delegate_;
++  std::unique_ptr<HeadlessDownloadManagerDelegate> download_manager_delegate_;
+ };
+
+ }  // namespace headless
+diff --git a/headless/lib/browser/headless_download_manager_delegate.cc b/headless/lib/browser/headless_download_manager_delegate.cc
+new file mode 100644
+index 0000000000000..cd801f6eda896
+--- /dev/null
++++ b/headless/lib/browser/headless_download_manager_delegate.cc
+@@ -0,0 +1,138 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "headless/lib/browser/headless_download_manager_delegate.h"
++
++#include <string>
++
++#include "base/check.h"
++#include "base/command_line.h"
++#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "base/functional/bind.h"
++#include "base/task/thread_pool.h"
++#include "components/download/public/common/download_target_info.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/browser_task_traits.h"
++#include "content/public/browser/browser_thread.h"
++#include "content/public/browser/download_manager.h"
++#include "net/base/filename_util.h"
++
++namespace headless {
++
++namespace {
++
++constexpr char kDownloadDirSwitch[] = "download-dir";
++
++}  // namespace
++
++HeadlessDownloadManagerDelegate::HeadlessDownloadManagerDelegate(
++    content::DownloadManager* download_manager)
++    : download_manager_(download_manager) {
++  DCHECK(download_manager_);
++}
++
++HeadlessDownloadManagerDelegate::~HeadlessDownloadManagerDelegate() {
++  if (download_manager_) {
++    download_manager_->SetDelegate(nullptr);
++    download_manager_ = nullptr;
++  }
++}
++
++void HeadlessDownloadManagerDelegate::Shutdown() {
++  weak_ptr_factory_.InvalidateWeakPtrs();
++  download_manager_ = nullptr;
++}
++
++bool HeadlessDownloadManagerDelegate::DetermineDownloadTarget(
++    download::DownloadItem* download,
++    download::DownloadTargetCallback* callback) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++
++  if (!download->GetForcedFilePath().empty()) {
++    download::DownloadTargetInfo target_info;
++    target_info.target_path = download->GetForcedFilePath();
++    target_info.intermediate_path = download->GetForcedFilePath();
++    std::move(*callback).Run(std::move(target_info));
++    return true;
++  }
++
++  FilenameDeterminedCallback filename_determined_callback = base::BindOnce(
++      &HeadlessDownloadManagerDelegate::OnDownloadPathGenerated,
++      weak_ptr_factory_.GetWeakPtr(), download->GetId(), std::move(*callback));
++
++  base::ThreadPool::PostTask(
++      FROM_HERE,
++      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
++       base::TaskPriority::USER_VISIBLE},
++      base::BindOnce(&HeadlessDownloadManagerDelegate::GenerateFilename,
++                     download->GetURL(), download->GetContentDisposition(),
++                     download->GetSuggestedFilename(), download->GetMimeType(),
++                     GetDefaultDownloadPath(),
++                     std::move(filename_determined_callback)));
++  return true;
++}
++
++bool HeadlessDownloadManagerDelegate::ShouldOpenDownload(
++    download::DownloadItem* item,
++    content::DownloadOpenDelayedCallback callback) {
++  return true;
++}
++
++void HeadlessDownloadManagerDelegate::GetNextId(
++    content::DownloadIdCallback callback) {
++  static uint32_t next_id = download::DownloadItem::kInvalidId + 1;
++  std::move(callback).Run(next_id++);
++}
++
++// static
++void HeadlessDownloadManagerDelegate::GenerateFilename(
++    const GURL& url,
++    const std::string& content_disposition,
++    const std::string& suggested_filename,
++    const std::string& mime_type,
++    const base::FilePath& suggested_directory,
++    FilenameDeterminedCallback callback) {
++  base::FilePath generated_name =
++      net::GenerateFileName(url, content_disposition, std::string(),
++                            suggested_filename, mime_type, "download");
++
++  if (!base::PathExists(suggested_directory))
++    base::CreateDirectory(suggested_directory);
++
++  base::FilePath suggested_path(suggested_directory.Append(generated_name));
++  content::GetUIThreadTaskRunner({})->PostTask(
++      FROM_HERE, base::BindOnce(std::move(callback), suggested_path));
++}
++
++void HeadlessDownloadManagerDelegate::OnDownloadPathGenerated(
++    uint32_t download_id,
++    download::DownloadTargetCallback callback,
++    const base::FilePath& suggested_path) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  download::DownloadTargetInfo target_info;
++  target_info.target_path = suggested_path;
++  target_info.intermediate_path =
++      suggested_path.AddExtension(FILE_PATH_LITERAL(".crdownload"));
++  target_info.display_name = suggested_path.BaseName();
++
++  std::move(callback).Run(std::move(target_info));
++}
++
++base::FilePath HeadlessDownloadManagerDelegate::GetDefaultDownloadPath() const {
++  const base::CommandLine* command_line =
++      base::CommandLine::ForCurrentProcess();
++  if (command_line && command_line->HasSwitch(kDownloadDirSwitch)) {
++    base::FilePath switch_path =
++        command_line->GetSwitchValuePath(kDownloadDirSwitch);
++    if (!switch_path.empty())
++      return switch_path;
++  }
++
++  return download_manager_->GetBrowserContext()
++      ->GetPath()
++      .Append(FILE_PATH_LITERAL("Downloads"));
++}
++
++}  // namespace headless
+diff --git a/headless/lib/browser/headless_download_manager_delegate.h b/headless/lib/browser/headless_download_manager_delegate.h
+new file mode 100644
+index 0000000000000..46921a0392ca3
+--- /dev/null
++++ b/headless/lib/browser/headless_download_manager_delegate.h
+@@ -0,0 +1,73 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef HEADLESS_LIB_BROWSER_HEADLESS_DOWNLOAD_MANAGER_DELEGATE_H_
++#define HEADLESS_LIB_BROWSER_HEADLESS_DOWNLOAD_MANAGER_DELEGATE_H_
++
++#include <stdint.h>
++
++#include <string>
++
++#include "base/functional/callback_forward.h"
++#include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
++#include "content/public/browser/download_manager_delegate.h"
++
++class GURL;
++
++namespace base {
++class FilePath;
++}
++
++namespace content {
++class DownloadManager;
++}
++
++namespace headless {
++
++class HeadlessDownloadManagerDelegate : public content::DownloadManagerDelegate {
++ public:
++  explicit HeadlessDownloadManagerDelegate(
++      content::DownloadManager* download_manager);
++
++  HeadlessDownloadManagerDelegate(const HeadlessDownloadManagerDelegate&) =
++      delete;
++  HeadlessDownloadManagerDelegate& operator=(
++      const HeadlessDownloadManagerDelegate&) = delete;
++
++  ~HeadlessDownloadManagerDelegate() override;
++
++  void Shutdown() override;
++  bool DetermineDownloadTarget(
++      download::DownloadItem* download,
++      download::DownloadTargetCallback* callback) override;
++  bool ShouldOpenDownload(
++      download::DownloadItem* item,
++      content::DownloadOpenDelayedCallback callback) override;
++  void GetNextId(content::DownloadIdCallback callback) override;
++
++ private:
++  using FilenameDeterminedCallback =
++      base::OnceCallback<void(const base::FilePath&)>;
++
++  static void GenerateFilename(const GURL& url,
++                               const std::string& content_disposition,
++                               const std::string& suggested_filename,
++                               const std::string& mime_type,
++                               const base::FilePath& suggested_directory,
++                               FilenameDeterminedCallback callback);
++
++  void OnDownloadPathGenerated(uint32_t download_id,
++                               download::DownloadTargetCallback callback,
++                               const base::FilePath& suggested_path);
++
++  base::FilePath GetDefaultDownloadPath() const;
++
++  raw_ptr<content::DownloadManager> download_manager_;
++  base::WeakPtrFactory<HeadlessDownloadManagerDelegate> weak_ptr_factory_{this};
++};
++
++}  // namespace headless
++
++#endif  // HEADLESS_LIB_BROWSER_HEADLESS_DOWNLOAD_MANAGER_DELEGATE_H_
+--
+2.43.0

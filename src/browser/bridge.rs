@@ -207,6 +207,8 @@ fn main() -> io::Result<Option<i32>> {
     let output = command
         .args(cmd.args)
         .env(EnvVar::ShellMode, "1")
+        .env_remove("CARBONYL_BASIC_AUTH")
+        .env_remove("CARBONYL_FILE_DIALOG_PATH")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::piped())

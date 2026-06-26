@@ -140,7 +140,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  void HeadlessBrowserImpl::SetOptions(HeadlessBrowser::Options options) {
    options_ = std::move(options);
-@@ -272,6 +299,332 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -272,6 +299,340 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
    return true;
  }
  
@@ -322,18 +322,26 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
 +  switch (key) {
 +    case 0x11:
 +      event.windows_key_code = ui::KeyboardCode::VKEY_UP;
++      event.dom_key = ui::DomKey::ARROW_UP;
 +      break;
 +    case 0x12:
 +      event.windows_key_code = ui::KeyboardCode::VKEY_DOWN;
++      event.dom_key = ui::DomKey::ARROW_DOWN;
 +      break;
 +    case 0x13:
 +      event.windows_key_code = ui::KeyboardCode::VKEY_RIGHT;
++      event.dom_key = ui::DomKey::ARROW_RIGHT;
 +      break;
 +    case 0x14:
 +      event.windows_key_code = ui::KeyboardCode::VKEY_LEFT;
++      event.dom_key = ui::DomKey::ARROW_LEFT;
 +      break;
 +    case 0x7f:
 +      event.windows_key_code = ui::KeyboardCode::VKEY_BACK;
++      break;
++    case 0x0d:
++      event.windows_key_code = ui::KeyboardCode::VKEY_RETURN;
++      event.dom_key = ui::DomKey::ENTER;
 +      break;
 +    case 0x09:
 +      event.windows_key_code = ui::KeyboardCode::VKEY_TAB;
@@ -473,7 +481,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    CreateOSCryptAsync();
  
-@@ -284,6 +637,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -284,6 +645,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    platform_delegate_->Start();
  
    std::move(on_start_callback_).Run(this);

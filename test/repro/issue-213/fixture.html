@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Carbonyl PDF fixture</title>
+    <style>
+      body {
+        color: #111;
+        background: #fff;
+        font-family: sans-serif;
+        margin: 24px;
+      }
+
+      iframe,
+      object {
+        display: block;
+        width: 640px;
+        height: 420px;
+        margin-top: 16px;
+        border: 1px solid #666;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Carbonyl PDF wrapper ready</h1>
+    <p id="html-marker">HTML marker text is visible before the PDF embeds.</p>
+    <iframe title="PDF iframe" src="/sample.pdf"></iframe>
+    <object aria-label="PDF object" data="/sample.pdf" type="application/pdf">
+      PDF fallback text should not be needed when PDF viewing works.
+    </object>
+  </body>
+</html>
