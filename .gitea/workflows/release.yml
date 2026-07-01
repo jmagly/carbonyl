@@ -77,7 +77,7 @@ jobs:
   release:
     name: Publish ${{ github.event.inputs.tag || github.ref_name }}
     runs-on: titan
-    timeout-minutes: 30
+    timeout-minutes: 120
     outputs:
       version: ${{ steps.export.outputs.version }}
       include_macos: ${{ steps.export.outputs.include_macos }}
@@ -202,8 +202,36 @@ jobs:
       - name: Verify all requested Linux runtime assets exist (no Chromium rebuild here!)
         env:
           GITEA_TOKEN: ${{ secrets.BUILD_REPO_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           API_BASE="https://git.integrolabs.net/api/v1/repos/${GITHUB_REPOSITORY}/releases/tags"
+          fetch_release() {
+            runtime_tag="$1"
+            attempts=1
+            if [ "${EVENT_NAME}" = "push" ]; then
+              # Tag-push release and push-to-main runtime builds are separate
+              # workflow runs. Gitea may start the release before the x11
+              # runtime matrix leg has uploaded its release, so wait here
+              # instead of failing a correct release cut due to queue timing.
+              attempts=90
+            fi
+
+            i=1
+            while [ "$i" -le "$attempts" ]; do
+              release_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" 2>/dev/null || true)"
+              if [ -n "${release_json}" ]; then
+                printf '%s' "${release_json}"
+                return 0
+              fi
+              if [ "$i" -lt "$attempts" ]; then
+                echo "[release] runtime release '${runtime_tag}' not found yet; waiting 60s (${i}/${attempts})" >&2
+                sleep 60
+              fi
+              i=$((i + 1))
+            done
+            return 1
+          }
+
           missing=0
           for ozone in ${OZONE_VARIANTS}; do
             if [ "$ozone" = "headless" ]; then
@@ -211,7 +239,7 @@ jobs:
             else
               runtime_tag="runtime-${ozone}-${HASH}"
             fi
-            release_json="$(curl -sf -H "Authorization: token ${GITEA_TOKEN}" "${API_BASE}/${runtime_tag}" 2>/dev/null || true)"
+            release_json="$(fetch_release "${runtime_tag}" || true)"
             if [ -z "${release_json}" ]; then
               echo "ERROR: runtime release '${runtime_tag}' not found." >&2
               echo "       Build it first: trigger build-runtime.yml with" >&2
