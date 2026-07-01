@@ -29,7 +29,7 @@ pip install carbonyl-agent && carbonyl-agent install
 
 ## What Carbonyl Is
 
-Carbonyl is a Chromium-based browser that renders into terminal text. It supports pretty much all Web APIs — WebGL, WebGPU, audio and video playback, animations — and starts in less than a second, runs at 60 FPS, and idles at 0% CPU. It does not require a window server (works in a safe-mode console) and runs comfortably over SSH. Carbonyl originally started as [`html2svg`](https://github.com/fathyb/html2svg) and is now the runtime behind it.
+Carbonyl is a Chromium-based browser that renders into terminal text. It supports pretty much all Web APIs — WebGL, WebGPU, audio and video playback, animations — and starts in less than a second, runs at 60 FPS, and idles at 0% CPU. It does not require a window server (works in a safe-mode console) and runs comfortably over SSH.
 
 This repository (`jmagly/carbonyl`) is the **maintained fork** of the original [`fathyb/carbonyl`](https://github.com/fathyb/carbonyl), which has been inactive since early 2023. It tracks upstream Chromium stable (currently M147) and publishes runtime tarballs as release assets.
 
