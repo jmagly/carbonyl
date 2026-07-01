@@ -179,6 +179,11 @@ jobs:
             "https://token:${{ github.token }}@git.integrolabs.net/${GITHUB_REPOSITORY}.git" \
             "${GITHUB_WORKSPACE}/.repo-clone"
 
+      - name: Verify release metadata matches tag
+        run: |
+          cd "${GITHUB_WORKSPACE}/.repo-clone"
+          bash scripts/verify-release-metadata.sh "${VERSION}"
+
       - name: Compute runtime hash for the tagged commit
         run: |
           # The hash is variant-independent (computed over patches +
@@ -310,6 +315,13 @@ jobs:
               curl -sfL -H "Authorization: token ${GITEA_TOKEN}" -o "${tmp}" "${url}"
               tar -tzf "${tmp}" >/dev/null
               mv "${tmp}" "${STAGE}/${asset_name}"
+
+              if [ "${triple}" = "x86_64-unknown-linux-gnu" ]; then
+                bash "${GITHUB_WORKSPACE}/.repo-clone/scripts/verify-release-asset-version.sh" \
+                  "${STAGE}/${asset_name}" "${VERSION}"
+              else
+                echo "[release] version assertion skipped for non-native asset ${asset_name}"
+              fi
 
               # sha256 alongside each tarball; carbonyl-agent install
               # already uses these to verify downloads.

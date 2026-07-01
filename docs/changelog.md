@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.0-alpha.16] - 2026-06-25
+## [0.2.0-alpha.17] - 2026-07-01
+
+### 🐛 Bug Fixes
+
+- Address high-priority issue batch
+- Extract embedded PDF text in dump-text
+
+### 📖 Documentation
+
+- Add June 2026 carbonyl report to docs blog store
+
+## [0.2.0-alpha.16] - 2026-06-26
 
 ### 🚀 Features
 
@@ -485,4 +496,3 @@ All notable changes to this project will be documented in this file.
 ### Build
 
 - Various build system fixes ([#20](https://github.com/jmagly/carbonyl/issues/20))
-

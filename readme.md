@@ -69,7 +69,9 @@ pip install carbonyl-agent
 carbonyl-agent install
 ```
 
-The installer downloads a verified-by-SHA256 runtime tarball from the release page. No compilation required.
+The installer downloads a verified-by-SHA256 runtime tarball from the public
+GitHub release page, with documented manual/offline fallbacks. No compilation
+required.
 
 ### Run Carbonyl directly
 

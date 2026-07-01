@@ -125,6 +125,19 @@ sha256sum -c carbonyl_<version>_amd64.deb.sha256
 - **Raw runtime tarball:** `carbonyl-<version>-<triple>.tgz` — unpack and run
   `./carbonyl`; used by the npm platform packages and for embedding.
 
+For scriptable runtime acquisition from this repository, use semantic release
+mode. It tries the public GitHub release first, falls back to the Gitea mirror,
+verifies the `.sha256` sidecar before extraction, and runs `carbonyl --version`
+when the downloaded binary is executable on the current host:
+
+```bash
+bash scripts/runtime-pull.sh --version <version> --dry-run
+bash scripts/runtime-pull.sh --version <version>
+```
+
+Manual offline installs remain supported by unpacking a verified tarball yourself
+or by pointing automation at an existing binary with `CARBONYL_BIN`.
+
 ## Architecture coverage
 
 Native packages currently target **Linux x86_64** and **macOS arm64** (the arches

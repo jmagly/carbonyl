@@ -126,7 +126,9 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148
    hosting platform's configuration.
 
    For release cuts, `release.yml` validates every requested runtime asset
-   before staging. Set `include_linux_arm64=true` only after
+   before staging and runs `scripts/verify-release-asset-version.sh` for native
+   Linux x86_64 tarballs, failing the release if the semantic release tag and
+   `carbonyl --version` disagree. Set `include_linux_arm64=true` only after
    `runtime-<hash>/aarch64-unknown-linux-gnu.tgz` exists for the tag's runtime
    hash.
 
