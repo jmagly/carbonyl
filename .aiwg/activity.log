@@ -89,3 +89,4 @@
 ## [2026-06-24 01:31] create | .aiwg/research/spike-241-sixel-rendering.md — sixel research spike for #241 (audit of upstream fathyb#11)
 ## [2026-06-24 02:34] deploy | roctinam/carbonyl#241 — added upstream-map label + fathyb#11 ref + spike comment; opened PR #257 for the spike
 ## [2026-06-24 02:47] update | fix #256 (deps/security): bumped chrono to 0.4.40, removed time 0.1.45 from lockfile, and verified cargo/npm/audit + clippy/fmt/test/check green
+## [2026-07-01 13:58] create | docs/blog/2026-6-carbonyl-june-2026-report.md + _manifest.json — reviewed June 2026 report added to docs blog store
