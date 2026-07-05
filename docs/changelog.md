@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Bug Fixes
 
+- Declare x11 package loader dependencies
 - Wait for runtime assets on tag push
 
 ### 📖 Documentation

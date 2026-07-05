@@ -26,6 +26,10 @@ viz software output proxy in M150.
 
 - X11 runtime builds now set the matching ANGLE and WebRTC X11 GN switches in
   both CI and the mutsu Linux arm64 driver.
+- Linux native packages now declare the X11 loader libraries required by the
+  x11 Ozone variant, including `libXcomposite.so.1`; the container image build
+  smokes this by running `carbonyl --version` immediately after installing the
+  `.deb`.
 - The direct `ninja` build step exports `LD_LIBRARY_PATH` for generated helper
   binaries that load `libcarbonyl.so`.
 - Patch validation syncs the branch `.gclient`, fetches the target Chromium tag
