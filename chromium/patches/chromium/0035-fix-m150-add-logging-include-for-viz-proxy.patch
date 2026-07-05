@@ -1,0 +1,20 @@
+From e19782d4732b636680788f3c995695d64c1b4e07 Mon Sep 17 00:00:00 2001
+From: Carbonyl Validator <validate@carbonyl.local>
+Date: Sun, 5 Jul 2026 07:28:39 -0400
+Subject: [PATCH 35/35] fix-m150-add-logging-include-for-viz-proxy
+
+---
+ .../viz/service/display_embedder/software_output_device_proxy.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/components/viz/service/display_embedder/software_output_device_proxy.cc b/components/viz/service/display_embedder/software_output_device_proxy.cc
+index e6ab20cf4d2ce..bf0571f06bd35 100644
+--- a/components/viz/service/display_embedder/software_output_device_proxy.cc
++++ b/components/viz/service/display_embedder/software_output_device_proxy.cc
+@@ -1,5 +1,6 @@
+ #include "components/viz/service/display_embedder/software_output_device_proxy.h"
+ 
++#include "base/logging.h"
+ #include "base/memory/unsafe_shared_memory_region.h"
+ #include "base/threading/thread_checker.h"
+ #include "base/trace_event/trace_event.h"

@@ -248,7 +248,7 @@ extract_last_frame() {
 
     if [ -n "$picked_start" ] && [ -n "$picked_end" ] && [ "$max_gap" -ge 128 ]; then
         local len="$max_gap"
-        tail -c +"$((picked_start + 1))" "$infile" | head -c "$len" > "$outfile"
+        dd if="$infile" of="$outfile" bs=1 skip="$picked_start" count="$len" status=none
     else
         # No substantial frame found — copy whole file as a fallback.
         cp "$infile" "$outfile"

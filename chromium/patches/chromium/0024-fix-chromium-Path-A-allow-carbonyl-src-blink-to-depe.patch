@@ -1,7 +1,7 @@
-From 733fcc9ba3d8e990593e4ad7b296ea7c325b040b Mon Sep 17 00:00:00 2001
+From 18cc2dd6592704072d125d0a3f65d1309b8cd16e Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Thu, 9 Apr 2026 18:18:30 -0400
-Subject: [PATCH 24/26] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
+Subject: [PATCH 24/35] =?UTF-8?q?fix(chromium):=20Path=20A=20=E2=80=94=20a?=
  =?UTF-8?q?llow=20//carbonyl/src/blink=20to=20depend=20on=20blink=20intern?=
  =?UTF-8?q?als?=
 MIME-Version: 1.0
@@ -42,10 +42,10 @@ See: roctinam/carbonyl#28 (this work), #27 (diagnosis), #29 (audit)
  5 files changed, 40 insertions(+), 241 deletions(-)
 
 diff --git a/content/renderer/BUILD.gn b/content/renderer/BUILD.gn
-index 250ae08f19be7..1ac3d0c21fa98 100644
+index 866d7b59ea0c9..d552e5d01dbec 100644
 --- a/content/renderer/BUILD.gn
 +++ b/content/renderer/BUILD.gn
-@@ -233,6 +233,7 @@ target(link_target_type, "renderer") {
+@@ -230,6 +230,7 @@ target(link_target_type, "renderer") {
      "//base",
      "//base:i18n",
      "//build:chromecast_buildflags",
@@ -54,10 +54,10 @@ index 250ae08f19be7..1ac3d0c21fa98 100644
      "//carbonyl/src/browser:mojom",
      "//carbonyl/src/browser:renderer",
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 22024489be11f..dbd598890868c 100644
+index c9ccbfc65070f..46ed699e669d0 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -273,14 +273,15 @@
+@@ -275,14 +275,15 @@
  #include "cc/trees/layer_tree_host.h"
  #include "cc/trees/render_frame_metadata_observer.h"
  #include "components/paint_preview/common/paint_preview_tracker.h"
@@ -81,7 +81,7 @@ index 22024489be11f..dbd598890868c 100644
  #include "third_party/skia/include/codec/SkEncodedImageFormat.h"
  #include "third_party/skia/include/core/SkMesh.h"
  #include "third_party/skia/include/core/SkStream.h"
-@@ -2034,8 +2035,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2102,8 +2103,6 @@ RenderFrameImpl::~RenderFrameImpl() {
        process_label_id_);
    agent_scheduling_group_->RemoveFrameRoute(frame_token_);
  
@@ -90,7 +90,7 @@ index 22024489be11f..dbd598890868c 100644
    if (render_callback_) {
      if (auto& callback = *render_callback_.get()) {
        callback = nullptr;
-@@ -2043,217 +2042,6 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2111,217 +2110,6 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -308,7 +308,7 @@ index 22024489be11f..dbd598890868c 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -2291,42 +2079,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2359,42 +2147,34 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
        frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
  
@@ -361,7 +361,7 @@ index 22024489be11f..dbd598890868c 100644
  
  void RenderFrameImpl::GetInterface(
 diff --git a/third_party/blink/renderer/BUILD.gn b/third_party/blink/renderer/BUILD.gn
-index 0f2a6baa28cfa..d0ac3b61516cd 100644
+index 4611db38b9378..99e93e5b7d572 100644
 --- a/third_party/blink/renderer/BUILD.gn
 +++ b/third_party/blink/renderer/BUILD.gn
 @@ -8,7 +8,12 @@ if (is_clang) {
@@ -379,7 +379,7 @@ index 0f2a6baa28cfa..d0ac3b61516cd 100644
  # arguments --------------------------------------------------------------------
  
 diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
-index 4adca63942d6c..118a5dcdb5341 100644
+index d7f554beb0531..53078c4a2440a 100644
 --- a/third_party/blink/renderer/core/BUILD.gn
 +++ b/third_party/blink/renderer/core/BUILD.gn
 @@ -99,6 +99,9 @@ if (is_ios) {
@@ -406,7 +406,7 @@ index 4adca63942d6c..118a5dcdb5341 100644
    sources = [
      "core_initializer.cc",
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 0ea9d1bc9a0c3..bdeb16766c44d 100644
+index 108b434930621..fa43d1371a36e 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
 @@ -31,6 +31,8 @@ visibility = [

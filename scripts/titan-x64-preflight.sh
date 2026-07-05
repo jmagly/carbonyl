@@ -9,6 +9,7 @@ CHROMIUM_SRC=${CHROMIUM_SRC:-"$HOST_ROOT/chromium/src"}
 MIN_HOST_FREE_GB=${MIN_HOST_FREE_GB:-200}
 MIN_TMP_FREE_GB=${MIN_TMP_FREE_GB:-10}
 SKIP_CARGO_CHECK=false
+ALLOW_MISSING_BASELINES=false
 BUILDER_IMAGE=${BUILDER_IMAGE:-}
 
 passes=0
@@ -29,6 +30,9 @@ Options:
   --min-host-free-gb N      Required free space for HOST_ROOT (default: 200)
   --min-tmp-free-gb N       Required free space for /tmp (default: 10)
   --skip-cargo-check        Skip cargo check; intended only for fast doc testing
+  --allow-missing-baselines Warn instead of failing when Chromium/Skia/WebRTC
+                            commits from scripts/patches.sh have not been
+                            fetched into the persistent checkout yet
   -h, --help                Show this help
 EOF
 }
@@ -58,6 +62,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --skip-cargo-check)
             SKIP_CARGO_CHECK=true
+            shift
+            ;;
+        --allow-missing-baselines)
+            ALLOW_MISSING_BASELINES=true
             shift
             ;;
         -h|--help)
@@ -125,6 +133,8 @@ check_git_commit() {
 
     if git -C "$repo_path" cat-file -e "${commit}^{commit}" >/dev/null 2>&1; then
         pass "$label baseline reachable: $commit"
+    elif [ "$ALLOW_MISSING_BASELINES" = true ]; then
+        warn "$label baseline missing locally: $commit"
     else
         fail "$label baseline missing: $commit"
     fi

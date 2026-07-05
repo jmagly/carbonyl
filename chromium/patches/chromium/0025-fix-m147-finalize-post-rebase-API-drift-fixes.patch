@@ -1,7 +1,7 @@
-From c0354defe8d44703cb75e237838e25ea6c7191a9 Mon Sep 17 00:00:00 2001
+From 8bc886f09d9ac58a715144218026de6dd741b9c6 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Tue, 21 Apr 2026 03:55:33 -0400
-Subject: [PATCH 25/26] fix(m147): finalize post-rebase API drift fixes
+Subject: [PATCH 25/35] fix(m147): finalize post-rebase API drift fixes
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -74,10 +74,10 @@ index 427d9bb4e4d05..e6ab20cf4d2ce 100644
    base::UnsafeSharedMemoryRegion region =
        base::UnsafeSharedMemoryRegion::Create(required_bytes);
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index ba33e31b94ceb..c18b6da2680a1 100644
+index 1fbd1c82ca0b0..afe3ecdbd344e 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
-@@ -962,8 +962,8 @@ void PopulateBinderMapWithContext(
+@@ -1042,8 +1042,8 @@ void PopulateBinderMapWithContext(
            &RenderFrameHostImpl::CreateWebTransportConnector>);
  
    map->Add<carbonyl::mojom::CarbonylRenderService>(
@@ -89,10 +89,10 @@ index ba33e31b94ceb..c18b6da2680a1 100644
    // BrowserMainLoop::GetInstance() may be null on unit tests.
    if (BrowserMainLoop::GetInstance()) {
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index 4620f764431a1..28d25d86087a9 100644
+index cf4229953ed78..e713f821a3508 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -948,7 +948,6 @@ executable("headless_shell") {
+@@ -905,7 +905,6 @@ executable("headless_shell") {
      ":headless_shell_lib",
      "//carbonyl/src/browser:renderer",
      "//build:branding_buildflags",
@@ -101,7 +101,7 @@ index 4620f764431a1..28d25d86087a9 100644
      "//components/version_info",
      "//content/public/app",
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index f1ba2b6b74d24..34df4b0541e8c 100644
+index de4f22e1c5d63..067f31f2b5422 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
 @@ -18,13 +18,11 @@
@@ -120,7 +120,7 @@ index f1ba2b6b74d24..34df4b0541e8c 100644
  #include "components/zoom/zoom_controller.h"
  #include "content/public/browser/browser_task_traits.h"
  #include "content/public/browser/browser_thread.h"
-@@ -319,7 +317,7 @@ void HeadlessBrowserImpl::Resize() {
+@@ -302,7 +300,7 @@ void HeadlessBrowserImpl::Resize() {
          continue;
        }
  
@@ -164,10 +164,10 @@ index b5dc04b653d6a..b28317c7d9524 100644
    void OnBoundsChanged(const gfx::Rect& old_bounds) override;
    void OnWindowStateChanged(HeadlessWindowState old_window_state) override;
 diff --git a/third_party/blink/renderer/core/paint/text_decoration_painter.cc b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-index 58ec2d2f02218..30299c55ade71 100644
+index 94112d362efe7..1a19789f42985 100644
 --- a/third_party/blink/renderer/core/paint/text_decoration_painter.cc
 +++ b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-@@ -153,6 +153,7 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
+@@ -154,6 +154,7 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
    const TextDecorationOffset decoration_offset(style_);
    const ETextDecorationSkipInk skip_ink =
        decoration_info.TargetStyle().TextDecorationSkipInk();
@@ -176,7 +176,7 @@ index 58ec2d2f02218..30299c55ade71 100644
        [&](TextShadowPaintPhase phase) {
          for (wtf_size_t i = 0; i < decoration_info.AppliedDecorationCount();
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index 7572d0a4e0256..144110e8a98b1 100644
+index f86b8cfe6120c..f7c6a7dcce9e7 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
 @@ -24,6 +24,7 @@
@@ -187,7 +187,7 @@ index 7572d0a4e0256..144110e8a98b1 100644
  #include "cc/paint/paint_flags.h"
  #include "third_party/blink/renderer/platform/fonts/character_range.h"
  #include "third_party/blink/renderer/platform/fonts/font_cache.h"
-@@ -92,129 +93,6 @@ bool Font::operator==(const Font& other) const {
+@@ -91,129 +92,6 @@ bool Font::operator==(const Font& other) const {
           font_description_ == other.font_description_;
  }
  
@@ -318,10 +318,10 @@ index 7572d0a4e0256..144110e8a98b1 100644
                      const TextFragmentPaintInfo& text_info,
                      const gfx::PointF& point,
 diff --git a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-index 917b250b7c469..f06a3de31f76c 100644
+index 0b66ed1902132..2e70147cd7d24 100644
 --- a/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
 +++ b/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
-@@ -420,63 +420,6 @@ cc::Layer* ForeignLayer(const PaintChunk& chunk,
+@@ -422,63 +422,6 @@ cc::Layer* ForeignLayer(const PaintChunk& chunk,
    return foreign_layer ? foreign_layer->GetLayer() : nullptr;
  }
  

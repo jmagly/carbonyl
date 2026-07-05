@@ -16,7 +16,8 @@ ozone_platform_x11 = false
 
 use_static_angle = true
 
-use_qt = false
+use_qt5 = false
+use_qt6 = false
 use_gio = false
 use_gtk = false
 use_cups = false
@@ -26,7 +27,6 @@ use_dbus = true
 use_glib = false
 use_libpci = false
 use_kerberos = false
-use_vaapi_x11 = false
 use_xkbcommon = false
 
 angle_use_x11 = false
@@ -47,6 +47,4 @@ rtc_use_x11_extensions = false
 # files that are transitively loaded during gn gen (via the gn_all root group).
 # headless_shell has its own if-guards and is unaffected by these defaults.
 # Flags that are safe to disable (no file-level asserts in M135):
-enable_nacl = false
 enable_media_remoting = false
-enable_system_notifications = false

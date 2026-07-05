@@ -1,7 +1,7 @@
-From ac3d6ee3f30dc3dd82ae2d7e75641149666c7f3a Mon Sep 17 00:00:00 2001
+From 9d042f26f8bd38aeae2f2456c2639e09e98fbd90 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:29:05 +0100
-Subject: [PATCH 11/26] Rename carbonyl::Renderer to carbonyl::Bridge
+Subject: [PATCH 11/35] Rename carbonyl::Renderer to carbonyl::Bridge
 
 ---
  headless/app/headless_shell.cc                          | 5 ++++-
@@ -13,7 +13,7 @@ Subject: [PATCH 11/26] Rename carbonyl::Renderer to carbonyl::Bridge
  6 files changed, 13 insertions(+), 9 deletions(-)
 
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 99e05ebd19e82..4d5707bece030 100644
+index 0ccb47741fda5..d9aea70f2e18a 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -14,6 +14,7 @@
@@ -24,7 +24,7 @@ index 99e05ebd19e82..4d5707bece030 100644
  #include "base/logging.h"
  #include "base/task/thread_pool.h"
  #include "base/version_info/version_info.h"
-@@ -107,7 +108,9 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -94,7 +95,9 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
    HeadlessBrowserContext::Builder context_builder =
        browser_->CreateBrowserContextBuilder();
  
@@ -49,10 +49,10 @@ index 203b06489e0e4..e8dc41abba686 100644
    content::ContentMainParams params(nullptr);
  #if BUILDFLAG(IS_WIN)
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 3fd1a6d12f6e6..5a95111480d0d 100644
+index 6b7624ee792ad..e5cf7898b5bc2 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -300,7 +300,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -283,7 +283,7 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
  }
  
  void HeadlessBrowserImpl::Resize() {
@@ -61,7 +61,7 @@ index 3fd1a6d12f6e6..5a95111480d0d 100644
    auto rect = gfx::Rect(0, 0, size.width(), size.height());
  
    for (auto* ctx: GetAllBrowserContexts()) {
-@@ -315,7 +315,7 @@ void HeadlessBrowserImpl::Resize() {
+@@ -298,7 +298,7 @@ void HeadlessBrowserImpl::Resize() {
      }
    }
  
@@ -70,7 +70,7 @@ index 3fd1a6d12f6e6..5a95111480d0d 100644
  }
  
  void HeadlessBrowserImpl::OnShutdownInput() {
-@@ -690,7 +690,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -702,7 +702,7 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
        }
      };
  

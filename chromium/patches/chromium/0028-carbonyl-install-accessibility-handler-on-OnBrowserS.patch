@@ -1,8 +1,11 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 080815117896e1e72d4b5f47bb82c3b9b57b2b75 Mon Sep 17 00:00:00 2001
 From: Carbonyl Maintainers <carbonyl@integrolabs.net>
 Date: Fri, 22 May 2026 14:45:00 +0000
-Subject: [PATCH 28/28] carbonyl: install accessibility handler on
+Subject: [PATCH 28/35] carbonyl: install accessibility handler on
  OnBrowserStart's WebContents
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 Wires `carbonyl::AccessibilityHandler::InstallFor()` into the headless
 shell's `OnBrowserStart()`, right after the patch-0027 dump_text
@@ -29,15 +32,15 @@ Refs: roctinam/carbonyl#4
 Refs: roctinam/carbonyl-fleet#10
 ---
  headless/BUILD.gn              |  1 +
- headless/app/headless_shell.cc | 14 ++++++++++++++
- 2 files changed, 15 insertions(+)
+ headless/app/headless_shell.cc | 13 +++++++++++++
+ 2 files changed, 14 insertions(+)
 
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index 4691cdc61cbac..5f3a0c0d61cbb 100644
+index c17c484f15d79..d45bb906bc9ff 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -946,6 +946,7 @@ executable("headless_shell") {
-
+@@ -903,6 +903,7 @@ executable("headless_shell") {
+ 
    deps = [
      ":headless_shell_lib",
 +    "//carbonyl/src/browser:accessibility",
@@ -45,18 +48,18 @@ index 4691cdc61cbac..5f3a0c0d61cbb 100644
      "//carbonyl/src/browser:renderer",
      "//build:branding_buildflags",
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 2446f07b906c2..f7ac18c3eff01 100644
+index 95a5cb6dbf8c7..0bf9cb5cb96df 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
-@@ -5,6 +5,7 @@
+@@ -4,6 +4,7 @@
+ 
  #include "headless/public/headless_shell.h"
-
+ 
 +#include "carbonyl/src/browser/accessibility_handler.h"
  #include "carbonyl/src/browser/dump_text_handler.h"
  #include "carbonyl/src/browser/renderer.h"
-
- #include <memory>
-@@ -162,6 +163,18 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+ 
+@@ -149,6 +150,18 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
          HeadlessWebContentsImpl::From(web_contents)->web_contents(),
          browser);
    }
@@ -73,7 +76,5 @@ index 2446f07b906c2..f7ac18c3eff01 100644
 +        HeadlessWebContentsImpl::From(web_contents)->web_contents());
 +  }
  }
-
+ 
  #if defined(HEADLESS_ENABLE_COMMANDS)
---
-2.43.0

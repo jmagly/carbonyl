@@ -1,8 +1,8 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 7218e72c17d6f93678a81179ffabeebb73981414 Mon Sep 17 00:00:00 2001
 From: Carbonyl Maintainers <carbonyl@integrolabs.net>
 Date: Tue, 16 Jun 2026 10:47:04 -0400
-Subject: [PATCH 31/31] carbonyl: install javascript handler on OnBrowserStart's
- WebContents
+Subject: [PATCH 31/35] carbonyl: install javascript handler on
+ OnBrowserStart's WebContents
 
 Wires carbonyl::JavaScriptHandler::InstallFor() into the headless shell's
 OnBrowserStart(), right after the patch-0028 accessibility install site.
@@ -28,10 +28,10 @@ Refs: roctinam/carbonyl-fleet#10
  2 files changed, 13 insertions(+)
 
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index be33ffb..aadba45 100644
+index d45bb906bc9ff..d283127735f87 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -948,6 +948,7 @@ executable("headless_shell") {
+@@ -905,6 +905,7 @@ executable("headless_shell") {
      ":headless_shell_lib",
      "//carbonyl/src/browser:accessibility",
      "//carbonyl/src/browser:dump_text",
@@ -40,7 +40,7 @@ index be33ffb..aadba45 100644
      "//build:branding_buildflags",
      "//components/os_crypt/common:switches",
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 6e9bfe8..9bcd028 100644
+index 0bf9cb5cb96df..a316e1118a4d4 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -6,6 +6,7 @@
@@ -51,7 +51,7 @@ index 6e9bfe8..9bcd028 100644
  #include "carbonyl/src/browser/renderer.h"
  
  #include <memory>
-@@ -175,6 +176,17 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -162,6 +163,17 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
      carbonyl::AccessibilityHandler::InstallFor(
          HeadlessWebContentsImpl::From(web_contents)->web_contents());
    }
@@ -69,6 +69,3 @@ index 6e9bfe8..9bcd028 100644
  }
  
  #if defined(HEADLESS_ENABLE_COMMANDS)
--- 
-2.43.0
-

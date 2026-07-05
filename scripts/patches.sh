@@ -6,12 +6,12 @@ source "$CARBONYL_ROOT/scripts/env.sh"
 
 cd "$CHROMIUM_SRC"
 
-# M148 (148.0.7778.167) baseline commits.
+# M150 (150.0.7871.47) baseline commits.
 # chromium_upstream: set this to the output of `git -C "$CHROMIUM_SRC" rev-parse HEAD`
 # after running `bash scripts/gclient.sh sync` for the target version.
-chromium_upstream="65db666ac2cf205fcc36db8bb5b9cd87f94808ac"  # 148.0.7778.167
-skia_upstream="a2888b27a98e4ff30085d4d2dba8a1a99baf6dfb"      # DEPS @ 148.0.7778.167
-webrtc_upstream="9a7f650bcd14f241d20f88f4e1ea3b7300de72ac"    # DEPS @ 148.0.7778.167
+chromium_upstream="0c3cca15d78645281db2d339b2dc3d6fad4ee90a"  # 150.0.7871.47
+skia_upstream="14d05ec761901b6e9e9193af8b347ab3a7f6fed0"      # DEPS @ 150.0.7871.47
+webrtc_upstream="1f975dfd761af6e5d76d28333191973b258d82a8"    # DEPS @ 150.0.7871.47
 
 if [[ "$1" == "apply" ]]; then
     # Force-reset each repo to its upstream baseline. The old

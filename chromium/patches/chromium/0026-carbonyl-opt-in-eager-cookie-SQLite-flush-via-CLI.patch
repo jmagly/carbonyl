@@ -1,7 +1,7 @@
-From 8a99f73c2f06ed9497f2ccea9ac4b4129306d3fe Mon Sep 17 00:00:00 2001
+From 567461a3cb295ab941fa96996ee5a3cdb5936069 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <anth.jaunt916@passmail.net>
 Date: Wed, 6 May 2026 00:10:08 -0400
-Subject: [PATCH 26/26] carbonyl: opt-in eager cookie SQLite flush via CLI
+Subject: [PATCH 26/35] carbonyl: opt-in eager cookie SQLite flush via CLI
 
 Adds --carbonyl-cookie-flush-interval-ms=N to override the default 30s
 kCommitInterval in SQLitePersistentCookieStore::Backend::BatchOperation.
@@ -19,10 +19,10 @@ Refs roctinam/carbonyl#69
  2 files changed, 30 insertions(+), 2 deletions(-)
 
 diff --git a/headless/lib/browser/headless_content_browser_client.cc b/headless/lib/browser/headless_content_browser_client.cc
-index 752ccbb30281d..399cd26fc5043 100644
+index 26eb69a377946..964208a0c1c18 100644
 --- a/headless/lib/browser/headless_content_browser_client.cc
 +++ b/headless/lib/browser/headless_content_browser_client.cc
-@@ -284,6 +284,17 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -277,6 +277,17 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
    }
  #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
  

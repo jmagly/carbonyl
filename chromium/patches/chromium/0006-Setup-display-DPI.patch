@@ -1,7 +1,7 @@
-From a31d7d825c72a313388ffd8da006e75e65bbe62b Mon Sep 17 00:00:00 2001
+From e7ac1bf7e1d7581b1e62a331b4402f5908bc357d Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 01:00:43 +0100
-Subject: [PATCH 06/26] Setup display DPI
+Subject: [PATCH 06/35] Setup display DPI
 
 ---
  .../headless_platform_delegate_aura.cc        | 12 +++--

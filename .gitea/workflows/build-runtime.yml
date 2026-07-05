@@ -276,6 +276,7 @@ jobs:
           }
           # Sync changed files from workspace to host repo dir.
           # Excludes preserve the pre-existing 150 GB Chromium checkout.
+          rm -rf "${HOST_CARBONYL_DIR}/chromium/patches"
           rsync -a \
             --no-owner \
             --no-group \
@@ -307,8 +308,11 @@ jobs:
               sed -i 's/^ozone_platform_x11 = false/ozone_platform_x11 = true/' "${ARGS_FILE}"
               # x11 Ozone needs xkbcommon for keyboard layout handling.
               sed -i 's/^use_xkbcommon = false/use_xkbcommon = true/' "${ARGS_FILE}"
+              sed -i 's/^angle_use_x11 = false/angle_use_x11 = true/' "${ARGS_FILE}"
+              sed -i 's/^rtc_use_x11 = false/rtc_use_x11 = true/' "${ARGS_FILE}"
+              sed -i 's/^rtc_use_x11_extensions = false/rtc_use_x11_extensions = true/' "${ARGS_FILE}"
               echo "[ozone] switched args.gn to x11"
-              grep -E "^ozone_platform|^use_xkbcommon" "${ARGS_FILE}"
+              grep -E "^ozone_platform|^use_xkbcommon|^angle_use_x11|^rtc_use_x11" "${ARGS_FILE}"
               ;;
             both)
               # Build BOTH ozone platforms in one binary — supports Phase 0
@@ -317,6 +321,9 @@ jobs:
               sed -i 's/^ozone_platform = "headless"/ozone_platform = "headless"/' "${ARGS_FILE}"
               sed -i 's/^ozone_platform_x11 = false/ozone_platform_x11 = true/' "${ARGS_FILE}"
               sed -i 's/^use_xkbcommon = false/use_xkbcommon = true/' "${ARGS_FILE}"
+              sed -i 's/^angle_use_x11 = false/angle_use_x11 = true/' "${ARGS_FILE}"
+              sed -i 's/^rtc_use_x11 = false/rtc_use_x11 = true/' "${ARGS_FILE}"
+              sed -i 's/^rtc_use_x11_extensions = false/rtc_use_x11_extensions = true/' "${ARGS_FILE}"
               # ozone_platform_headless defaults to true; leave alone.
               echo "[ozone] built both headless + x11 (--ozone-platform selects at runtime)"
               ;;
@@ -467,6 +474,7 @@ jobs:
             "${BUILDER_IMAGE}" \
             bash -c "
               source scripts/env.sh
+              export LD_LIBRARY_PATH=${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}:\${LD_LIBRARY_PATH:-}
               ninja -C ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
             "
 
