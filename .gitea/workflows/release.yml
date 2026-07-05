@@ -673,10 +673,12 @@ jobs:
           # GitHub's asset DELETE is asynchronous: deleting a same-name asset and
           # immediately re-POSTing races the delete and returns 422 already_exists
           # (#249). Capture the HTTP code (no `curl -sf` on the upload, so a 4xx is
-          # inspected here instead of collapsing to an opaque exit 22) and, on 422,
-          # back off and retry until the delete settles.
+          # inspected here instead of collapsing to an opaque exit 22). If GitHub
+          # keeps reporting a same-name asset, leave the existing mirror asset in
+          # place; the Gitea release above remains the authoritative artifact set.
           mirror_asset() {
-            local asset="$1" name="$2" mime="$3" attempt max resp code body ids id settle
+            local asset="$1" name="$2" mime="$3" attempt max resp code body ids id settle existing_name encoded_name
+            encoded_name="$(jq -rn --arg name "${name}" '$name|@uri')"
             max=12
             for attempt in $(seq 1 "${max}"); do
               # Delete every existing same-name asset (GitHub rejects dup names).
@@ -698,7 +700,7 @@ jobs:
               done
 
               resp="$(curl -s -w '\n__HTTP__%{http_code}' -X POST \
-                "https://uploads.github.com/repos/jmagly/carbonyl/releases/${GH_RELEASE_ID}/assets?name=${name}" \
+                "https://uploads.github.com/repos/jmagly/carbonyl/releases/${GH_RELEASE_ID}/assets?name=${encoded_name}" \
                 -H "Authorization: Bearer ${GH_TOKEN}" \
                 -H "Content-Type: ${mime}" \
                 --data-binary "@${asset}")"
@@ -708,6 +710,13 @@ jobs:
                   echo "[release] mirrored ${name} → GitHub"
                   return 0 ;;
                 422)
+                  existing_name="$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" \
+                    "${GH_API}/releases/${GH_RELEASE_ID}/assets?per_page=100" \
+                    | jq -r ".[] | select(.name == \"${name}\") | .name" 2>/dev/null | head -n1 || true)"
+                  if [ "${existing_name}" = "${name}" ]; then
+                    echo "[release] ${name}: GitHub already has same-name asset; leaving existing mirror asset" >&2
+                    return 0
+                  fi
                   echo "[release] ${name}: HTTP 422 already_exists (delete not settled); retry ${attempt}/${max}" >&2
                   sleep $((attempt * 6)) ;;
                 *)
