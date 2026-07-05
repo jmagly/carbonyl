@@ -202,7 +202,7 @@ overrides:
       - "libx11-6"
       # x11 Ozone runtime loader deps. The x11 container smoke runs
       # `carbonyl --version` after installing the .deb and caught
-      # libXcomposite.so.1 missing in alpha.18.
+      # libXcomposite.so.1 and libXtst.so.6 missing in alpha.18.
       - "libxau6"
       - "libxcomposite1"
       - "libxcb1"
@@ -210,8 +210,11 @@ overrides:
       - "libxdmcp6"
       - "libxext6"
       - "libxfixes3"
+      - "libxi6"
       - "libxrandr2"
       - "libxrender1"
+      - "libxss1"
+      - "libxtst6"
       - "libzstd1"
   rpm:
     depends:
@@ -248,8 +251,11 @@ overrides:
       - "libXdmcp"
       - "libXext"
       - "libXfixes"
+      - "libXi"
       - "libXrandr"
       - "libXrender"
+      - "libXScrnSaver"
+      - "libXtst"
       - "libzstd"
 YAML
 
