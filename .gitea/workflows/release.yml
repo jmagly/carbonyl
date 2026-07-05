@@ -710,6 +710,10 @@ jobs:
                   echo "[release] mirrored ${name} → GitHub"
                   return 0 ;;
                 422)
+                  if echo "${body}" | jq -e '.errors[]? | select(.code == "already_exists")' >/dev/null 2>&1; then
+                    echo "[release] ${name}: GitHub reports existing mirror asset; leaving it in place" >&2
+                    return 0
+                  fi
                   existing_name="$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" \
                     "${GH_API}/releases/${GH_RELEASE_ID}/assets?per_page=100" \
                     | jq -r ".[] | select(.name == \"${name}\") | .name" 2>/dev/null | head -n1 || true)"
