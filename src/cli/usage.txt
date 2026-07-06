@@ -29,6 +29,10 @@ Options:
     --tab-focus                forward Tab and Shift+Tab to Chromium for page
                                focus traversal (default: disabled; alias:
                                --enable-tab-nav; also via CARBONYL_TAB_FOCUS=1).
+    --color-scheme=<mode>      page color-scheme preference. Modes: normal,
+                               light, dark. dark appends Chromium's
+                               --force-dark-mode unless already supplied. Also
+                               via CARBONYL_COLOR_SCHEME.
     --sixel[=on|auto|off]      render compositor frames as sixel terminal
                                images in capable terminals (default: disabled;
                                also via CARBONYL_SIXEL=1/auto/off). With
@@ -87,6 +91,7 @@ Environment variables:
     CARBONYL_PAGE_HEIGHT=N     same as --page-height
     CARBONYL_CHROME_ROWS=N     same as --chrome-rows
     CARBONYL_TAB_FOCUS=1       same as --tab-focus
+    CARBONYL_COLOR_SCHEME=dark same as --color-scheme=dark
     CARBONYL_SIXEL=1|auto|off  same as --sixel / --sixel=auto / --sixel=off
     CARBONYL_TERMINAL_IMAGE=<mode>
                                same as --terminal-image=<mode>; overrides

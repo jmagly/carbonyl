@@ -81,12 +81,21 @@ pub struct CommandLine {
     /// is preserved as a Chromium switch; `CARBONYL_FILE_DIALOG_PATH` appends
     /// that switch when the CLI did not specify one.
     pub file_dialog_path: Option<String>,
+    /// Optional page color-scheme preference (#176). `dark` appends Chromium's
+    /// `--force-dark-mode` switch unless the caller already supplied it.
+    pub color_scheme: ColorSchemeMode,
 }
 
 pub enum EnvVar {
     Debug,
     Bitmap,
     ShellMode,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorSchemeMode {
+    Normal,
+    Dark,
 }
 
 impl EnvVar {
@@ -135,6 +144,7 @@ impl CommandLine {
         let mut basic_auth: Option<String> = None;
         let mut download_dir: Option<String> = None;
         let mut file_dialog_path: Option<String> = None;
+        let mut color_scheme = ColorSchemeMode::Normal;
         let mut program = CommandLineProgram::Main;
         // Dump-mode scaffolding — collected during the loop and folded into
         // `program` after, so it composes with `--help` / `--version` /
@@ -234,6 +244,13 @@ impl CommandLine {
                         }
                     }
                 }
+                "--color-scheme" => {
+                    if let Some(value) = value {
+                        if let Some(mode) = parse_color_scheme(value) {
+                            color_scheme = mode;
+                        }
+                    }
+                }
 
                 "--dump-text" => {
                     dump_text_requested = true;
@@ -330,9 +347,21 @@ impl CommandLine {
             }
         }
 
-        let args = apply_file_dialog_path(
-            apply_download_dir(apply_basic_auth(args, basic_auth.as_deref()), &download_dir),
-            &file_dialog_path,
+        if let Ok(value) = env::var("CARBONYL_COLOR_SCHEME") {
+            if let Some(mode) = parse_color_scheme(&value) {
+                color_scheme = mode;
+            }
+        }
+
+        let args = apply_color_scheme(
+            apply_file_dialog_path(
+                apply_download_dir(
+                    apply_basic_auth(normalize_url_args(args), basic_auth.as_deref()),
+                    &download_dir,
+                ),
+                &file_dialog_path,
+            ),
+            color_scheme,
         );
 
         if !dump_text_requested {
@@ -435,8 +464,51 @@ impl CommandLine {
             basic_auth,
             download_dir,
             file_dialog_path,
+            color_scheme,
         }
     }
+}
+
+fn normalize_url_args(args: Vec<String>) -> Vec<String> {
+    args.into_iter()
+        .map(|arg| {
+            if arg.starts_with('-') {
+                arg
+            } else {
+                normalize_url_arg(&arg).unwrap_or(arg)
+            }
+        })
+        .collect()
+}
+
+fn normalize_url_arg(arg: &str) -> Option<String> {
+    if arg.is_empty()
+        || arg.starts_with('/')
+        || arg.starts_with("./")
+        || arg.starts_with("../")
+        || arg.contains("://")
+        || arg.starts_with("about:")
+        || arg.starts_with("data:")
+        || arg.starts_with("file:")
+        || arg.starts_with("mailto:")
+        || arg.starts_with("chrome:")
+        || arg.starts_with("devtools:")
+    {
+        return None;
+    }
+
+    let authority_end = arg.find(['/', '?', '#']).unwrap_or(arg.len());
+    let authority = &arg[..authority_end];
+    if authority.is_empty()
+        || authority.contains('@')
+        || authority.eq_ignore_ascii_case("localhost")
+        || authority.parse::<std::net::IpAddr>().is_ok()
+        || !authority.contains('.')
+    {
+        return None;
+    }
+
+    Some(format!("https://{arg}"))
 }
 
 fn basic_auth_value(arg: &str) -> Option<&str> {
@@ -536,6 +608,27 @@ fn apply_file_dialog_path(mut args: Vec<String>, file_dialog_path: &Option<Strin
 
     args.insert(0, format!("--file-dialog-path={file_dialog_path}"));
     args
+}
+
+fn apply_color_scheme(mut args: Vec<String>, color_scheme: ColorSchemeMode) -> Vec<String> {
+    if color_scheme != ColorSchemeMode::Dark
+        || args
+            .iter()
+            .any(|arg| arg == "--force-dark-mode" || arg.starts_with("--force-dark-mode="))
+    {
+        return args;
+    }
+
+    args.insert(0, "--force-dark-mode".to_string());
+    args
+}
+
+fn parse_color_scheme(value: &str) -> Option<ColorSchemeMode> {
+    match value.to_ascii_lowercase().as_str() {
+        "" | "normal" | "auto" | "system" | "light" | "off" => Some(ColorSchemeMode::Normal),
+        "dark" | "force-dark" | "forced-dark" => Some(ColorSchemeMode::Dark),
+        _ => None,
+    }
 }
 
 /// Resolve the framebuffer device path from an optional `=VALUE`. An empty or
@@ -774,6 +867,99 @@ mod tests {
         assert_eq!(parse_page_height("-1"), None);
         assert_eq!(parse_page_height("1280x800"), None);
         assert_eq!(parse_page_height("abc"), None);
+    }
+
+    #[test]
+    fn bare_hostname_urls_default_to_https() {
+        let cmd = CommandLine::parse_args(vec![
+            "--user-agent=Custom UA 1.0".to_string(),
+            "example.com/path?q=1".to_string(),
+        ]);
+
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--user-agent=Custom UA 1.0".to_string(),
+                "https://example.com/path?q=1".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn url_normalization_keeps_explicit_schemes_and_local_paths() {
+        let argv = vec![
+            "http://example.com".to_string(),
+            "https://example.org".to_string(),
+            "file:///tmp/page.html".to_string(),
+            "./fixture.html".to_string(),
+            "/tmp/page.html".to_string(),
+            "localhost".to_string(),
+            "127.0.0.1".to_string(),
+            "search-term".to_string(),
+        ];
+        let cmd = CommandLine::parse_args(argv.clone());
+
+        assert_eq!(cmd.args, argv);
+    }
+
+    #[test]
+    fn url_normalization_runs_before_basic_auth() {
+        let cmd = CommandLine::parse_args(vec![
+            "--basic-auth=user:pass".to_string(),
+            "example.com/path".to_string(),
+        ]);
+
+        assert_eq!(
+            cmd.args,
+            vec!["https://user:pass@example.com/path".to_string()]
+        );
+    }
+
+    #[test]
+    fn color_scheme_dark_appends_force_dark_mode() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original = std::env::var("CARBONYL_COLOR_SCHEME").ok();
+        std::env::remove_var("CARBONYL_COLOR_SCHEME");
+
+        let cmd = CommandLine::parse_args(vec![
+            "--color-scheme=dark".to_string(),
+            "example.com".to_string(),
+        ]);
+
+        assert_eq!(cmd.color_scheme, ColorSchemeMode::Dark);
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--force-dark-mode".to_string(),
+                "--color-scheme=dark".to_string(),
+                "https://example.com".to_string(),
+            ]
+        );
+
+        restore_env("CARBONYL_COLOR_SCHEME", original);
+    }
+
+    #[test]
+    fn color_scheme_env_respects_existing_chromium_switch() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original = std::env::var("CARBONYL_COLOR_SCHEME").ok();
+        std::env::set_var("CARBONYL_COLOR_SCHEME", "dark");
+
+        let cmd = CommandLine::parse_args(vec![
+            "--force-dark-mode".to_string(),
+            "https://example.com".to_string(),
+        ]);
+
+        assert_eq!(cmd.color_scheme, ColorSchemeMode::Dark);
+        assert_eq!(
+            cmd.args,
+            vec![
+                "--force-dark-mode".to_string(),
+                "https://example.com".to_string(),
+            ]
+        );
+
+        restore_env("CARBONYL_COLOR_SCHEME", original);
     }
 
     #[test]
