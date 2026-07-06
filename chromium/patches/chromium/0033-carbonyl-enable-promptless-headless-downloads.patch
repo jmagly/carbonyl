@@ -1,28 +1,27 @@
-From 1a163de0e5fb3e13c89210395e3a2f20e91c7ad7 Mon Sep 17 00:00:00 2001
+From 53552dc05c6938ed8f024fc91c617c724300ee7b Mon Sep 17 00:00:00 2001
 From: Carbonyl Maintainers <maintainers@carbonyl.dev>
 Date: Fri, 26 Jun 2026 00:00:00 +0000
-Subject: [PATCH 33/33] carbonyl: enable promptless headless downloads
+Subject: [PATCH 33/35] carbonyl: enable promptless headless downloads
 
 Install a headless DownloadManagerDelegate so downloads have a concrete target
 path instead of being dropped by the default null delegate. The delegate honors
 Chromium's --download-dir switch and falls back to a Downloads directory under
 the browser context path when the switch is absent.
-
 ---
  headless/BUILD.gn                             |   3 +
- .../headless_browser_context_impl.cc          |   8 +-
- .../headless_browser_context_impl.h           |   1 +
+ .../browser/headless_browser_context_impl.cc  |   8 +-
+ .../browser/headless_browser_context_impl.h   |   2 +
  .../headless_download_manager_delegate.cc     | 138 ++++++++++++++++++
- .../headless_download_manager_delegate.h      |  73 ++++++++++
- 5 files changed, 222 insertions(+), 1 deletion(-)
+ .../headless_download_manager_delegate.h      |  73 +++++++++
+ 5 files changed, 223 insertions(+), 1 deletion(-)
  create mode 100644 headless/lib/browser/headless_download_manager_delegate.cc
  create mode 100644 headless/lib/browser/headless_download_manager_delegate.h
 
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index 28d25d86087a9..9ca43033ec23f 100644
+index fe8430d24b688..ce07ef678842f 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -327,6 +327,8 @@ source_set("headless_browser") {
+@@ -319,6 +319,8 @@ source_set("headless_browser") {
      "lib/browser/headless_client_hints_controller_delegate.h",
      "lib/browser/headless_content_browser_client.cc",
      "lib/browser/headless_content_browser_client.h",
@@ -31,7 +30,7 @@ index 28d25d86087a9..9ca43033ec23f 100644
      "lib/browser/headless_devtools.cc",
      "lib/browser/headless_devtools.h",
      "lib/browser/headless_devtools_manager_delegate.cc",
-@@ -385,6 +387,7 @@ source_set("headless_browser") {
+@@ -377,6 +379,7 @@ source_set("headless_browser") {
      "//carbonyl/src/browser:bridge",
      "//carbonyl/src/browser:renderer",
      "//components/cookie_config",
@@ -40,7 +39,7 @@ index 28d25d86087a9..9ca43033ec23f 100644
      "//components/embedder_support:user_agent",
      "//components/headless/clipboard",
 diff --git a/headless/lib/browser/headless_browser_context_impl.cc b/headless/lib/browser/headless_browser_context_impl.cc
-index f664e9994a3c3..4c2ff3f359764 100644
+index d04fcd9a1ea3b..736026c8650b2 100644
 --- a/headless/lib/browser/headless_browser_context_impl.cc
 +++ b/headless/lib/browser/headless_browser_context_impl.cc
 @@ -22,6 +22,7 @@
@@ -51,8 +50,8 @@ index f664e9994a3c3..4c2ff3f359764 100644
  #include "headless/lib/browser/headless_browser_impl.h"
  #include "headless/lib/browser/headless_browser_main_parts.h"
  #include "headless/lib/browser/headless_client_hints_controller_delegate.h"
-@@ -185,7 +186,12 @@ bool HeadlessBrowserContextImpl::IsOffTheRecord() {
-
+@@ -184,7 +185,12 @@ bool HeadlessBrowserContextImpl::IsOffTheRecord() {
+ 
  content::DownloadManagerDelegate*
  HeadlessBrowserContextImpl::GetDownloadManagerDelegate() {
 -  return nullptr;
@@ -63,27 +62,27 @@ index f664e9994a3c3..4c2ff3f359764 100644
 +  }
 +  return download_manager_delegate_.get();
  }
-
+ 
  content::BrowserPluginGuestManager*
 diff --git a/headless/lib/browser/headless_browser_context_impl.h b/headless/lib/browser/headless_browser_context_impl.h
-index 88e67a02160c2..84178a921e898 100644
+index 88e67a02160c2..a2b59dcbc2403 100644
 --- a/headless/lib/browser/headless_browser_context_impl.h
 +++ b/headless/lib/browser/headless_browser_context_impl.h
-@@ -29,6 +29,7 @@ namespace content {
+@@ -28,6 +28,7 @@ class WebContents;
  namespace headless {
  class HeadlessBrowserImpl;
  class HeadlessClientHintsControllerDelegate;
 +class HeadlessDownloadManagerDelegate;
  class HeadlessWebContentsImpl;
-
+ 
  class HEADLESS_EXPORT HeadlessBrowserContextImpl final
-@@ -125,6 +125,7 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+@@ -125,6 +126,7 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
        origin_trials_controller_delegate_;
-
+ 
    std::unique_ptr<HeadlessClientHintsControllerDelegate> hints_delegate_;
 +  std::unique_ptr<HeadlessDownloadManagerDelegate> download_manager_delegate_;
  };
-
+ 
  }  // namespace headless
 diff --git a/headless/lib/browser/headless_download_manager_delegate.cc b/headless/lib/browser/headless_download_manager_delegate.cc
 new file mode 100644
@@ -308,5 +307,3 @@ index 0000000000000..46921a0392ca3
 +}  // namespace headless
 +
 +#endif  // HEADLESS_LIB_BROWSER_HEADLESS_DOWNLOAD_MANAGER_DELEGATE_H_
---
-2.43.0

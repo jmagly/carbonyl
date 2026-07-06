@@ -1,7 +1,10 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 724312b638b6f3b00c6005f2d85232823cf86dba Mon Sep 17 00:00:00 2001
 From: Carbonyl Maintainers <carbonyl@integrolabs.net>
 Date: Fri, 22 May 2026 14:30:00 +0000
-Subject: [PATCH 29/29] carbonyl: honor --viewport in X11 ozone screen
+Subject: [PATCH 29/35] carbonyl: honor --viewport in X11 ozone screen
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 Fixes the x11 ozone half of roctinam/carbonyl#99 — Gap 1 in the cycle-1
 analysis.
@@ -43,27 +46,26 @@ Refs: roctinam/carbonyl#100  (the terminal-render half, merged
  2 files changed, 29 insertions(+)
 
 diff --git a/ui/ozone/platform/x11/BUILD.gn b/ui/ozone/platform/x11/BUILD.gn
-index aa11aa11aa11..bb22bb22bb22 100644
+index de7c3330d47d3..9b0214c6db5ed 100644
 --- a/ui/ozone/platform/x11/BUILD.gn
 +++ b/ui/ozone/platform/x11/BUILD.gn
-@@ -51,6 +51,8 @@ source_set("x11") {
+@@ -50,6 +50,8 @@ source_set("x11") {
    ]
-
+ 
    deps = [
 +    "//carbonyl/src/browser:bridge",
 +    "//carbonyl/src/browser:renderer",
      "//base",
      "//build:chromecast_buildflags",
      "//components/viz/common/resources:shared_image_format",
-
 diff --git a/ui/ozone/platform/x11/x11_screen_ozone.cc b/ui/ozone/platform/x11/x11_screen_ozone.cc
-index aa11aa11aa11..bb22bb22bb22 100644
+index 1b2420abcc6fa..4c1548b6a624f 100644
 --- a/ui/ozone/platform/x11/x11_screen_ozone.cc
 +++ b/ui/ozone/platform/x11/x11_screen_ozone.cc
 @@ -6,6 +6,9 @@
-
+ 
  #include <memory>
-
+ 
 +#include "carbonyl/src/browser/bridge.h"
 +#include "carbonyl/src/browser/renderer.h"
 +#include "ui/gfx/geometry/rect_conversions.h"
@@ -72,7 +74,7 @@ index aa11aa11aa11..bb22bb22bb22 100644
  #include "ui/base/x/x11_display_util.h"
 @@ -123,6 +126,30 @@ const std::vector<display::Display>& X11ScreenOzone::GetAllDisplays() const {
  }
-
+ 
  display::Display X11ScreenOzone::GetPrimaryDisplay() const {
 +  // Carbonyl issue #99: when a carbonyl renderer is registered, use its
 +  // viewport-respecting size for the primary display geometry instead of
@@ -100,6 +102,4 @@ index aa11aa11aa11..bb22bb22bb22 100644
 +  }
    return x11_display_manager_->GetPrimaryDisplay();
  }
-
---
-2.43.0
+ 

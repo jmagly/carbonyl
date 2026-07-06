@@ -419,6 +419,9 @@ run_awake "${docker_run[@]}" "$builder_image" bash -lc '
       sed -i "s/^ozone_platform = \"headless\"/ozone_platform = \"x11\"/" "${CHROMIUM_SRC}/out/Default/args.gn"
       sed -i "s/^ozone_platform_x11 = false/ozone_platform_x11 = true/" "${CHROMIUM_SRC}/out/Default/args.gn"
       sed -i "s/^use_xkbcommon = false/use_xkbcommon = true/" "${CHROMIUM_SRC}/out/Default/args.gn"
+      sed -i "s/^angle_use_x11 = false/angle_use_x11 = true/" "${CHROMIUM_SRC}/out/Default/args.gn"
+      sed -i "s/^rtc_use_x11 = false/rtc_use_x11 = true/" "${CHROMIUM_SRC}/out/Default/args.gn"
+      sed -i "s/^rtc_use_x11_extensions = false/rtc_use_x11_extensions = true/" "${CHROMIUM_SRC}/out/Default/args.gn"
       echo "[mutsu-linux] switched generated args to x11 Ozone"
       ;;
     *)

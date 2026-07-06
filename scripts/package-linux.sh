@@ -200,9 +200,21 @@ overrides:
       - "libsystemd0"
       - "libudev1"
       - "libx11-6"
+      # x11 Ozone runtime loader deps. The x11 container smoke runs
+      # `carbonyl --version` after installing the .deb and caught
+      # libXcomposite.so.1 and libXtst.so.6 missing in alpha.18.
       - "libxau6"
+      - "libxcomposite1"
       - "libxcb1"
+      - "libxdamage1"
       - "libxdmcp6"
+      - "libxext6"
+      - "libxfixes3"
+      - "libxi6"
+      - "libxrandr2"
+      - "libxrender1"
+      - "libxss1"
+      - "libxtst6"
       - "libzstd1"
   rpm:
     depends:
@@ -233,8 +245,17 @@ overrides:
       - "systemd-libs"
       - "libX11"
       - "libXau"
+      - "libXcomposite"
       - "libxcb"
+      - "libXdamage"
       - "libXdmcp"
+      - "libXext"
+      - "libXfixes"
+      - "libXi"
+      - "libXrandr"
+      - "libXrender"
+      - "libXScrnSaver"
+      - "libXtst"
       - "libzstd"
 YAML
 

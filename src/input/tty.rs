@@ -93,6 +93,9 @@ impl TTY {
         write!(out, "\x1bP$qm\x1b\\")?;
         // Query current terminal name
         write!(out, "\x1bP+q544e\x1b\\")?;
+        // Query Primary Device Attributes; terminals that support sixel include
+        // attribute 4 in the response (`CSI ? ... ; 4 c`).
+        write!(out, "\x1b[c")?;
 
         out.flush()
     }

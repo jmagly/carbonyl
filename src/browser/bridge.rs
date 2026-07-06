@@ -18,9 +18,13 @@ use std::{env, io, thread};
 
 use libc::{c_char, c_float, c_int, c_uchar, c_uint, c_void, size_t};
 
-use crate::cli::{CommandLine, CommandLineProgram, DumpFrameFormat, EnvVar};
+use crate::cli::{CommandLine, CommandLineProgram, DumpFrameFormat, EnvVar, SixelMode};
 use crate::gfx::{Cast, Color, Point, Rect, Size};
-use crate::output::{encode_png, Framebuffer, RenderThread, ScreenshotFormat, Window};
+use crate::output::{
+    bgra_to_sixel, encode_iterm2_png, encode_kitty_png, encode_png, measure_sixel,
+    write_iterm2_frame, write_kitty_frame, write_sixel_frame, Framebuffer, RenderThread,
+    ScreenshotFormat, Window,
+};
 use crate::ui::navigation::NavigationAction;
 use crate::{input, utils::log};
 
@@ -76,6 +80,10 @@ pub struct RendererBridge {
     capture_enabled: bool,
     last_frame: Option<(Vec<u8>, Size)>,
     last_frame_at: Option<Instant>,
+    /// True after the terminal answers Primary Device Attributes with sixel
+    /// attribute 4. Used by `--sixel=auto` as a conservative fallback policy:
+    /// default quadrant rendering stays active until this bit is observed.
+    sixel_supported: bool,
 }
 
 // SAFETY: a `RendererBridge` is only ever owned by the `Mutex` created in
@@ -296,6 +304,7 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
         capture_enabled: false,
         last_frame: None,
         last_frame_at: None,
+        sixel_supported: false,
     };
 
     // NOTE: the network-event sink is registered lazily in `set_network_capture`
@@ -314,21 +323,21 @@ pub extern "C" fn carbonyl_renderer_create() -> RendererPtr {
 
 #[no_mangle]
 pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
-    let program = CommandLine::parse().program;
+    let cmd = CommandLine::parse();
 
     // Dump modes (#88, #206): stdout belongs to the dump payload. Enabling the
     // terminal renderer would interleave ANSI escapes and chrome into the same
     // fd, corrupting the output.
-    if matches!(program, CommandLineProgram::DumpText { .. }) {
+    if matches!(cmd.program, CommandLineProgram::DumpText { .. }) {
         return;
     }
     if let CommandLineProgram::DumpFrame {
         format,
         idle_ms,
         max_wait_ms,
-    } = program
+    } = cmd.program
     {
-        start_dump_frame_monitor(bridge, format, idle_ms, max_wait_ms);
+        start_dump_frame_monitor(bridge, format, idle_ms, max_wait_ms, cmd.debug);
         return;
     }
 
@@ -337,7 +346,9 @@ pub extern "C" fn carbonyl_renderer_start(bridge: RendererPtr) {
             return;
         };
 
-        guard.renderer.enable()
+        if !guard.cmd.sixel_mode.is_forced() {
+            guard.renderer.enable()
+        }
     }
 
     carbonyl_renderer_resize(bridge);
@@ -348,6 +359,7 @@ fn start_dump_frame_monitor(
     format: DumpFrameFormat,
     idle_ms: u64,
     max_wait_ms: u64,
+    debug: bool,
 ) {
     let bridge_addr = bridge as usize;
     thread::spawn(move || {
@@ -369,9 +381,7 @@ fn start_dump_frame_monitor(
                     (Some((bgra, size)), Some(last_frame_at))
                         if timed_out || now.duration_since(last_frame_at) >= idle =>
                     {
-                        match format {
-                            DumpFrameFormat::Png => encode_png(bgra, *size),
-                        }
+                        encode_dump_frame(format, bgra, *size, debug)
                     }
                     _ if timed_out => None,
                     _ => continue,
@@ -394,6 +404,75 @@ fn start_dump_frame_monitor(
             }
         }
     });
+}
+
+fn encode_dump_frame(
+    format: DumpFrameFormat,
+    bgra: &[u8],
+    size: Size,
+    debug: bool,
+) -> Option<Vec<u8>> {
+    match format {
+        DumpFrameFormat::Png => {
+            let png = encode_png(bgra, size)?;
+            if debug {
+                log_dump_png_stats(format, size, bgra.len(), png.len(), png.len());
+            }
+            Some(png)
+        }
+        DumpFrameFormat::Sixel => {
+            let damage = Rect::new(0, 0, size.width, size.height);
+            let sixel = bgra_to_sixel(bgra, size, damage).ok()?;
+            if debug {
+                if let Ok(stats) = measure_sixel(bgra, size, damage) {
+                    log::debug!(
+                        "dump-frame sixel stats: {}x{} source_bytes={} encoded_bytes={} colors={} palette_mode={:?}",
+                        stats.width,
+                        stats.height,
+                        stats.source_bytes,
+                        stats.encoded_bytes,
+                        stats.colors,
+                        stats.palette_mode
+                    );
+                }
+            }
+            Some(sixel)
+        }
+        DumpFrameFormat::Kitty => {
+            let png = encode_png(bgra, size)?;
+            let wrapped = encode_kitty_png(&png, size);
+            if debug {
+                log_dump_png_stats(format, size, bgra.len(), png.len(), wrapped.len());
+            }
+            Some(wrapped)
+        }
+        DumpFrameFormat::Iterm2 => {
+            let png = encode_png(bgra, size)?;
+            let wrapped = encode_iterm2_png(&png, size);
+            if debug {
+                log_dump_png_stats(format, size, bgra.len(), png.len(), wrapped.len());
+            }
+            Some(wrapped)
+        }
+    }
+}
+
+fn log_dump_png_stats(
+    format: DumpFrameFormat,
+    size: Size,
+    source_bytes: usize,
+    png_bytes: usize,
+    encoded_bytes: usize,
+) {
+    log::debug!(
+        "dump-frame {:?} stats: {}x{} source_bytes={} png_bytes={} encoded_bytes={}",
+        format,
+        size.width,
+        size.height,
+        source_bytes,
+        png_bytes,
+        encoded_bytes
+    );
 }
 
 #[no_mangle]
@@ -555,6 +634,24 @@ pub extern "C" fn carbonyl_renderer_draw_bitmap(
                 origin: rect.origin.into(),
             },
         );
+    }
+
+    if let Some(mode) = bridge.live_image_mode() {
+        let mut stdout = io::stdout();
+        let result = match mode {
+            SixelMode::On => write_sixel_frame(&mut stdout, pixels, pixels_size.into())
+                .map_err(|err| err.to_string()),
+            SixelMode::Kitty => write_kitty_frame(&mut stdout, pixels, pixels_size.into())
+                .map_err(|err| err.to_string()),
+            SixelMode::Iterm2 => write_iterm2_frame(&mut stdout, pixels, pixels_size.into())
+                .map_err(|err| err.to_string()),
+            SixelMode::Auto | SixelMode::Off => Ok(()),
+        };
+        if let Err(err) = result {
+            log::debug!("live terminal image frame output failed: {err}");
+        }
+        callback(callback_data.as_ptr());
+        return;
     }
 
     // #3 screenshot capture: retain the latest full BGRA frame when armed so
@@ -834,11 +931,37 @@ fn dispatch_input_events(
                 }
                 Terminal(terminal) => match terminal {
                     TerminalEvent::Name(name) => log::debug!("terminal name: {name}"),
+                    TerminalEvent::SixelSupported => {
+                        if let Ok(mut bridge) = bridge.lock() {
+                            bridge.enable_sixel_support();
+                        }
+                    }
                     TerminalEvent::TrueColorSupported => renderer.enable_true_color(),
                 },
             }
         }
     })
+}
+
+impl RendererBridge {
+    fn live_image_mode(&self) -> Option<SixelMode> {
+        match self.cmd.sixel_mode {
+            SixelMode::On | SixelMode::Kitty | SixelMode::Iterm2 => Some(self.cmd.sixel_mode),
+            SixelMode::Auto if self.sixel_supported => Some(SixelMode::On),
+            SixelMode::Auto | SixelMode::Off => None,
+        }
+    }
+
+    fn enable_sixel_support(&mut self) {
+        self.sixel_supported = true;
+        if self.cmd.sixel_mode.is_auto() {
+            log::debug!(
+                "terminal reports sixel support; auto mode will route subsequent frames to sixel"
+            );
+        } else {
+            log::debug!("terminal reports sixel support");
+        }
+    }
 }
 
 #[no_mangle]

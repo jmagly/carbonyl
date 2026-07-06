@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0-alpha.18] - 2026-07-05
+
+### 🐛 Bug Fixes
+
+- Declare x11 package loader dependencies
+- Wait for runtime assets on tag push
+
+### 📖 Documentation
+
+- Remove html2svg origin note
+
 ## [0.2.0-alpha.17] - 2026-07-01
 
 ### 🐛 Bug Fixes

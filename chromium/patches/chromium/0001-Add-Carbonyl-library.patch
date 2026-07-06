@@ -1,7 +1,7 @@
-From a80de708987d5b4a9ef0dab62517b491d9786c92 Mon Sep 17 00:00:00 2001
+From ced7855d3de74714db41799e0b588b145b07b6a5 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:20:50 +0100
-Subject: [PATCH 01/26] Add Carbonyl library
+Subject: [PATCH 01/35] Add Carbonyl library
 
 ---
  carbonyl/build    |  1 +
@@ -28,10 +28,10 @@ index 0000000000000..dabb0e15a991e
 +../../../src
 \ No newline at end of file
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index c17b97a6ea38e..fc0137798a835 100644
+index fab2bfb45cecd..7595c298ad9eb 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -382,6 +382,7 @@ source_set("headless_browser") {
+@@ -374,6 +374,7 @@ source_set("headless_browser") {
      "//base:base_static",
      "//build:branding_buildflags",
      "//build/config/linux/dbus:buildflags",
@@ -39,7 +39,7 @@ index c17b97a6ea38e..fc0137798a835 100644
      "//components/cookie_config",
      "//components/embedder_support",
      "//components/embedder_support:user_agent",
-@@ -922,6 +923,15 @@ if (should_strip_binary) {
+@@ -879,6 +880,15 @@ if (should_strip_binary) {
  }
  
  executable("headless_shell") {
@@ -55,7 +55,7 @@ index c17b97a6ea38e..fc0137798a835 100644
    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
  
-@@ -935,6 +945,7 @@ executable("headless_shell") {
+@@ -892,6 +902,7 @@ executable("headless_shell") {
    deps = [
      ":headless_shell_lib",
      "//build:branding_buildflags",

@@ -1,7 +1,7 @@
-From 21eed478a3f688c7388434b44af6f1c47347a344 Mon Sep 17 00:00:00 2001
+From f9e5eddebba7fd7db67b9302ce07d1201853c18a Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Sun, 12 Feb 2023 00:55:33 +0100
-Subject: [PATCH 10/26] Conditionally enable text rendering
+Subject: [PATCH 10/35] Conditionally enable text rendering
 
 ---
  cc/trees/layer_tree_host.cc                   |  21 ++
@@ -17,10 +17,10 @@ Subject: [PATCH 10/26] Conditionally enable text rendering
  10 files changed, 356 insertions(+), 16 deletions(-)
 
 diff --git a/cc/trees/layer_tree_host.cc b/cc/trees/layer_tree_host.cc
-index c5427bb8c60dd..c1724aba94417 100644
+index 4a740ff0ecbfe..b68a95c723cdd 100644
 --- a/cc/trees/layer_tree_host.cc
 +++ b/cc/trees/layer_tree_host.cc
-@@ -547,6 +547,24 @@ bool LayerTreeHost::IsUsingLayerLists() const {
+@@ -549,6 +549,24 @@ bool LayerTreeHost::IsUsingLayerLists() const {
    return settings_.use_layer_lists;
  }
  
@@ -45,7 +45,7 @@ index c5427bb8c60dd..c1724aba94417 100644
  void LayerTreeHost::CommitComplete(int source_frame_number,
                                     const CommitTimestamps& commit_timestamps) {
    DCHECK(IsMainThread());
-@@ -1820,6 +1838,9 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
+@@ -1827,6 +1845,9 @@ bool LayerTreeHost::PaintContent(const LayerList& update_layer_list) {
    for (const auto& layer : update_layer_list) {
      result |= layer->Update();
    }
@@ -56,10 +56,10 @@ index c5427bb8c60dd..c1724aba94417 100644
  }
  
 diff --git a/cc/trees/layer_tree_host.h b/cc/trees/layer_tree_host.h
-index 925a5b0e8ff7a..064467c90f975 100644
+index bb1b8edfe423e..d05b44c77b3b0 100644
 --- a/cc/trees/layer_tree_host.h
 +++ b/cc/trees/layer_tree_host.h
-@@ -187,6 +187,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
+@@ -193,6 +193,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
    // Returns the process global unique identifier for this LayerTreeHost.
    int GetId() const;
  
@@ -72,7 +72,7 @@ index 925a5b0e8ff7a..064467c90f975 100644
    // The commit state for the frame being assembled by the compositor host.
    const CommitState* pending_commit_state() const {
      DCHECK(IsMainThread());
-@@ -1183,6 +1189,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
+@@ -1189,6 +1195,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostDelegate {
    std::unique_ptr<PropertyTreeDelegate> owned_property_tree_delegate_;
    raw_ptr<PropertyTreeDelegate> property_tree_delegate_;
  
@@ -82,10 +82,10 @@ index 925a5b0e8ff7a..064467c90f975 100644
  };
  
 diff --git a/content/browser/browser_interface_binders.cc b/content/browser/browser_interface_binders.cc
-index baa5bd1ca2699..ba33e31b94ceb 100644
+index 159c5cbb1ea29..1fbd1c82ca0b0 100644
 --- a/content/browser/browser_interface_binders.cc
 +++ b/content/browser/browser_interface_binders.cc
-@@ -961,6 +961,10 @@ void PopulateBinderMapWithContext(
+@@ -1041,6 +1041,10 @@ void PopulateBinderMapWithContext(
        &BindRenderFrameHostImpl<
            &RenderFrameHostImpl::CreateWebTransportConnector>);
  
@@ -97,10 +97,10 @@ index baa5bd1ca2699..ba33e31b94ceb 100644
    if (BrowserMainLoop::GetInstance()) {
      // BrowserMainLoop, which owns MediaStreamManager, is alive for the lifetime
 diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
-index 735febe0f136d..4309df84585bd 100644
+index 981c6062775d3..9506de5e66df7 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.cc
 +++ b/content/browser/renderer_host/render_frame_host_impl.cc
-@@ -15158,6 +15158,12 @@ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
+@@ -15051,6 +15051,12 @@ void RenderFrameHostImpl::BindTrustTokenQueryAnswerer(
        std::move(receiver), ComputeTopFrameOrigin(GetLastCommittedOrigin()));
  }
  
@@ -114,10 +114,10 @@ index 735febe0f136d..4309df84585bd 100644
      mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver) {
    AudioContextManagerImpl::Create(this, std::move(receiver));
 diff --git a/content/browser/renderer_host/render_frame_host_impl.h b/content/browser/renderer_host/render_frame_host_impl.h
-index 4b47563aca368..289508e0fea5c 100644
+index 8979afdd17eee..9dc6968ccb776 100644
 --- a/content/browser/renderer_host/render_frame_host_impl.h
 +++ b/content/browser/renderer_host/render_frame_host_impl.h
-@@ -221,6 +221,8 @@
+@@ -223,6 +223,8 @@
  #include "media/mojo/mojom/remoting.mojom-forward.h"
  #endif
  
@@ -126,7 +126,7 @@ index 4b47563aca368..289508e0fea5c 100644
  namespace blink {
  class AssociatedInterfaceRegistry;
  class DocumentPolicy;
-@@ -2088,6 +2090,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
+@@ -2086,6 +2088,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
    // Set the `frame_` for sending messages to the renderer process.
    void SetMojomFrameRemote(mojo::PendingAssociatedRemote<mojom::Frame>);
  
@@ -137,10 +137,10 @@ index 4b47563aca368..289508e0fea5c 100644
        mojo::PendingReceiver<blink::mojom::AudioContextManager> receiver);
  
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 678489f4b1f18..4fbb9a4801478 100644
+index a26f270bf4cc2..c4f414baf174e 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -245,6 +245,7 @@
+@@ -247,6 +247,7 @@
  #include "third_party/blink/public/web/web_window_features.h"
  #include "third_party/perfetto/include/perfetto/tracing/track.h"
  #include "third_party/perfetto/include/perfetto/tracing/track_event_args.h"
@@ -148,7 +148,7 @@ index 678489f4b1f18..4fbb9a4801478 100644
  #include "ui/accessibility/ax_tree_update.h"
  #include "ui/events/base_event_utils.h"
  #include "url/origin.h"
-@@ -261,6 +262,39 @@
+@@ -263,6 +264,39 @@
  #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
  #endif
  
@@ -188,7 +188,7 @@ index 678489f4b1f18..4fbb9a4801478 100644
  using base::Time;
  using blink::ContextMenuData;
  using blink::WebContentDecryptionModule;
-@@ -2006,6 +2040,223 @@ RenderFrameImpl::~RenderFrameImpl() {
+@@ -2074,6 +2108,223 @@ RenderFrameImpl::~RenderFrameImpl() {
    }
  }
  
@@ -412,7 +412,7 @@ index 678489f4b1f18..4fbb9a4801478 100644
  void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    initialized_ = true;
    is_main_frame_ = !parent;
-@@ -2031,6 +2282,8 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2099,6 +2350,8 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
                                    GetBrowserInterfaceBroker());
    }
  
@@ -421,7 +421,7 @@ index 678489f4b1f18..4fbb9a4801478 100644
    // Bind this class to mojom::Frame and to the message router for legacy IPC.
    // These must be called after |frame_| is set since binding requires a
    // per-frame task runner.
-@@ -2040,6 +2293,37 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
+@@ -2108,6 +2361,37 @@ void RenderFrameImpl::Initialize(blink::WebFrame* parent) {
    agent_scheduling_group_->AddFrameRoute(
        frame_token_,
        this, GetTaskRunner(blink::TaskType::kInternalNavigationAssociated));
@@ -485,10 +485,10 @@ index 11e9b422ee4ed..d55d67e56752c 100644
    // WebFrameWidgetImpl is the only concrete subclass that implements
    // WebFrameWidget, so that it is safe to downcast to WebFrameWidgetImpl.
 diff --git a/third_party/blink/renderer/core/css/resolver/style_resolver.cc b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-index 4447153eac9bf..ac93838e7fb48 100644
+index fc5e4283c2ebb..98e63887fafc0 100644
 --- a/third_party/blink/renderer/core/css/resolver/style_resolver.cc
 +++ b/third_party/blink/renderer/core/css/resolver/style_resolver.cc
-@@ -141,6 +141,8 @@
+@@ -142,6 +142,8 @@
  #include "third_party/blink/renderer/platform/wtf/text/atomic_string_hash.h"
  #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
  
@@ -497,7 +497,7 @@ index 4447153eac9bf..ac93838e7fb48 100644
  namespace blink {
  
  namespace {
-@@ -1488,18 +1490,20 @@ const ComputedStyle* StyleResolver::ResolveStyle(
+@@ -1459,18 +1461,20 @@ const ComputedStyle* StyleResolver::ResolveStyle(
      GetDocument().GetStyleEngine().SetUsesLineHeightUnits(true);
    }
  
@@ -530,22 +530,22 @@ index 4447153eac9bf..ac93838e7fb48 100644
    state.LoadPendingResources();
  
 diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
-index 87f64f5c2cfd4..7fc654b99c76c 100644
+index ac8478a059fa6..53f52027d03e6 100644
 --- a/third_party/blink/renderer/platform/BUILD.gn
 +++ b/third_party/blink/renderer/platform/BUILD.gn
-@@ -1807,6 +1807,7 @@ component("platform") {
+@@ -1805,6 +1805,7 @@ component("platform") {
      "//base:base_static",
      "//base/allocator:buildflags",
      "//build:chromecast_buildflags",
 +    "//carbonyl/src/browser:carbonyl",
      "//cc",
-     "//cc/ipc",
      "//cc/mojo_embedder",
+     "//components/input",
 diff --git a/third_party/blink/renderer/platform/fonts/font.cc b/third_party/blink/renderer/platform/fonts/font.cc
-index e7e8319a1da34..c9f23ca4d68c0 100644
+index 304244a61c718..7a7ebd273e8da 100644
 --- a/third_party/blink/renderer/platform/fonts/font.cc
 +++ b/third_party/blink/renderer/platform/fonts/font.cc
-@@ -43,6 +43,8 @@
+@@ -42,6 +42,8 @@
  #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
  #include "ui/gfx/geometry/rect_f.h"
  
@@ -554,7 +554,7 @@ index e7e8319a1da34..c9f23ca4d68c0 100644
  namespace blink {
  
  namespace {
-@@ -91,14 +93,12 @@ bool Font::operator==(const Font& other) const {
+@@ -90,14 +92,12 @@ bool Font::operator==(const Font& other) const {
  
  namespace {
  
@@ -570,7 +570,7 @@ index e7e8319a1da34..c9f23ca4d68c0 100644
      return;
    }
  
-@@ -174,7 +174,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -173,7 +173,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  
@@ -579,7 +579,7 @@ index e7e8319a1da34..c9f23ca4d68c0 100644
      auto string = StringView(
        run_info.run.ToStringView(),
        run_info.from,
-@@ -222,7 +222,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
+@@ -221,7 +221,7 @@ void Font::DrawText(cc::PaintCanvas* canvas,
    if (ShouldSkipDrawing())
      return;
  

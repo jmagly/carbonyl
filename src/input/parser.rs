@@ -16,6 +16,7 @@ enum Sequence {
     Control,
     Mouse(Mouse),
     Keyboard(Keyboard),
+    DeviceAttributes(Vec<u8>),
     DeviceControl(DeviceControl),
     Utf8(Utf8),
 }
@@ -23,6 +24,7 @@ enum Sequence {
 #[derive(Clone, Debug)]
 pub enum TerminalEvent {
     Name(String),
+    SixelSupported,
     TrueColorSupported,
 }
 
@@ -96,6 +98,7 @@ impl Parser {
                 Sequence::Control => match key {
                     b'<' => Sequence::Mouse(Mouse::new()),
                     b'1' => Sequence::Keyboard(Keyboard::new()),
+                    b'?' => Sequence::DeviceAttributes(Vec::new()),
                     // CSI Z (back-tab, terminfo `kcbt`): the bare Shift+Tab xterm
                     // emits for reverse focus. Deliver Tab (0x09) with shift so
                     // Blink runs reverse traversal once the FFI carries the
@@ -108,6 +111,14 @@ impl Parser {
                 },
                 Sequence::Mouse(ref mut mouse) => parse!(mouse, key),
                 Sequence::Keyboard(ref mut keyboard) => parse!(keyboard, key),
+                Sequence::DeviceAttributes(ref mut attrs) => match key {
+                    b'c' => emit!(parse_device_attributes(attrs)),
+                    b'0'..=b'9' | b';' => {
+                        attrs.push(key);
+                        continue;
+                    }
+                    _ => Sequence::Char,
+                },
                 Sequence::DeviceControl(ref mut dcs) => parse!(dcs, key),
                 Sequence::Utf8(ref mut utf8) => parse!(utf8, key),
             }
@@ -117,6 +128,13 @@ impl Parser {
 
         std::mem::take(&mut self.events)
     }
+}
+
+fn parse_device_attributes(attrs: &[u8]) -> Option<Event> {
+    let text = std::str::from_utf8(attrs).ok()?;
+    text.split(';')
+        .any(|attr| attr == "4")
+        .then_some(Event::Terminal(TerminalEvent::SixelSupported))
 }
 
 #[cfg(test)]
@@ -143,6 +161,41 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    fn terminal_events(events: Vec<Event>) -> Vec<TerminalEvent> {
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::Terminal(event) => Some(event),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn primary_device_attributes_detect_sixel_attribute() {
+        let mut p = Parser::new();
+        assert!(matches!(
+            terminal_events(p.parse(b"\x1b[?1;2;4c")).as_slice(),
+            [TerminalEvent::SixelSupported]
+        ));
+    }
+
+    #[test]
+    fn primary_device_attributes_accumulate_across_parse_calls() {
+        let mut p = Parser::new();
+        assert!(terminal_events(p.parse(b"\x1b[?1;")).is_empty());
+        assert!(matches!(
+            terminal_events(p.parse(b"2;4c")).as_slice(),
+            [TerminalEvent::SixelSupported]
+        ));
+    }
+
+    #[test]
+    fn primary_device_attributes_without_sixel_attribute_are_ignored() {
+        let mut p = Parser::new();
+        assert!(terminal_events(p.parse(b"\x1b[?1;2c")).is_empty());
     }
 
     #[test]

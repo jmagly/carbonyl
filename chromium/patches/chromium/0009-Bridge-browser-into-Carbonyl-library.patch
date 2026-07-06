@@ -1,19 +1,19 @@
-From bb6a7aea607c2097f98430f45fcb8de23938ee36 Mon Sep 17 00:00:00 2001
+From 69f8965971d12f729f688b70afca85bc8effe6d8 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:32:30 +0100
-Subject: [PATCH 09/26] Bridge browser into Carbonyl library
+Subject: [PATCH 09/35] Bridge browser into Carbonyl library
 
 ---
  headless/app/headless_shell.cc                |  31 +-
  headless/app/headless_shell_main.cc           |   5 +
- headless/lib/browser/headless_browser_impl.cc | 410 +++++++++++++++++-
- headless/lib/browser/headless_browser_impl.h  |  27 ++
+ headless/lib/browser/headless_browser_impl.cc | 440 +++++++++++++++++-
+ headless/lib/browser/headless_browser_impl.h  |  31 ++
  .../lib/browser/headless_web_contents_impl.cc |  32 ++
  .../lib/browser/headless_web_contents_impl.h  |  11 +-
- 6 files changed, 488 insertions(+), 28 deletions(-)
+ 6 files changed, 522 insertions(+), 28 deletions(-)
 
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 59e464014960f..99e05ebd19e82 100644
+index 73883294aeb67..0ccb47741fda5 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -4,6 +4,8 @@
@@ -25,7 +25,7 @@ index 59e464014960f..99e05ebd19e82 100644
  #include <memory>
  
  #include "base/base_switches.h"
-@@ -105,6 +107,8 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -92,6 +94,8 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
    HeadlessBrowserContext::Builder context_builder =
        browser_->CreateBrowserContextBuilder();
  
@@ -34,7 +34,7 @@ index 59e464014960f..99e05ebd19e82 100644
    // Create browser context and set it as the default. The default browser
    // context is used by the Target.createTarget() DevTools command when no other
    // context is given.
-@@ -136,31 +140,8 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -123,31 +127,8 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
    GURL target_url = ConvertArgumentToURL(args.front());
    HeadlessWebContents::Builder builder(
        browser_context->CreateWebContentsBuilder());
@@ -86,7 +86,7 @@ index f8287680cfea4..203b06489e0e4 100644
  #if BUILDFLAG(IS_WIN)
    sandbox::SandboxInterfaceInfo sandbox_info = {nullptr};
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index 17f063e1c55a2..3fd1a6d12f6e6 100644
+index 580c6e9c0718d..6b7624ee792ad 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
 @@ -7,6 +7,8 @@
@@ -98,7 +98,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  #include "base/compiler_specific.h"
  #include "base/functional/callback.h"
-@@ -65,6 +67,24 @@
+@@ -59,6 +61,24 @@
  #include "components/variations/service/variations_service.h"  // nogncheck
  #endif
  
@@ -123,7 +123,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  namespace headless {
  
  namespace {
-@@ -133,7 +152,15 @@ HeadlessBrowserImpl::HeadlessBrowserImpl(
+@@ -127,7 +147,15 @@ HeadlessBrowserImpl::HeadlessBrowserImpl(
      : on_start_callback_(std::move(on_start_callback)),
        platform_delegate_(std::make_unique<HeadlessPlatformDelegate>()) {}
  
@@ -140,7 +140,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  void HeadlessBrowserImpl::SetOptions(HeadlessBrowser::Options options) {
    options_ = std::move(options);
-@@ -272,6 +299,340 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+@@ -254,6 +282,340 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
    return true;
  }
  
@@ -481,7 +481,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    CreateOSCryptAsync();
  
-@@ -284,6 +645,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
+@@ -266,6 +628,82 @@ void HeadlessBrowserImpl::PreMainMessageLoopRun() {
    platform_delegate_->Start();
  
    std::move(on_start_callback_).Run(this);
@@ -565,7 +565,7 @@ index 17f063e1c55a2..3fd1a6d12f6e6 100644
  
  void HeadlessBrowserImpl::WillRunMainMessageLoop(base::RunLoop& run_loop) {
 diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
-index 1d9ba1861de00..eed25b81f39c6 100644
+index 630d301fb1d67..893612560d309 100644
 --- a/headless/lib/browser/headless_browser_impl.h
 +++ b/headless/lib/browser/headless_browser_impl.h
 @@ -8,6 +8,7 @@
@@ -576,10 +576,14 @@ index 1d9ba1861de00..eed25b81f39c6 100644
  
  #include "base/memory/raw_ptr.h"
  #include "base/memory/weak_ptr.h"
-@@ -112,6 +113,32 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
-   policy::PolicyService* GetPolicyService();
+@@ -100,6 +101,36 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+   PrefService* GetPrefs();
  #endif
  
++#if defined(HEADLESS_USE_POLICY)
++  policy::PolicyService* GetPolicyService();
++#endif
++
 +#if BUILDFLAG(IS_MAC)
 +  device::GeolocationSystemPermissionManager*
 +  GetGeolocationSystemPermissionManager();

@@ -46,8 +46,8 @@ To bump a specific crate to a new major version, edit `Cargo.toml` then run
 
 ### Chromium version (involved — do when security patches are needed)
 
-Chromium is currently at `148.0.7778.167` (M148, upgraded May 2026 from M147).
-The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148. Updating it requires:
+Chromium is currently at `150.0.7871.47` (M150, upgraded July 2026 from M148).
+The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148 → M150. Updating it requires:
 
 1. **Choose a new Chromium version**: check https://chromiumdash.appspot.com/releases
    for a stable branch release.
@@ -134,63 +134,45 @@ The upgrade path was: M111 → M120 → M132 → M135 → M140 → M147 → M148
 
 ### Patch reference commits
 
-The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M148):
+The `scripts/patches.sh` script uses hardcoded upstream base commits (current: M150):
 
 | Repo | Base commit | Chromium version |
 |------|-------------|-----------------|
-| Chromium | `65db666ac2cf205fcc36db8bb5b9cd87f94808ac` | M148 (148.0.7778.167) |
-| Skia | `a2888b27a98e4ff30085d4d2dba8a1a99baf6dfb` | DEPS @ 148.0.7778.167 |
-| WebRTC | `9a7f650bcd14f241d20f88f4e1ea3b7300de72ac` | DEPS @ 148.0.7778.167 |
+| Chromium | `0c3cca15d78645281db2d339b2dc3d6fad4ee90a` | M150 (150.0.7871.47) |
+| Skia | `14d05ec761901b6e9e9193af8b347ab3a7f6fed0` | DEPS @ 150.0.7871.47 |
+| WebRTC | `1f975dfd761af6e5d76d28333191973b258d82a8` | DEPS @ 150.0.7871.47 |
 
 When updating Chromium, update all three to the new version's base commits
 before running `patches.sh apply`.
 
-### Notes on current patch set (M148)
+### Notes on current patch set (M150)
 
-- **Total patches**: 26. The M148 rebase keeps the existing structure but
-  regenerates the Chromium patch stack against `148.0.7778.167`.
+- **Total patches**: 35. The M150 rebase regenerates the Chromium patch stack
+  against `150.0.7871.47`.
 
 - **Rebase changes baked into existing patches**:
-  - `font.h`: dead `Font::DrawText(TextRun)` overloads removed —
-    `CachingWordShaper` and `ShapeResultBuffer` were removed upstream.
-    The `TextFragmentPaintInfo` path (with the b64 text-capture bypass)
-    is the only remaining carbonyl hook into text rendering.
-  - `host_display_client.h`: `ui/gfx/native_widget_types.h` renamed to
-    `ui/gfx/native_ui_types.h`; `SkBitmap.h` added; viz target now deps
-    on `//ui/gfx`
-  - `software_output_device_proxy.cc`: `ResourceSizes::MaybeSizeInBytes`
-    replaced with `SinglePlaneFormat::kRGBA_8888.MaybeEstimatedSizeInBytes()`
-  - `browser_interface_binders.cc`: `BinderMap::Add` signature changed;
-    use `BindRenderFrameHostImpl<>` template
-  - `headless/BUILD.gn`: phantom `//carbonyl/src/browser:carbonyl` dep
-    removed (target never existed — worked by accident in older gn)
-  - `headless_browser_impl.cc`: added `content/public/browser/navigation_controller.h`;
-    `PlatformSetWebContentsBounds` → `SetWebContentsBounds`
-  - `headless_screen.cc`: removed duplicate `~HeadlessScreen() = default`
-  - `headless_web_contents_impl.h`: `using content::WebContentsObserver::OnVisibilityChanged`
-  - `paint_artifact_compositor.cc`: removed orphan
-    `DumpWithDifferingPaintPropertiesIncluded` definition. The M148 tree also
-    removed the upstream debug dump helper block (`DescribePaintPropertyNode`
-    and `DumpWithDifferingPaintPropertiesIncluded` callers), so the regenerated
-    patch now matches the final upstream shape.
-  - `text_decoration_painter.cc`: `(void)skip_ink` to suppress unused-var
-  - `cc/trees/layer_tree_host.cc`: `PaintContent` keeps the upstream M148
-    `bool result` flow, calls `StartTerminalRender()`, and returns `result`.
+  - `text_decoration_painter.cc` and `ui/gfx/render_text.cc`: underline,
+    overline, and strike drawing remain disabled while preserving the M150 text
+    decoration API shape.
+  - `headless_browser_impl.h`: keeps M150's browser declarations while retaining
+    the Carbonyl bridge hooks and input thread.
+  - Blink `BUILD.gn` targets were refreshed for M150's target layout while
+    preserving the `//carbonyl/src/blink:text_capture` dependency path.
+  - `third_party/blink/renderer/platform/BUILD.gn`: the stale
+    `//carbonyl/src/browser:blink` dependency remains removed.
+  - `src/browser/args.gn`: stale M150 GN args were removed
+    (`enable_nacl`, `enable_system_notifications`, `use_vaapi_x11`), and the
+    old `use_qt` switch is now `use_qt5 = false` plus `use_qt6 = false`.
 
-- **Rebase changes in carbonyl source**:
-  - `src/browser/args.gn`: `use_dbus = true` (wayland ozone requirement)
-  - `src/browser/renderer.cc`: static `unique_ptr` → leaked raw pointer
-    (M147+ clang enforces `-Wexit-time-destructors`)
-  - `src/blink/text_capture.cc`:
-    - Skia `drawPath(path, paint, bool=false)` → `drawPath(path, paint)`
-    - Skia `getRelativeTransform` returns `SkM44` — use `.asM33()`
-    - Static `RendererService` → leaked pointer
+- **Patch 35** (`fix-m150-add-logging-include-for-viz-proxy`): adds
+  `base/logging.h` to `software_output_device_proxy.cc` so the restored viz
+  proxy compiles with M150's include graph.
 
-- **CI verification**: `build-runtime.yml` is green for both `headless` and
-  `x11` amd64 variants on run 133 at `c751224`, and `mirror.yml` is green on
-  run 134. The x11 smoke test requires a real PTY via `script` for terminal
-  capture while also checking the X framebuffer; both outputs passed before the
-  runtime was published.
+- **CI/runtime verification**: PR #269 is green at `95c3cc7`. Check/Lint,
+  Security, and Validate Patches passed on runs 585-587. The amd64 runtime
+  matrix passed for both headless and x11 on run 583, publishing runtime hash
+  `027cf47450dc6ce9`. Text-render parity passed on run 588 for `static.html`,
+  `css-rich.html`, and `dynamic.html` using the same runtime hash.
 
 - **Patch 22** (`fix-m135-remove-stale-blink-target-dep`): removes a stale
   `:blink` GN dep from `blink/renderer/platform/BUILD.gn` (artifact of patch
@@ -269,7 +251,7 @@ milestone, the `text_capture` source set may need to be relocated — but the
 pattern (dedicated blink TU for non-blink consumers) is the correct long-term
 approach.
 
-### GN args notes (M148)
+### GN args notes (M150)
 
 Several feature flags are intentionally **left at their platform defaults**
 (typically `true` on Linux) instead of being explicitly set to `false`:
@@ -288,9 +270,10 @@ evaluation graph even though headless_shell never compiles their targets.
 The features are not built into headless_shell either way (it has its own
 if-guards on dependent targets).
 
-**Removed from args.gn**: `enable_component_updater` (M135) and `enable_nacl`
-(M140) no longer exist as GN args. Setting them produces "not declared in any
-declare_args block" warnings.
+**Removed from args.gn**: `enable_component_updater` (M135), `enable_nacl`
+(M140), plus M150's stale `enable_system_notifications`, `use_vaapi_x11`, and
+single `use_qt` switches no longer exist as used here. Setting them produces
+"not declared in any declare_args block" warnings.
 
 ## Automation Layer
 

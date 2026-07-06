@@ -8,6 +8,8 @@ mod quad;
 mod render_thread;
 mod renderer;
 mod screenshot;
+mod sixel;
+mod terminal_image;
 mod window;
 mod xterm;
 
@@ -19,4 +21,6 @@ pub use quad::*;
 pub use render_thread::*;
 pub use renderer::*;
 pub use screenshot::*;
+pub use sixel::*;
+pub use terminal_image::*;
 pub use window::*;

@@ -112,7 +112,7 @@ jobs:
       - name: Titan host preflight
         run: |
           cd "${GITHUB_WORKSPACE}/.repo-clone"
-          BUILDER_IMAGE="${BUILDER_IMAGE}" scripts/titan-x64-preflight.sh
+          BUILDER_IMAGE="${BUILDER_IMAGE}" scripts/titan-x64-preflight.sh --allow-missing-baselines
 
       - name: Shell smoke syntax
         run: |

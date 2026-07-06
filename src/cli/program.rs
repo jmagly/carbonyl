@@ -1,4 +1,4 @@
-use super::CommandLine;
+use super::{CommandLine, SixelMode};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DumpTextMode {
@@ -14,6 +14,12 @@ pub enum DumpTextMode {
 pub enum DumpFrameFormat {
     /// PNG image encoded from the latest compositor frame.
     Png,
+    /// Sixel DCS sequence encoded from the latest compositor frame (#241).
+    Sixel,
+    /// Kitty graphics protocol sequence carrying a PNG frame (#241).
+    Kitty,
+    /// iTerm2 inline-image sequence carrying a PNG frame (#241).
+    Iterm2,
 }
 
 #[derive(Clone, Debug)]
@@ -28,9 +34,10 @@ pub enum CommandLineProgram {
         idle_ms: u64,
         max_wait_ms: u64,
     },
-    /// `--dump[=png]` / `--screenshot[=png]` — load the URL, wait for
-    /// compositor frames to settle, emit the current frame as PNG on stdout,
-    /// and exit. Bypasses the terminal renderer entirely. See #206.
+    /// `--dump[=png|sixel|kitty|iterm2]` / matching `--screenshot` — load the
+    /// URL, wait for compositor frames to settle, emit the current frame on
+    /// stdout, and exit. Bypasses the terminal renderer entirely. See #206 and
+    /// #241.
     DumpFrame {
         format: DumpFrameFormat,
         idle_ms: u64,
@@ -60,6 +67,36 @@ impl CommandLineProgram {
                          local-console input via evdev (needs the input/video group \
                          or root). See docs/framebuffer-backend.md."
                     );
+                }
+                match cmd.sixel_mode {
+                    SixelMode::On => {
+                        eprintln!(
+                            "carbonyl: sixel output enabled — rendering compositor frames \
+                             as terminal images; the default quadrant renderer is disabled \
+                             for this session."
+                        );
+                    }
+                    SixelMode::Auto => {
+                        eprintln!(
+                            "carbonyl: sixel auto-detect enabled — using the default \
+                             quadrant renderer unless the terminal reports sixel support."
+                        );
+                    }
+                    SixelMode::Kitty => {
+                        eprintln!(
+                            "carbonyl: kitty terminal-image output enabled — rendering \
+                             compositor frames as kitty graphics; the default quadrant \
+                             renderer is disabled for this session."
+                        );
+                    }
+                    SixelMode::Iterm2 => {
+                        eprintln!(
+                            "carbonyl: iTerm2 terminal-image output enabled — rendering \
+                             compositor frames as inline images; the default quadrant \
+                             renderer is disabled for this session."
+                        );
+                    }
+                    SixelMode::Off => {}
                 }
                 return Some(cmd);
             }

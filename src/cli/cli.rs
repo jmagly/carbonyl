@@ -2,6 +2,25 @@ use std::{env, ffi::OsStr};
 
 use super::{CommandLineProgram, DumpFrameFormat, DumpTextMode};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SixelMode {
+    Off,
+    Auto,
+    On,
+    Kitty,
+    Iterm2,
+}
+
+impl SixelMode {
+    pub fn is_forced(self) -> bool {
+        matches!(self, Self::On | Self::Kitty | Self::Iterm2)
+    }
+
+    pub fn is_auto(self) -> bool {
+        matches!(self, Self::Auto)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct CommandLine {
     pub args: Vec<String>,
@@ -11,6 +30,13 @@ pub struct CommandLine {
     pub bitmap: bool,
     pub program: CommandLineProgram,
     pub shell_mode: bool,
+    /// Live terminal image output backend policy (#241). Forced image modes
+    /// emit compositor frames as terminal images instead of using the default
+    /// Unicode quadrant renderer. Auto mode keeps the quadrant renderer as
+    /// fallback until DA1 reports sixel support; terminal-image auto first
+    /// checks well-known kitty/iTerm2 environment markers. Set via
+    /// `--sixel[=auto|on|off]`, `--terminal-image=...`, or env vars.
+    pub sixel_mode: SixelMode,
     /// Optional consumer-provided CSS viewport override as (width, height).
     /// When set, Chromium lays out against this viewport regardless of
     /// terminal cell count, and the terminal samples a view onto the
@@ -100,6 +126,7 @@ impl CommandLine {
         let mut debug = false;
         let mut bitmap = false;
         let mut shell_mode = false;
+        let mut sixel_mode = SixelMode::Off;
         let mut viewport: Option<(u32, u32)> = None;
         let mut chrome_rows: u32 = 1;
         let mut framebuffer: Option<String> = None;
@@ -151,6 +178,18 @@ impl CommandLine {
                 "-z" | "--zoom" => set_f32!(zoom = zoom / 100.0),
                 "-d" | "--debug" => set!(debug, Debug),
                 "-b" | "--bitmap" => set!(bitmap, Bitmap),
+                "--sixel" => {
+                    sixel_mode = value
+                        .and_then(|value| parse_sixel_mode(value))
+                        .unwrap_or(SixelMode::On)
+                }
+                "--terminal-image" | "--image-protocol" => {
+                    if let Some(value) = value {
+                        if let Some(mode) = parse_terminal_image_mode(value) {
+                            sixel_mode = resolve_terminal_image_mode(mode);
+                        }
+                    }
+                }
                 "--viewport" => {
                     if let Some(value) = value {
                         if let Some((w, h)) = parse_viewport(value) {
@@ -364,6 +403,21 @@ impl CommandLine {
             shell_mode = true;
         }
 
+        if let Ok(value) = env::var("CARBONYL_SIXEL") {
+            sixel_mode = parse_sixel_mode(&value).unwrap_or_else(|| {
+                if parse_bool_env(&value) {
+                    SixelMode::On
+                } else {
+                    SixelMode::Off
+                }
+            });
+        }
+        if let Ok(value) = env::var("CARBONYL_TERMINAL_IMAGE") {
+            if let Some(mode) = parse_terminal_image_mode(&value) {
+                sixel_mode = resolve_terminal_image_mode(mode);
+            }
+        }
+
         CommandLine {
             args,
             fps,
@@ -372,6 +426,7 @@ impl CommandLine {
             bitmap,
             program,
             shell_mode,
+            sixel_mode,
             viewport,
             chrome_rows,
             framebuffer,
@@ -531,11 +586,60 @@ fn parse_dump_text_mode(value: &str) -> Option<DumpTextMode> {
     }
 }
 
-/// Parse the `--dump=<format>` / `--screenshot=<format>` value. Only PNG is
-/// implemented today; aliases are accepted so the CLI has room to grow.
+fn parse_sixel_mode(value: &str) -> Option<SixelMode> {
+    match value.to_ascii_lowercase().as_str() {
+        "" | "1" | "true" | "yes" | "on" | "force" | "forced" => Some(SixelMode::On),
+        "0" | "false" | "no" | "off" | "disable" | "disabled" => Some(SixelMode::Off),
+        "auto" | "detect" | "detected" => Some(SixelMode::Auto),
+        _ => None,
+    }
+}
+
+fn parse_terminal_image_mode(value: &str) -> Option<SixelMode> {
+    match value.to_ascii_lowercase().as_str() {
+        "" | "0" | "false" | "no" | "off" | "disable" | "disabled" => Some(SixelMode::Off),
+        "1" | "true" | "yes" | "on" | "sixel" | "sixel-on" | "sixel-force" => Some(SixelMode::On),
+        "auto" | "detect" | "detected" | "sixel-auto" | "sixel-detect" => Some(SixelMode::Auto),
+        "kitty" | "kitty-graphics" => Some(SixelMode::Kitty),
+        "iterm" | "iterm2" | "inline-image" => Some(SixelMode::Iterm2),
+        _ => None,
+    }
+}
+
+fn resolve_terminal_image_mode(mode: SixelMode) -> SixelMode {
+    if mode != SixelMode::Auto {
+        return mode;
+    }
+    detect_terminal_image_mode().unwrap_or(SixelMode::Auto)
+}
+
+fn detect_terminal_image_mode() -> Option<SixelMode> {
+    if env_present("KITTY_WINDOW_ID") || env_equals_ignore_case("TERM", "kitty") {
+        return Some(SixelMode::Kitty);
+    }
+
+    if env_present("ITERM_SESSION_ID") || env_equals_ignore_case("TERM_PROGRAM", "iTerm.app") {
+        return Some(SixelMode::Iterm2);
+    }
+
+    None
+}
+
+fn env_present(name: &str) -> bool {
+    env::var(name).is_ok_and(|value| !value.is_empty())
+}
+
+fn env_equals_ignore_case(name: &str, expected: &str) -> bool {
+    env::var(name).is_ok_and(|value| value.eq_ignore_ascii_case(expected))
+}
+
+/// Parse the `--dump=<format>` / `--screenshot=<format>` value.
 fn parse_dump_frame_format(value: &str) -> Option<DumpFrameFormat> {
     match value.to_ascii_lowercase().as_str() {
         "" | "1" | "png" | "image/png" => Some(DumpFrameFormat::Png),
+        "sixel" | "image/sixel" => Some(DumpFrameFormat::Sixel),
+        "kitty" | "kitty-graphics" | "image/kitty" => Some(DumpFrameFormat::Kitty),
+        "iterm" | "iterm2" | "inline-image" | "image/iterm2" => Some(DumpFrameFormat::Iterm2),
         _ => None,
     }
 }
@@ -543,6 +647,9 @@ fn parse_dump_frame_format(value: &str) -> Option<DumpFrameFormat> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn dump_text_mode_aliases() {
@@ -578,6 +685,22 @@ mod tests {
             parse_dump_frame_format("IMAGE/PNG"),
             Some(DumpFrameFormat::Png)
         );
+        assert_eq!(
+            parse_dump_frame_format("sixel"),
+            Some(DumpFrameFormat::Sixel)
+        );
+        assert_eq!(
+            parse_dump_frame_format("IMAGE/SIXEL"),
+            Some(DumpFrameFormat::Sixel)
+        );
+        assert_eq!(
+            parse_dump_frame_format("kitty-graphics"),
+            Some(DumpFrameFormat::Kitty)
+        );
+        assert_eq!(
+            parse_dump_frame_format("ITERM2"),
+            Some(DumpFrameFormat::Iterm2)
+        );
         assert_eq!(parse_dump_frame_format("jpeg"), None);
     }
 
@@ -597,14 +720,14 @@ mod tests {
         ));
 
         let cmd = CommandLine::parse_args(vec![
-            "--screenshot=png".to_string(),
+            "--screenshot=kitty".to_string(),
             "--idle=750".to_string(),
             "--max-wait=9000".to_string(),
         ]);
         assert!(matches!(
             cmd.program,
             CommandLineProgram::DumpFrame {
-                format: DumpFrameFormat::Png,
+                format: DumpFrameFormat::Kitty,
                 idle_ms: 750,
                 max_wait_ms: 9000
             }
@@ -669,6 +792,151 @@ mod tests {
 
         if let Some(value) = original {
             std::env::set_var("CARBONYL_TAB_FOCUS", value);
+        }
+    }
+
+    #[test]
+    fn sixel_defaults_off_and_cli_enables_it() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original = std::env::var("CARBONYL_SIXEL").ok();
+        std::env::remove_var("CARBONYL_SIXEL");
+
+        let cmd = CommandLine::parse_args(vec!["https://example.com".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Off);
+
+        let cmd = CommandLine::parse_args(vec!["--sixel".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::On);
+
+        let cmd = CommandLine::parse_args(vec!["--sixel=auto".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Auto);
+
+        let cmd = CommandLine::parse_args(vec!["--sixel=off".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Off);
+
+        if let Some(value) = original {
+            std::env::set_var("CARBONYL_SIXEL", value);
+        }
+    }
+
+    #[test]
+    fn sixel_env_accepts_auto_and_boolean_values() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original = std::env::var("CARBONYL_SIXEL").ok();
+
+        std::env::set_var("CARBONYL_SIXEL", "auto");
+        let cmd = CommandLine::parse_args(vec!["https://example.com".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Auto);
+
+        std::env::set_var("CARBONYL_SIXEL", "1");
+        let cmd = CommandLine::parse_args(vec!["https://example.com".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::On);
+
+        std::env::set_var("CARBONYL_SIXEL", "0");
+        let cmd = CommandLine::parse_args(vec!["--sixel".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Off);
+
+        match original {
+            Some(value) => std::env::set_var("CARBONYL_SIXEL", value),
+            None => std::env::remove_var("CARBONYL_SIXEL"),
+        }
+    }
+
+    #[test]
+    fn terminal_image_cli_enables_live_kitty_and_iterm2() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original = std::env::var("CARBONYL_TERMINAL_IMAGE").ok();
+        let original_kitty = std::env::var("KITTY_WINDOW_ID").ok();
+        let original_iterm = std::env::var("ITERM_SESSION_ID").ok();
+        let original_term = std::env::var("TERM").ok();
+        let original_term_program = std::env::var("TERM_PROGRAM").ok();
+        std::env::remove_var("CARBONYL_TERMINAL_IMAGE");
+        std::env::remove_var("KITTY_WINDOW_ID");
+        std::env::remove_var("ITERM_SESSION_ID");
+        std::env::remove_var("TERM");
+        std::env::remove_var("TERM_PROGRAM");
+
+        let cmd = CommandLine::parse_args(vec!["--terminal-image=kitty".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Kitty);
+
+        let cmd = CommandLine::parse_args(vec!["--image-protocol=iterm2".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Iterm2);
+
+        let cmd = CommandLine::parse_args(vec!["--terminal-image=sixel-auto".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Auto);
+
+        match original {
+            Some(value) => std::env::set_var("CARBONYL_TERMINAL_IMAGE", value),
+            None => std::env::remove_var("CARBONYL_TERMINAL_IMAGE"),
+        }
+        restore_env("KITTY_WINDOW_ID", original_kitty);
+        restore_env("ITERM_SESSION_ID", original_iterm);
+        restore_env("TERM", original_term);
+        restore_env("TERM_PROGRAM", original_term_program);
+    }
+
+    #[test]
+    fn terminal_image_auto_detects_kitty_and_iterm2_envs() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original_terminal = std::env::var("CARBONYL_TERMINAL_IMAGE").ok();
+        let original_kitty = std::env::var("KITTY_WINDOW_ID").ok();
+        let original_iterm = std::env::var("ITERM_SESSION_ID").ok();
+        let original_term = std::env::var("TERM").ok();
+        let original_term_program = std::env::var("TERM_PROGRAM").ok();
+
+        std::env::remove_var("CARBONYL_TERMINAL_IMAGE");
+        std::env::remove_var("KITTY_WINDOW_ID");
+        std::env::remove_var("ITERM_SESSION_ID");
+        std::env::remove_var("TERM");
+        std::env::remove_var("TERM_PROGRAM");
+
+        let cmd = CommandLine::parse_args(vec!["--terminal-image=auto".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Auto);
+
+        std::env::set_var("KITTY_WINDOW_ID", "1");
+        let cmd = CommandLine::parse_args(vec!["--terminal-image=auto".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Kitty);
+
+        std::env::remove_var("KITTY_WINDOW_ID");
+        std::env::set_var("TERM_PROGRAM", "iTerm.app");
+        let cmd = CommandLine::parse_args(vec!["--terminal-image=auto".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Iterm2);
+
+        std::env::set_var("CARBONYL_TERMINAL_IMAGE", "auto");
+        let cmd = CommandLine::parse_args(vec!["https://example.com".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Iterm2);
+
+        restore_env("CARBONYL_TERMINAL_IMAGE", original_terminal);
+        restore_env("KITTY_WINDOW_ID", original_kitty);
+        restore_env("ITERM_SESSION_ID", original_iterm);
+        restore_env("TERM", original_term);
+        restore_env("TERM_PROGRAM", original_term_program);
+    }
+
+    #[test]
+    fn terminal_image_env_overrides_legacy_sixel_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original_terminal = std::env::var("CARBONYL_TERMINAL_IMAGE").ok();
+        let original_sixel = std::env::var("CARBONYL_SIXEL").ok();
+
+        std::env::set_var("CARBONYL_SIXEL", "1");
+        std::env::set_var("CARBONYL_TERMINAL_IMAGE", "kitty");
+        let cmd = CommandLine::parse_args(vec!["https://example.com".to_string()]);
+        assert_eq!(cmd.sixel_mode, SixelMode::Kitty);
+
+        match original_terminal {
+            Some(value) => std::env::set_var("CARBONYL_TERMINAL_IMAGE", value),
+            None => std::env::remove_var("CARBONYL_TERMINAL_IMAGE"),
+        }
+        match original_sixel {
+            Some(value) => std::env::set_var("CARBONYL_SIXEL", value),
+            None => std::env::remove_var("CARBONYL_SIXEL"),
+        }
+    }
+
+    fn restore_env(name: &str, value: Option<String>) {
+        match value {
+            Some(value) => std::env::set_var(name, value),
+            None => std::env::remove_var(name),
         }
     }
 

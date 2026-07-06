@@ -129,8 +129,9 @@ jobs:
         # Patches live in chromium/patches/chromium/*.patch — sync just that
         # directory + scripts so patches.sh works.
         run: |
+          rm -rf "${HOST_CARBONYL_DIR}/chromium/patches"
           rsync -a --no-owner --no-group \
-            --include='chromium/' --include='chromium/patches/' --include='chromium/patches/**' \
+            --include='chromium/' --include='chromium/.gclient' --include='chromium/patches/' --include='chromium/patches/**' \
             --include='scripts/' --include='scripts/**' \
             --include='src/' --include='src/browser/' \
             --include='src/browser/args.gn' \
@@ -174,6 +175,15 @@ jobs:
               if [ -z "${TARGET_SHA}" ]; then
                 echo "[validate] ERROR: could not resolve chromium_upstream from scripts/patches.sh" >&2
                 exit 1
+              fi
+              TARGET_VERSION="$(sed -n "s/.*src\.git@\([^\"]*\)\".*/\1/p" chromium/.gclient | head -1)"
+              if [ -z "${TARGET_VERSION}" ]; then
+                echo "[validate] ERROR: could not resolve Chromium tag from chromium/.gclient" >&2
+                exit 1
+              fi
+              if ! git -C ${CHROMIUM_SRC} cat-file -e "${TARGET_SHA}^{commit}" 2>/dev/null; then
+                echo "[validate] fetching Chromium tag ${TARGET_VERSION}"
+                git -C ${CHROMIUM_SRC} fetch --progress origin "refs/tags/${TARGET_VERSION}:refs/tags/${TARGET_VERSION}"
               fi
               git -C ${CHROMIUM_SRC} cat-file -e "${TARGET_SHA}^{commit}"
               git -C ${CHROMIUM_SRC} worktree add --detach ${WORKTREE} "${TARGET_SHA}"

@@ -1,7 +1,7 @@
-From f5666e89d0399300ffee642affab629a21ce36fd Mon Sep 17 00:00:00 2001
+From 9ffcd5f80672451dd3ae6eaeb4a87cd054fce026 Mon Sep 17 00:00:00 2001
 From: Joseph Magly <1159087+jmagly@users.noreply.github.com>
 Date: Sat, 4 Apr 2026 21:51:24 -0400
-Subject: [PATCH 18/26] fix(m120): fix compile errors in render_frame_impl and
+Subject: [PATCH 18/35] fix(m120): fix compile errors in render_frame_impl and
  headless_browser_impl
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -19,10 +19,10 @@ Content-Transfer-Encoding: 8bit
  4 files changed, 8 insertions(+), 15 deletions(-)
 
 diff --git a/content/renderer/render_frame_impl.cc b/content/renderer/render_frame_impl.cc
-index 4fbb9a4801478..f19727bafa2ba 100644
+index c4f414baf174e..5ebad1a104920 100644
 --- a/content/renderer/render_frame_impl.cc
 +++ b/content/renderer/render_frame_impl.cc
-@@ -281,14 +281,14 @@
+@@ -283,14 +283,14 @@
  #include "third_party/blink/renderer/core/layout/layout_view.h"
  #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
  #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
@@ -39,7 +39,7 @@ index 4fbb9a4801478..f19727bafa2ba 100644
  #include "third_party/skia/src/text/GlyphRun.h"
  #include "third_party/skia/src/core/SkClipStackDevice.h"
  #include "third_party/skia/src/core/SkDevice.h"
-@@ -2182,25 +2182,15 @@ protected:
+@@ -2250,25 +2250,15 @@ protected:
  
        base64[runSize] = '\0';
  
@@ -69,10 +69,10 @@ index 4fbb9a4801478..f19727bafa2ba 100644
            paint.getColor()
          )
 diff --git a/content/renderer/render_frame_impl.h b/content/renderer/render_frame_impl.h
-index abc5652bee5a0..d60e5c21ae59c 100644
+index 434528b6e8c77..22103c6bcd894 100644
 --- a/content/renderer/render_frame_impl.h
 +++ b/content/renderer/render_frame_impl.h
-@@ -127,6 +127,7 @@
+@@ -126,6 +126,7 @@
  #include "url/gurl.h"
  #include "url/origin.h"
  #include "v8/include/v8-forward.h"
@@ -81,10 +81,10 @@ index abc5652bee5a0..d60e5c21ae59c 100644
  #if BUILDFLAG(IS_ANDROID)
  #include "content/common/gin_java_bridge.mojom.h"
 diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
-index a7c66b2fe7016..43d8c71167a7b 100644
+index 8673d6512e805..32c6a4f42b151 100644
 --- a/headless/lib/browser/headless_browser_impl.cc
 +++ b/headless/lib/browser/headless_browser_impl.cc
-@@ -183,6 +183,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
+@@ -178,6 +178,7 @@ HeadlessBrowserImpl::BrowserMainThread() const {
  void HeadlessBrowserImpl::Shutdown() {
    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
  
@@ -93,10 +93,10 @@ index a7c66b2fe7016..43d8c71167a7b 100644
    // Make sure GetAllBrowserContexts is sane if called after this point.
    auto tmp = std::move(browser_contexts_);
 diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
-index eed25b81f39c6..840cf9c5d4fa4 100644
+index 893612560d309..123029e567d93 100644
 --- a/headless/lib/browser/headless_browser_impl.h
 +++ b/headless/lib/browser/headless_browser_impl.h
-@@ -147,6 +147,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+@@ -139,6 +139,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
    std::unique_ptr<HeadlessPlatformDelegate> platform_delegate_;
  
    int exit_code_ = 0;

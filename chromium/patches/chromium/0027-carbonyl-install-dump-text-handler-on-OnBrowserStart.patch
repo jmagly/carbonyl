@@ -1,8 +1,11 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 10665f5461dde5eab91b9bb8be85d946a9afad79 Mon Sep 17 00:00:00 2001
 From: Carbonyl Maintainers <carbonyl@integrolabs.net>
-Date: Wed, 21 May 2026 13:00:00 +0000
-Subject: [PATCH 27/27] carbonyl: install --dump-text handler on
+Date: Thu, 21 May 2026 13:00:00 +0000
+Subject: [PATCH 27/35] carbonyl: install --dump-text handler on
  OnBrowserStart's WebContents
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
 
 Wires `carbonyl::DumpTextHandler::StartFor()` into the headless shell's
 `OnBrowserStart()`, right after the initial `HeadlessWebContents` is
@@ -48,11 +51,11 @@ Refs: roctinam/carbonyl#5
  2 files changed, 14 insertions(+)
 
 diff --git a/headless/BUILD.gn b/headless/BUILD.gn
-index 28d25d86087a9..4691cdc61cbac 100644
+index e713f821a3508..c17c484f15d79 100644
 --- a/headless/BUILD.gn
 +++ b/headless/BUILD.gn
-@@ -946,6 +946,7 @@ executable("headless_shell") {
-
+@@ -903,6 +903,7 @@ executable("headless_shell") {
+ 
    deps = [
      ":headless_shell_lib",
 +    "//carbonyl/src/browser:dump_text",
@@ -60,18 +63,18 @@ index 28d25d86087a9..4691cdc61cbac 100644
      "//build:branding_buildflags",
      "//components/os_crypt/common:switches",
 diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
-index 2446f07b906c2..f7ac18c3eff01 100644
+index 1b82a594f44c7..95a5cb6dbf8c7 100644
 --- a/headless/app/headless_shell.cc
 +++ b/headless/app/headless_shell.cc
 @@ -4,6 +4,7 @@
-
+ 
  #include "headless/public/headless_shell.h"
-
+ 
 +#include "carbonyl/src/browser/dump_text_handler.h"
  #include "carbonyl/src/browser/renderer.h"
-
+ 
  #include <memory>
-@@ -149,6 +150,18 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -136,6 +137,18 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
      LOG(ERROR) << "Navigation to " << target_url << " failed.";
      ShutdownSoon();
    }
@@ -88,7 +91,5 @@ index 2446f07b906c2..f7ac18c3eff01 100644
 +        browser);
 +  }
  }
-
+ 
  #if defined(HEADLESS_ENABLE_COMMANDS)
---
-2.43.0

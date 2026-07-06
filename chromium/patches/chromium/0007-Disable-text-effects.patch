@@ -1,62 +1,51 @@
-From 4ffdaa56164414a58e748716e3207b8a2405138a Mon Sep 17 00:00:00 2001
+From dc2d550766f7006ed0ab190dc24c26faade7c0e9 Mon Sep 17 00:00:00 2001
 From: Fathy Boundjadj <hey@fathy.fr>
 Date: Thu, 9 Feb 2023 03:31:17 +0100
-Subject: [PATCH 07/26] Disable text effects
+Subject: [PATCH 07/35] Disable text effects
 
 ---
- .../core/paint/text_decoration_painter.cc     | 41 ++++++++-----------
- ui/gfx/render_text.cc                         | 36 ++++++++--------
- 2 files changed, 34 insertions(+), 43 deletions(-)
+ .../core/paint/text_decoration_painter.cc     | 30 +---------------
+ ui/gfx/render_text.cc                         | 36 +++++++++----------
+ 2 files changed, 19 insertions(+), 47 deletions(-)
 
 diff --git a/third_party/blink/renderer/core/paint/text_decoration_painter.cc b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-index d01cb32832deb..58ec2d2f02218 100644
+index 221ed3d2197e4..94112d362efe7 100644
 --- a/third_party/blink/renderer/core/paint/text_decoration_painter.cc
 +++ b/third_party/blink/renderer/core/paint/text_decoration_painter.cc
-@@ -174,31 +174,22 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
+@@ -177,35 +177,7 @@ void TextDecorationPainter::PaintUnderOrOverLineDecorations(
              continue;
            }
  
--          if (decoration_info.HasUnderline() && decoration_info.FontData() &&
+-          if (decoration.HasUnderline() && decoration.HasFontData() &&
 -              EnumHasFlags(lines_to_paint, TextDecorationLine::kUnderline)) {
 -            DecorationGeometry geometry =
--                decoration_info.ComputeUnderlineLineData(decoration_offset);
+-                decoration_info.ComputeUnderlineLineData(decoration,
+-                                                         decoration_offset);
 -            text_painter_.ClipDecorationLine(
 -                geometry, decoration_info.BaselineForInkSkip(),
 -                fragment_paint_info, skip_ink);
 -
 -            text_painter_.PaintDecorationLine(
 -                geometry, decoration_info.HasDecorationOverride(),
--                LineColorForPhase(decoration_info, phase), auto_dark_mode);
+-                LineColorForPhase(decoration_info, decoration, phase),
+-                auto_dark_mode);
 -          }
 -
--          if (decoration_info.HasOverline() && decoration_info.FontData() &&
+-          if (decoration.HasOverline() && decoration.HasFontData() &&
 -              EnumHasFlags(lines_to_paint, TextDecorationLine::kOverline)) {
 -            DecorationGeometry geometry =
--                decoration_info.ComputeOverlineLineData(decoration_offset);
+-                decoration_info.ComputeOverlineLineData(decoration,
+-                                                        decoration_offset);
 -            text_painter_.ClipDecorationLine(
 -                geometry, decoration_info.BaselineForInkSkip(),
 -                fragment_paint_info, skip_ink);
 -
 -            text_painter_.PaintDecorationLine(
 -                geometry, decoration_info.HasDecorationOverride(),
--                LineColorForPhase(decoration_info, phase), auto_dark_mode);
+-                LineColorForPhase(decoration_info, decoration, phase),
+-                auto_dark_mode);
 -          }
 +          // carbonyl: underline/overline painting disabled (text effects patch)
-+          // if (decoration_info.HasUnderline() && decoration_info.FontData() &&
-+          //     EnumHasFlags(lines_to_paint, TextDecorationLine::kUnderline)) {
-+          //   decoration_info.SetUnderlineLineData(decoration_offset);
-+          //   text_painter_.PaintDecorationLine(
-+          //       decoration_info, LineColorForPhase(decoration_info, phase),
-+          //       &fragment_paint_info);
-+          // }
-+
-+          // if (decoration_info.HasOverline() && decoration_info.FontData() &&
-+          //     EnumHasFlags(lines_to_paint, TextDecorationLine::kOverline)) {
-+          //   decoration_info.SetOverlineLineData(decoration_offset);
-+          //   text_painter_.PaintDecorationLine(
-+          //       decoration_info, LineColorForPhase(decoration_info, phase),
-+          //       &fragment_paint_info);
-+          // }
          }
        },
        paint_info_.context, text_style);

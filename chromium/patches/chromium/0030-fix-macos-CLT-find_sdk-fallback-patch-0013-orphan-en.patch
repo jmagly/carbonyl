@@ -1,8 +1,8 @@
-From 1a39f76a72980b3ca1c43241e9c0e155ad8753db Mon Sep 17 00:00:00 2001
+From c0168fb09eaed2a96a7c3e1b0357c5784c14f083 Mon Sep 17 00:00:00 2001
 From: carbonyl <carbonyl@local>
 Date: Sun, 24 May 2026 21:05:15 -0400
-Subject: [PATCH] fix(macos): CLT find_sdk fallback + patch-0013 orphan #endif
- + headless geolocation fwd-decl
+Subject: [PATCH 30/35] fix(macos): CLT find_sdk fallback + patch-0013 orphan
+ #endif + headless geolocation fwd-decl
 
 macOS arm64 build fixes (carbonyl #109), all in code paths only compiled on
 mac so they were never caught by the Linux build:
@@ -55,10 +55,10 @@ index c83a3d1151dd5..5faf2269967cb 100755
  
    if options.print_sdk_build:
 diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
-index 840cf9c5d4fa4..c8817b31bfc22 100644
+index 123029e567d93..aba0afb9d3e80 100644
 --- a/headless/lib/browser/headless_browser_impl.h
 +++ b/headless/lib/browser/headless_browser_impl.h
-@@ -40,6 +40,10 @@ namespace ui {
+@@ -32,6 +32,10 @@ namespace ui {
  class Compositor;
  }
  
@@ -73,7 +73,7 @@ diff --git a/printing/printing_context_mac.mm b/printing/printing_context_mac.mm
 index fafb60088e0de..53add77b12fcc 100644
 --- a/printing/printing_context_mac.mm
 +++ b/printing/printing_context_mac.mm
-@@ -750,7 +750,6 @@ bool IsIppColorModelColorful(mojom::ColorModel color_model) {
+@@ -750,7 +750,6 @@ bool PrintingContextMac::SetOutputColor(int color_mode) {
                     GetIppColorModelForModel(color_model))) {
      return false;
    }
@@ -81,6 +81,3 @@ index fafb60088e0de..53add77b12fcc 100644
  
    // Even when interfacing with printer settings using CUPS IPP, the print job
    // may still expect PPD color values if the printer was added to the system
--- 
-2.50.1 (Apple Git-155)
-
