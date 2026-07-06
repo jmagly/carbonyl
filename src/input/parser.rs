@@ -15,6 +15,7 @@ enum Sequence {
     Escape,
     Control,
     Mouse(Mouse),
+    LegacyMouse(LegacyMouse),
     Keyboard(Keyboard),
     DeviceAttributes(Vec<u8>),
     DeviceControl(DeviceControl),
@@ -97,6 +98,7 @@ impl Parser {
                 },
                 Sequence::Control => match key {
                     b'<' => Sequence::Mouse(Mouse::new()),
+                    b'M' => Sequence::LegacyMouse(LegacyMouse::new()),
                     b'1' => Sequence::Keyboard(Keyboard::new()),
                     b'?' => Sequence::DeviceAttributes(Vec::new()),
                     // CSI Z (back-tab, terminfo `kcbt`): the bare Shift+Tab xterm
@@ -110,6 +112,7 @@ impl Parser {
                     key => emit!(Keyboard::key(key, 0)),
                 },
                 Sequence::Mouse(ref mut mouse) => parse!(mouse, key),
+                Sequence::LegacyMouse(ref mut mouse) => parse!(mouse, key),
                 Sequence::Keyboard(ref mut keyboard) => parse!(keyboard, key),
                 Sequence::DeviceAttributes(ref mut attrs) => match key {
                     b'c' => emit!(parse_device_attributes(attrs)),
@@ -215,6 +218,62 @@ mod tests {
         // A bare Tab byte is still an unmodified Tab — only CSI Z carries shift.
         let mut p = Parser::new();
         assert_eq!(key_codes_with_mask(p.parse(b"\x09")), vec![(0x09, 0)]);
+    }
+
+    #[test]
+    fn legacy_mouse_down_decodes_x10_report() {
+        let mut p = Parser::new();
+        let events = p.parse(b"\x1b[M !!");
+
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseDown {
+                row: 0,
+                col: 0,
+                button: 0
+            }]
+        ));
+    }
+
+    #[test]
+    fn legacy_mouse_up_completes_primary_click() {
+        let mut p = Parser::new();
+        let events = p.parse(b"\x1b[M#!!");
+
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseUp {
+                row: 0,
+                col: 0,
+                button: 0
+            }]
+        ));
+    }
+
+    #[test]
+    fn legacy_mouse_scroll_decodes_wheel_reports() {
+        let mut p = Parser::new();
+        let up = p.parse(b"\x1b[M`!!");
+        let down = p.parse(b"\x1b[Ma!!");
+
+        assert!(matches!(up.as_slice(), [Event::Scroll { delta: 1 }]));
+        assert!(matches!(down.as_slice(), [Event::Scroll { delta: -1 }]));
+    }
+
+    #[test]
+    fn legacy_mouse_accumulates_across_parse_calls() {
+        let mut p = Parser::new();
+        assert!(p.parse(b"\x1b[M ").is_empty());
+
+        let events = p.parse(b"!!");
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseDown {
+                row: 0,
+                col: 0,
+                button: 0
+            }]
+        ));
     }
 
     #[test]
