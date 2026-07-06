@@ -29,6 +29,18 @@ Options:
     --tab-focus                forward Tab and Shift+Tab to Chromium for page
                                focus traversal (default: disabled; alias:
                                --enable-tab-nav; also via CARBONYL_TAB_FOCUS=1).
+    --sixel[=on|auto|off]      render compositor frames as sixel terminal
+                               images in capable terminals (default: disabled;
+                               also via CARBONYL_SIXEL=1/auto/off). With
+                               --sixel=auto, the default quadrant renderer
+                               remains active unless DA1 reports sixel support.
+                               Use --dump=sixel for single-frame output.
+    --terminal-image=<mode>    live terminal image output. Modes: off, auto,
+                               sixel, sixel-auto, kitty, iterm2. auto detects
+                               kitty/iTerm2 env markers, then falls back to
+                               DA1-gated sixel. Also via
+                               CARBONYL_TERMINAL_IMAGE. Alias:
+                               --image-protocol=<mode>.
     --basic-auth=<user:pass>   add Basic Auth userinfo to the first HTTP(S) URL
                                before launching Chromium. The flag is consumed
                                by Carbonyl and is not forwarded to Chromium.
@@ -44,17 +56,22 @@ Options:
                                accessibility (falls back to innertext until
                                #4 lands), raw-dom. Also via CARBONYL_DUMP_TEXT
                                env var. See docs/runtime-modes.md Mode 4.
-    --dump[=png],              skip the terminal renderer entirely; load the
-    --screenshot[=png]         URL, wait for compositor frames to stop changing,
-                               write the current frame as PNG to stdout, and
-                               exit. Also via CARBONYL_DUMP_FRAME=1.
+    --dump[=png|sixel|kitty|iterm2],
+    --screenshot[=png|sixel|kitty|iterm2]
+                               skip the terminal renderer entirely; load the
+                               URL, wait for compositor frames to stop changing,
+                               write the current frame as PNG or terminal image
+                               protocol payload to stdout, and exit. Also via
+                               CARBONYL_DUMP_FRAME=1.
     --idle=<ms>                with --dump-text: wait <ms> after the load
                                event before extracting; with --dump: wait <ms>
                                after the last compositor frame (default: 500).
     --max-wait=<ms>            with dump modes: hard timeout in ms
                                (default: 30000).
     -b, --bitmap               render text as bitmaps
-    -d, --debug                enable debug logs
+    -d, --debug                enable debug logs; with --dump, writes frame
+                               size statistics to stderr while stdout remains
+                               the image payload
     -h, --help                 display this help message
     -v, --version              output the version number
 
@@ -70,6 +87,10 @@ Environment variables:
     CARBONYL_PAGE_HEIGHT=N     same as --page-height
     CARBONYL_CHROME_ROWS=N     same as --chrome-rows
     CARBONYL_TAB_FOCUS=1       same as --tab-focus
+    CARBONYL_SIXEL=1|auto|off  same as --sixel / --sixel=auto / --sixel=off
+    CARBONYL_TERMINAL_IMAGE=<mode>
+                               same as --terminal-image=<mode>; overrides
+                               CARBONYL_SIXEL when both are set
     CARBONYL_BASIC_AUTH=u:p    same as --basic-auth; removed from the spawned
                                Chromium child environment
     CARBONYL_DOWNLOAD_DIR=PATH same as --download-dir when the CLI flag is
@@ -82,7 +103,8 @@ Environment variables:
     CARBONYL_ENV_BITMAP=1      same as --bitmap
     CARBONYL_DUMP_TEXT=<mode>  same as --dump-text (empty / "1" implies
                                default mode); CLI flag wins if both set
-    CARBONYL_DUMP_FRAME=1      same as --dump=png
+    CARBONYL_DUMP_FRAME=1      same as --dump=png; set to "sixel", "kitty",
+                               or "iterm2" for terminal image payloads
     CARBONYL_DUMP_IDLE_MS=<ms> same as --idle
     CARBONYL_DUMP_MAX_WAIT_MS=<ms>
                                same as --max-wait
@@ -107,3 +129,9 @@ Runtime modes (see docs/runtime-modes.md for the full operator guide):
        (text-only extraction)  (see docs/runtime-modes.md Mode 4)
     dump-frame                 carbonyl --dump --viewport=1280x800 <url> > page.png
        (PNG frame capture)     (see docs/runtime-modes.md Mode 5)
+    terminal image output      carbonyl --sixel=auto --viewport=1280x800 <url>
+       (auto/opt-in images)    carbonyl --terminal-image=kitty <url>
+                               carbonyl --terminal-image=iterm2 <url>
+                               carbonyl --dump=sixel <url> > page.sixel
+    terminal image dumps       carbonyl --dump=kitty <url> > page.kitty
+                               carbonyl --dump=iterm2 <url> > page.iterm2

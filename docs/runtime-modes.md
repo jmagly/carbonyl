@@ -21,6 +21,7 @@ notes before switching modes mid-engagement.
 | Automation **and** screenshot/video capture | **x11 + uinput + X-mirror** | same as above | `scrot`, `ffmpeg`, `x11vnc` against `$DISPLAY` | full |
 | Text-only extraction (scraping, LLM pipes) | **`--dump-text`** | none — single-shot navigation | none — bypasses renderer | full |
 | Visual frame dump (screenshots, mailcap filters) | **`--dump`** | none — single-shot navigation | none — bypasses terminal renderer | full compositor frame |
+| Terminal image protocols | **`--sixel[=auto]`**, **`--terminal-image=<mode>`**, or **`--dump=<mode>`** | terminal with matching image support | matching terminal emulator | full compositor frame |
 
 **Rule of thumb:** if you don't need bot-detection-resistant input, stay
 in terminal-only mode — it has the smallest dependency surface and the
@@ -194,22 +195,39 @@ length, since a real page can legitimately have an empty `innerText`.
 
 ---
 
-## Mode 5 — `--dump` / `--screenshot` (PNG frame dump, no terminal renderer)
+## Mode 5 — `--dump` / `--screenshot` (frame dump, no terminal renderer)
 
-`--dump[=png]` loads the URL, watches compositor frames, waits until the frame
-has stopped changing for the idle window, writes the current frame as PNG bytes
-to stdout, and exits. The terminal renderer is not started, so stdout contains
-only the PNG payload.
+`--dump[=png|sixel|kitty|iterm2]` loads the URL, watches compositor frames,
+waits until the frame has stopped changing for the idle window, writes the
+current frame to stdout, and exits. The terminal renderer is not started, so
+stdout contains only the selected payload.
 
 ```bash
 carbonyl --dump --viewport=1280x800 https://example.com > page.png
 carbonyl --screenshot=png --page-height=4000 https://example.com > full-page.png
+carbonyl --dump=sixel --viewport=1280x800 https://example.com > page.sixel
+carbonyl --dump=kitty --viewport=1280x800 https://example.com > page.kitty
+carbonyl --dump=iterm2 --viewport=1280x800 https://example.com > page.iterm2
 ```
 
-The mode uses the same BGRA frame cache and PNG encoder as the screenshot FFI,
-but it is CLI-first and single-shot. It is intentionally separate from
-`--dump-text=raw-dom`: raw DOM returns post-JavaScript HTML, while `--dump`
-returns the visual compositor frame.
+The mode uses the same BGRA frame cache as the screenshot FFI, but it is
+CLI-first and single-shot. `png` uses the PNG encoder; `sixel` uses the in-tree
+sixel encoder for terminal image consumers. `kitty` and `iterm2` wrap the same
+PNG frame in the respective terminal image protocol escape sequence. It is
+intentionally separate from `--dump-text=raw-dom`: raw DOM returns
+post-JavaScript HTML, while `--dump` returns the visual compositor frame.
+
+For size/perf characterization, add `--debug` and redirect stderr separately.
+Stdout remains the selected image payload; debug logs report the source raster
+size and encoded byte count. For sixel, the log also includes palette size and
+whether the exact palette or RGB332 fallback was used.
+
+```bash
+carbonyl --debug --dump=sixel --viewport=1280x800 https://example.com \
+  > page.sixel 2> page.sixel.log
+carbonyl --debug --dump=kitty --viewport=1280x800 https://example.com \
+  > page.kitty 2> page.kitty.log
+```
 
 **Timing flags:**
 
@@ -222,9 +240,47 @@ returns the visual compositor frame.
 
 | Code | Meaning |
 |------|---------|
-| `0`  | PNG frame written to stdout |
+| `0`  | frame written to stdout |
 | `1`  | internal write/bridge failure |
 | `6`  | no encodable frame arrived before `--max-wait` |
+
+## Mode 6 — live terminal image output
+
+`--sixel` is an explicit opt-in backend for terminals that support DEC sixel.
+It keeps the terminal setup/input path, but disables the default Unicode
+quadrant renderer for the session and writes each compositor frame as a sixel
+image in the alt screen. `--terminal-image=kitty` and
+`--terminal-image=iterm2` use the same live frame path but wrap each PNG frame
+in the corresponding terminal image protocol.
+
+```bash
+carbonyl --sixel --viewport=1280x800 https://example.com
+carbonyl --sixel=auto --viewport=1280x800 https://example.com
+carbonyl --terminal-image=auto --viewport=1280x800 https://example.com
+carbonyl --terminal-image=kitty --viewport=1280x800 https://example.com
+carbonyl --terminal-image=iterm2 --viewport=1280x800 https://example.com
+CARBONYL_SIXEL=1 carbonyl --viewport=1280x800 https://example.com
+CARBONYL_SIXEL=auto carbonyl --viewport=1280x800 https://example.com
+CARBONYL_TERMINAL_IMAGE=auto carbonyl --viewport=1280x800 https://example.com
+CARBONYL_TERMINAL_IMAGE=kitty carbonyl --viewport=1280x800 https://example.com
+```
+
+Plain `--sixel` / `CARBONYL_SIXEL=1` is force-on mode for a known
+sixel-capable terminal; otherwise the raw DCS payload may be visible.
+`--sixel=auto` / `CARBONYL_SIXEL=auto` is conservative: Carbonyl sends a
+Primary Device Attributes query during terminal setup, keeps the default
+quadrant renderer active, and only routes subsequent frames to sixel after the
+terminal reports DA1 attribute `4`. If no support report arrives, the normal
+renderer remains the fallback.
+
+`--terminal-image=auto` / `CARBONYL_TERMINAL_IMAGE=auto` is the broader
+terminal-image detector. It selects kitty graphics when `KITTY_WINDOW_ID` is
+present or `TERM=kitty`, selects iTerm2 inline images when `ITERM_SESSION_ID`
+is present or `TERM_PROGRAM=iTerm.app`, and otherwise falls back to the
+DA1-gated sixel policy above. Detection is intentionally conservative and
+environment-based for kitty/iTerm2; explicit `--terminal-image=kitty` or
+`--terminal-image=iterm2` remains available for compatible terminals such as
+WezTerm.
 
 ---
 
@@ -238,10 +294,13 @@ carbonyl [options] [url]
   --viewport=<WIDTHxHEIGHT>  override the CSS viewport Chromium lays out
                              against. Also via CARBONYL_VIEWPORT.
   -b, --bitmap               render text as quadrant bitmaps (default)
+  --sixel[=on|auto|off]      render live frames as sixel terminal images
+  --terminal-image=<mode>    render live frames with sixel, kitty, or iterm2
   --chrome-rows=<N>          stack the URL/chrome bar across N terminal rows
                              (default 1)
-  --dump[=png],
-  --screenshot[=png]         dump the current compositor frame as PNG
+  --dump[=png|sixel|kitty|iterm2],
+  --screenshot[=png|sixel|kitty|iterm2]
+                             dump the current compositor frame
   -d, --debug                enable debug logs (also CARBONYL_ENV_DEBUG=1)
   -h, --help                 print usage
   -v, --version              print version

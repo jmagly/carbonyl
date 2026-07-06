@@ -43,7 +43,9 @@ This section is synthesized after template emission from the current workspace s
 
 ### Discover-First Protocol
 
-Before declining an AIWG request as out of scope or inventing a workflow from memory, run `aiwg discover "<the user need>"`. The CLI ranks AIWG capabilities across the installed corpus. Fetch the selected item with `aiwg show <type> <name>`. This prevents decline-without-search failures and hallucinated skill or agent names. Full rule: `agentic/code/addons/aiwg-utils/rules/skill-discovery.md`.
+Classify every user turn FIRST: is it a **new directive** or a continuation? When a message names or references an AIWG command/capability — even as pasted content like an `address-issues` tracker table, an issue list, or a `flow-*` name — treat it as a new directive and ACT: run `aiwg discover "<the need>"`, fetch with `aiwg show <type> <name>`, and invoke it. Do NOT ask "what would you like me to do with these?" when the action is implied — a pasted `address-issues #1234` table means run the address-issues workflow on those issues.
+
+Also run `aiwg discover` before declining an AIWG request as out of scope or inventing a workflow from memory. The CLI ranks AIWG capabilities across the installed corpus and rebuilds the index from `$AIWG_ROOT` automatically, so a "no matches" for a command you know is deployed is a bug — not a signal it is absent. Commands AIWG deploys to your provider command directory (`.opencode/command/`, `.claude/commands/`, `~/.codex/prompts/`, …) ARE discoverable this way; fetch them with `aiwg show command <name>`. This prevents decline-without-search failures, ask-instead-of-act on new directives, and hallucinated skill or agent names. Full rule: `agentic/code/addons/aiwg-utils/rules/skill-discovery.md`.
 
 ### Engagement Verification
 
@@ -55,3 +57,10 @@ When a user asks whether AIWG is active or engaged in this project, run or read 
 - Root `AIWG.md` is the generated cross-provider companion loaded through `AGENTS.md` and provider twins.
 - `AGENTS.md`, `WARP.md`, `.hermes.md`, and `.github/copilot-instructions.md` are provider-facing bridges, not replacements for `.aiwg/AIWG.md`.
 <!-- aiwg-context-finalization:END -->
+
+## Issue Tracking
+
+- Primary issue system: Gitea at `https://git.integrolabs.net/roctinam/carbonyl/issues`.
+- GitHub issue mirror: `https://github.com/jmagly/carbonyl/issues` is secondary and should not be used for canonical tracking unless the user explicitly requests GitHub.
+- For user reports and agent-created work items, file or update Gitea issues first; link any GitHub mirror reports back to the Gitea issue.
+- Repository code and release assets may still mirror to GitHub, but issues and PR review workflow are tracked in Gitea by default.

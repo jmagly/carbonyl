@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Carbonyl issue 241 terminal image fixture</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #111827;
+    font-family: system-ui, sans-serif;
+    color: white;
+  }
+
+  body.ready {
+    background:
+      radial-gradient(circle at 20% 20%, #ff3366 0, transparent 28%),
+      radial-gradient(circle at 78% 30%, #00d4ff 0, transparent 24%),
+      linear-gradient(135deg, #111827 0%, #1f2937 34%, #facc15 35%, #f97316 58%, #0f172a 59%);
+  }
+
+  main {
+    box-sizing: border-box;
+    min-height: 100vh;
+    padding: 48px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: center;
+    opacity: 0;
+  }
+
+  body.ready main {
+    opacity: 1;
+  }
+
+  h1 {
+    margin: 0 0 16px;
+    font-size: 56px;
+    line-height: 1;
+  }
+
+  p {
+    max-width: 560px;
+    font-size: 22px;
+    line-height: 1.35;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 4px;
+  }
+
+  .tile {
+    aspect-ratio: 1;
+    border-radius: 4px;
+  }
+</style>
+<main>
+  <section>
+    <h1>Issue 241</h1>
+    <p>Gradient, text, and dense color tiles exercise terminal image payload size and palette fallback behavior.</p>
+  </section>
+  <section class="grid" aria-label="color tiles"></section>
+</main>
+<script>
+  const grid = document.querySelector(".grid");
+  for (let i = 0; i < 256; i++) {
+    const tile = document.createElement("div");
+    tile.className = "tile";
+    tile.style.background = `rgb(${(i * 47) % 256}, ${(i * 83) % 256}, ${(i * 131) % 256})`;
+    grid.appendChild(tile);
+  }
+  setTimeout(() => document.body.classList.add("ready"), 500);
+</script>

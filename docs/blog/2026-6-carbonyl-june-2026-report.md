@@ -10,9 +10,14 @@ reading_time: 10
 status: "published"
 pillar: "1 report"
 audience: "Carbonyl users and evaluators who want the June 2026 release summary"
+hero: "/assets/blog/2026-6-carbonyl-june-2026-report.png"
 ---
 
 # Carbonyl suite — June 2026
+
+![A real web page rendered as glowing colored structure inside a terminal window, with an accessibility-tree/extraction motif of nodes flowing out to one side.](/assets/blog/2026-6-carbonyl-june-2026-report.png)
+
+Hero image: AI-generated with ChatGPT from a brand-specified prompt; no text or logos are AI-rendered.
 
 *Carbonyl is a real web browser that runs inside your terminal. It shows web pages as colored blocks of text, right in the terminal window — no desktop, no graphics screen needed. It was first built by Fathy Boundjadj; this is the actively maintained version. Around the browser, the suite adds a toolkit agents use to drive it, a manager for many sessions at once, a library of "looks like a real browser" profiles, and an automated tester. It is the browser-automation layer of the Agentic Operating System.*
 
@@ -142,4 +147,3 @@ Keep clearing the upstream bug backlog, wire the framebuffer output into the liv
 - **Verify downloads:** checksums + GPG signature; the signing key is published (see magly.net).
 - **Source:** github.com/jmagly/carbonyl (browser) · -agent · -fleet · -fingerprint-corpus · -agent-qa (suite) · window: all of June 2026.
 - **Related:** agentic-sandbox (provides the virtual-machine path for trusted-input QA).
-
