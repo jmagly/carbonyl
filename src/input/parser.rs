@@ -236,6 +236,74 @@ mod tests {
     }
 
     #[test]
+    fn sgr_mouse_down_decodes_primary_button_report() {
+        let mut p = Parser::new();
+        let events = p.parse(b"\x1b[<0;1;1M");
+
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseDown {
+                row: 0,
+                col: 0,
+                button: 0
+            }]
+        ));
+    }
+
+    #[test]
+    fn sgr_mouse_up_completes_primary_click() {
+        let mut p = Parser::new();
+        let events = p.parse(b"\x1b[<0;1;1m");
+
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseUp {
+                row: 0,
+                col: 0,
+                button: 0
+            }]
+        ));
+    }
+
+    #[test]
+    fn sgr_mouse_move_decodes_button_event_report() {
+        let mut p = Parser::new();
+        let events = p.parse(b"\x1b[<32;2;3M");
+
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseMove { row: 2, col: 1 }]
+        ));
+    }
+
+    #[test]
+    fn sgr_mouse_scroll_decodes_wheel_reports() {
+        let mut p = Parser::new();
+        let up = p.parse(b"\x1b[<64;1;1M");
+        let down = p.parse(b"\x1b[<65;1;1M");
+
+        assert!(matches!(up.as_slice(), [Event::Scroll { delta: 1 }]));
+        assert!(matches!(down.as_slice(), [Event::Scroll { delta: -1 }]));
+    }
+
+    #[test]
+    fn sgr_mouse_accumulates_across_parse_calls() {
+        let mut p = Parser::new();
+        assert!(p.parse(b"\x1b[<0;").is_empty());
+        assert!(p.parse(b"1;").is_empty());
+
+        let events = p.parse(b"1M");
+        assert!(matches!(
+            events.as_slice(),
+            [Event::MouseDown {
+                row: 0,
+                col: 0,
+                button: 0
+            }]
+        ));
+    }
+
+    #[test]
     fn legacy_mouse_up_completes_primary_click() {
         let mut p = Parser::new();
         let events = p.parse(b"\x1b[M#!!");
