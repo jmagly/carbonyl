@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SSHCLICK:init</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+    body {
+      font: 16px sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <a href="#clicked">click target</a>
+  <input id="field" autofocus>
+  <script>
+    function t(s) { document.title = s; }
+    document.addEventListener("mousedown", e => t("SSHCLICK:md:" + e.button));
+    document.addEventListener("click", () => t("SSHCLICK:clicked"));
+    field.addEventListener("input", () => t("SSHCLICK:typed:" + field.value));
+    window.addEventListener("load", () => t("SSHCLICK:ready"));
+  </script>
+</body>
+</html>
