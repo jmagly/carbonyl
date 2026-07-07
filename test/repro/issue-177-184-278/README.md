@@ -28,6 +28,8 @@ The script verifies:
 - Terminal setup still enables DECSET 1002, 1003, and 1006 mouse modes.
 - A local throwaway `sshd` can carry SGR mouse input over an SSH PTY to a remote
   Carbonyl process and activate a fixture click target.
+- The same SSH smoke can run the remote Carbonyl process inside `tmux` and
+  observe the pane log to prove click delivery through `ssh -> tmux -> Carbonyl`.
 - Existing PTY runtime smokes for right-click (#199) and Shift+Tab/modifiers
   (#237) are available; if `CARBONYL_BIN` points at an executable runtime, the
   script runs them too and reports their pass/fail status. These sibling smokes
@@ -41,6 +43,7 @@ Use a runtime built from the same tree as the local checks.
 | Client | Path | Required evidence |
 |---|---|---|
 | Local throwaway OpenSSH | `./run.sh` with `CARBONYL_BIN` set | `ssh_smoke.py` reports SGR click reached remote Carbonyl over SSH PTY |
+| Local OpenSSH + tmux | `./run.sh` with `CARBONYL_BIN` set | `ssh_smoke.py --tmux` reports SGR click reached remote Carbonyl through tmux |
 | PuTTY on Windows | SSH to a Linux host, run Carbonyl interactively | Link or button click fires; no junk mouse bytes remain after exit |
 | Konsole on Linux | SSH to Debian host, run Carbonyl interactively | SGR click on a fixture link navigates or activates the link |
 | Termux on Android | SSH to Debian host, run Carbonyl interactively | Touch/click translation activates the fixture link |

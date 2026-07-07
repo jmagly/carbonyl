@@ -10,6 +10,7 @@ import pathlib
 import pty
 import re
 import select
+import shlex
 import shutil
 import signal
 import socket
@@ -95,16 +96,26 @@ def start_sshd(tmp):
 
 
 def main():
+    tmux_mode = "--tmux" in sys.argv[1:]
+    if any(arg != "--tmux" for arg in sys.argv[1:]):
+        print("usage: ssh_smoke.py [--tmux]")
+        return 2
+
     if not BIN.exists() or not os.access(BIN, os.X_OK):
         print(f"SETUP-FAIL: CARBONYL_BIN not executable: {BIN}")
         return 2
     if shutil.which("ssh") is None:
         print("SETUP-FAIL: ssh client not found")
         return 2
+    if tmux_mode and shutil.which("tmux") is None:
+        print("SETUP-FAIL: tmux not found")
+        return 2
 
     with tempfile.TemporaryDirectory(prefix="carbonyl-ssh-smoke-") as tmp_name:
         tmp = pathlib.Path(tmp_name)
         port, client_key, pid_file, log_file = start_sshd(tmp)
+        tmux_socket = f"carbonyl-ssh-smoke-{os.getpid()}" if tmux_mode else None
+        pane_log = tmp / "tmux-pane.log"
         pid = None
         fd = None
         buf = b""
@@ -122,6 +133,13 @@ def main():
                     os.kill(int(pid_file.read_text()), signal.SIGTERM)
                 except OSError:
                     pass
+            if tmux_socket:
+                subprocess.run(
+                    ["tmux", "-L", tmux_socket, "kill-server"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
 
         def pump(seconds):
             nonlocal buf
@@ -137,24 +155,45 @@ def main():
                 if not chunk:
                     return
                 buf += chunk
-                for match in TITLE_RE.findall(buf):
-                    title = match.decode(errors="replace")
-                    if not seen or seen[-1] != title:
-                        seen.append(title)
+
+        def output_bytes():
+            if tmux_mode:
+                try:
+                    return pane_log.read_bytes()
+                except FileNotFoundError:
+                    return b""
+            return buf
+
+        def refresh_seen():
+            for match in TITLE_RE.findall(output_bytes()):
+                title = match.decode(errors="replace")
+                if not seen or seen[-1] != title:
+                    seen.append(title)
 
         def wait_for(title, timeout):
             end = time.time() + timeout
             while time.time() < end:
                 pump(0.1)
+                refresh_seen()
                 if title in seen:
                     return True
             return False
 
         try:
-            remote_cmd = (
+            carbonyl_cmd = (
                 f"env COLUMNS={COLS} LINES={ROWS} "
                 f"{str(BIN)!r} --no-sandbox --disable-gpu {URL!r}"
             )
+            remote_cmd = carbonyl_cmd
+            if tmux_mode:
+                socket_arg = shlex.quote(tmux_socket)
+                pipe_cmd = shlex.quote(f"cat > {shlex.quote(str(pane_log))}")
+                remote_cmd = (
+                    f"tmux -L {socket_arg} -f /dev/null new-session -d "
+                    f"{shlex.quote(carbonyl_cmd)} && "
+                    f"tmux -L {socket_arg} pipe-pane -o {pipe_cmd} && "
+                    f"tmux -L {socket_arg} attach-session"
+                )
             pid, fd = pty.fork()
             if pid == 0:
                 fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
@@ -182,7 +221,8 @@ def main():
                 os.write(fd, LEFT_DOWN)
                 os.write(fd, LEFT_UP)
                 if wait_for("SSHCLICK:clicked", 4):
-                    print("PASS: SSH PTY delivered SGR left-click to remote Carbonyl.")
+                    transport = "SSH+tmux PTY" if tmux_mode else "SSH PTY"
+                    print(f"PASS: {transport} delivered SGR left-click to remote Carbonyl.")
                     return 0
 
             print(f"FAIL: SSH PTY click did not reach page (seen: {seen!r}).")

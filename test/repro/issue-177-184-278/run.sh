@@ -24,6 +24,9 @@ if [[ -n "${CARBONYL_BIN:-}" ]]; then
   echo "[issue-177-184-278] SSH PTY smoke: local throwaway sshd"
   CARBONYL_BIN="$CARBONYL_BIN" python3 "$HERE/ssh_smoke.py"
 
+  echo "[issue-177-184-278] SSH+tmux PTY smoke: local throwaway sshd"
+  CARBONYL_BIN="$CARBONYL_BIN" python3 "$HERE/ssh_smoke.py" --tmux
+
   echo "[issue-177-184-278] runtime PTY smoke: right-click mouse path (#199)"
   if CARBONYL_BIN="$CARBONYL_BIN" "$ROOT/test/repro/issue-199/run.sh"; then
     echo "[issue-177-184-278] advisory smoke #199: PASS"
