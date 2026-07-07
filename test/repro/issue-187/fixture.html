@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>issue-187 starting</title>
+<body>
+  <pre id="result">pending</pre>
+  <script>
+    const events = [];
+
+    alert("issue-187 alert");
+    events.push("alert:ack");
+
+    events.push(`confirm:${confirm("issue-187 confirm")}`);
+    events.push(`prompt:${prompt("issue-187 prompt", "default-value")}`);
+
+    const result = events.join("\n");
+    document.getElementById("result").textContent = result;
+    document.title = "issue-187 complete";
+  </script>
+</body>

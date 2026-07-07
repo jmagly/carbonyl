@@ -82,6 +82,8 @@ component("javascript") {
   output_name = "carbonyl_javascript"
   defines = [ "CARBONYL_BRIDGE_IMPLEMENTATION" ]
   sources = [
+    "javascript_dialog_manager.cc",
+    "javascript_dialog_manager.h",
     "javascript_handler.cc",
     "javascript_handler.h",
   ]

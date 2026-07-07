@@ -1,0 +1,73 @@
+From 4a1c0bbd2e1db0d7c0c95f41e8412cf7a5dbef25 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <carbonyl@integrolabs.net>
+Date: Mon, 6 Jul 2026 20:10:00 -0400
+Subject: [PATCH 36/36] carbonyl: auto-accept JavaScript dialogs
+
+Carbonyl has no native modal UI surface, so page JavaScript dialogs currently
+fall through the headless WebContents delegate without a dialog manager and can
+leave window.alert/confirm/prompt behavior missing or blocked.
+
+Install Carbonyl's deterministic dialog manager on the headless WebContents
+delegate:
+
+- alert: acknowledge
+- confirm: accept
+- prompt: accept with the page-provided default text
+- beforeunload: proceed
+
+This keeps terminal/browser automation non-interactive while making pages that
+use JavaScript dialogs continue running.
+
+Refs: roctinam/carbonyl#187
+---
+ headless/BUILD.gn                                  | 1 +
+ headless/lib/browser/headless_web_contents_impl.cc | 8 ++++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index ce07ef678842f..d9fad57732cbc 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -377,6 +377,7 @@ source_set("headless_browser") {
+     "//build:branding_buildflags",
+     "//build/config/linux/dbus:buildflags",
+     "//carbonyl/src/browser:bridge",
++    "//carbonyl/src/browser:javascript",
+     "//carbonyl/src/browser:renderer",
+     "//components/cookie_config",
+     "//components/download/public/common:public",
+diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
+index 5433f3504109a..55bc40666613f 100644
+--- a/headless/lib/browser/headless_web_contents_impl.cc
++++ b/headless/lib/browser/headless_web_contents_impl.cc
+@@ -22,6 +22,7 @@
+ #include "base/trace_event/trace_event.h"
+ #include "base/values.h"
+ #include "build/build_config.h"
++#include "carbonyl/src/browser/javascript_dialog_manager.h"
+ #include "carbonyl/src/browser/renderer.h"
+ #include "components/zoom/zoom_controller.h"
+ #include "carbonyl/src/browser/bridge.h"
+@@ -138,6 +139,11 @@ class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
+     headless_contents.Close();
+   }
+ 
++  content::JavaScriptDialogManager* GetJavaScriptDialogManager(
++      content::WebContents* source) override {
++    return &javascript_dialog_manager_;
++  }
++
+   void GetAIPageContent(
+       content::WebContents* web_contents,
+       bool include_actionable_elements,
+@@ -327,6 +333,8 @@ class HeadlessWebContentsImpl::Delegate : public content::WebContentsDelegate {
+  private:
+   HeadlessBrowserImpl* browser() { return headless_web_contents_->browser(); }
+ 
++  carbonyl::CarbonylJavaScriptDialogManager javascript_dialog_manager_;
++
+   raw_ptr<HeadlessWebContentsImpl> headless_web_contents_;  // Not owned.
+ };
+ 
+--
+2.43.0
