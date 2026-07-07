@@ -68,6 +68,10 @@ impl Painter {
         write!(self.buffer, "\x1b[?25l\x1b[?12l")
     }
 
+    pub fn clear_screen(&mut self) -> io::Result<()> {
+        write!(self.buffer, "\x1b[H\x1b[2J")
+    }
+
     pub fn end(&mut self, cursor: Option<Point>) -> io::Result<()> {
         if let Some(cursor) = cursor {
             write!(

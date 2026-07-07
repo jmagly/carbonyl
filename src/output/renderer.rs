@@ -26,6 +26,10 @@ pub struct Renderer {
     /// invert-colors toggle, issue #181) requires every cell to be re-emitted on
     /// the next `render`, bypassing the usual previous/current diff.
     force_repaint: bool,
+    /// Set when terminal state outside the cell buffer may contain stale content.
+    /// Terminal resize is the main case: old rows/columns can remain visible
+    /// outside the next Chromium damage rect unless the terminal is cleared once.
+    clear_before_repaint: bool,
 }
 
 impl Default for Renderer {
@@ -46,6 +50,7 @@ impl Renderer {
             painter: Painter::new(),
             size: Size::new(0, 0),
             force_repaint: false,
+            clear_before_repaint: false,
         }
     }
 
@@ -93,6 +98,11 @@ impl Renderer {
     }
 
     pub fn set_size(&mut self, size: Size) {
+        if self.size != size {
+            self.force_repaint = true;
+            self.clear_before_repaint = true;
+        }
+
         self.nav.set_size(size);
         self.size = size;
 
@@ -132,11 +142,15 @@ impl Renderer {
             );
         }
 
-        self.painter.begin()?;
-
         // After an invert toggle the cell buffer is unchanged but the emitted
         // colors must change, so repaint every cell once (issue #181).
         let force = std::mem::take(&mut self.force_repaint);
+        let clear = std::mem::take(&mut self.clear_before_repaint);
+
+        self.painter.begin()?;
+        if clear {
+            self.painter.clear_screen()?;
+        }
 
         for (previous, current) in self.cells.iter_mut() {
             if !force && current == previous {
@@ -402,5 +416,29 @@ mod tests {
         assert_eq!(text_at(&renderer, 1, 0), Some("a"));
         assert_eq!(text_at(&renderer, 1, 1), Some("b"));
         assert_eq!(text_at(&renderer, 1, 2), Some("c"));
+    }
+
+    #[test]
+    fn resize_schedules_clear_and_full_repaint() {
+        let mut renderer = Renderer::new();
+
+        renderer.set_size(Size::new(8, 4));
+
+        assert!(renderer.force_repaint);
+        assert!(renderer.clear_before_repaint);
+    }
+
+    #[test]
+    fn unchanged_size_does_not_schedule_resize_clear() {
+        let mut renderer = Renderer::new();
+
+        renderer.set_size(Size::new(8, 4));
+        renderer.force_repaint = false;
+        renderer.clear_before_repaint = false;
+
+        renderer.set_size(Size::new(8, 4));
+
+        assert!(!renderer.force_repaint);
+        assert!(!renderer.clear_before_repaint);
     }
 }
