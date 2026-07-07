@@ -1,9 +1,9 @@
 # issue #169 — TAB key advances form focus
 
 Verifies the fix in chromium patch 0009 (`OnKeyPressInput`: `0x09 -> VKEY_TAB`,
-PR #232 / commit `201be82`): pressing TAB in a multi-field form must advance
-focus to the next field instead of inserting a literal tab character into the
-current field's value.
+PR #232 / commit `201be82`): with Carbonyl's opt-in `CARBONYL_TAB_FOCUS=1`
+setting, pressing TAB in a multi-field form must advance focus to the next field
+instead of inserting a literal tab character into the current field's value.
 
 ## How it works (GPU-independent)
 
@@ -29,8 +29,9 @@ makes pixel-based harnesses (e.g. issue-87) environment-sensitive.
 
 - A Carbonyl runtime that carries chromium patch 0009 with the
   `0x09 -> VKEY_TAB` case — i.e. a runtime built from `main` at/after
-  `201be82`. The bundled `alpha.1` pre-built runtime predates the fix and will
-  FAIL (that is the expected "before" result).
+  `201be82`. The harness sets `CARBONYL_TAB_FOCUS=1` because Tab focus
+  traversal is now intentionally opt-in (#242). The bundled `alpha.1` pre-built
+  runtime predates the fix and will FAIL (that is the expected "before" result).
 - `python3`, a PTY (standard on Linux), and the runtime's shared-lib deps.
 - Runs in terminal/headless mode (`--no-sandbox --disable-gpu`); no X server
   required.

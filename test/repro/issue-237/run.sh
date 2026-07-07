@@ -11,6 +11,8 @@
 #   - chromium patch 0009 widened `key_press` to (key, modifiers) and sets
 #     blink modifiers from the mask;
 #   - src/input parser decodes CSI Z to Tab+shift.
+# The verifier sets CARBONYL_TAB_FOCUS=1 because Tab/Shift+Tab focus traversal
+# is now opt-in (#242).
 # A pre-#237 runtime drops the modifier (or never decodes CSI Z), so Shift+Tab
 # does not reverse focus and this harness fails — exactly the regression guard.
 #

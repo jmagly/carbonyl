@@ -6,8 +6,9 @@
 # see verify.py and README.md).
 #
 # Requires a runtime that carries chromium patch 0009 with the
-# `0x09 -> VKEY_TAB` case (post-PR #232 / commit 201be82). Point CARBONYL_BIN
-# at it; defaults to the repo's pre-built runtime if unset.
+# `0x09 -> VKEY_TAB` case (post-PR #232 / commit 201be82). The verifier sets
+# CARBONYL_TAB_FOCUS=1 because Tab focus traversal is now opt-in (#242). Point
+# CARBONYL_BIN at it; defaults to the repo's pre-built runtime if unset.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

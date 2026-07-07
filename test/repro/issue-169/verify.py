@@ -40,7 +40,7 @@ def main():
     if pid == 0:  # child: become carbonyl in terminal mode
         ws = struct.pack("HHHH", ROWS, COLS, 0, 0)
         fcntl.ioctl(0, termios.TIOCSWINSZ, ws)
-        env = dict(os.environ, COLUMNS=str(COLS), LINES=str(ROWS))
+        env = dict(os.environ, COLUMNS=str(COLS), LINES=str(ROWS), CARBONYL_TAB_FOCUS="1")
         args = [BIN, "--no-sandbox", "--disable-gpu", URL]
         os.execvpe(BIN, args, env)
         os._exit(127)

@@ -20,6 +20,8 @@ The fix has two halves:
 
 The invert-color shortcut (`modifier + Up`, #181) is unaffected: the renderer
 still intercepts it before the FFI dispatch, so its consumption is preserved.
+The harness sets `CARBONYL_TAB_FOCUS=1` because Tab / Shift+Tab focus traversal
+is now intentionally opt-in (#242).
 
 ## How it works (GPU-independent)
 
@@ -40,7 +42,7 @@ terminal byte stream — no pixel capture, no GL/Xvfb.
 - **Exit 1 / FAIL** — forward TAB worked but Shift+Tab did not reverse (modifier
   dropped at the FFI, or CSI Z not decoded — fix absent/regressed).
 - **Exit 2 / SETUP-FAIL** — page never loaded, or forward TAB itself is broken
-  (so reverse focus cannot be evaluated).
+  with `CARBONYL_TAB_FOCUS=1` enabled (so reverse focus cannot be evaluated).
 
 ## Requirements
 
