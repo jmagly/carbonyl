@@ -478,8 +478,7 @@ jobs:
               ninja -C ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR} -j ${NINJA_JOBS} \
                 headless:headless_shell \
                 carbonyl/src/browser:storage_flush_unittests
-              ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}/storage_flush_unittests \
-                --gtest_color=yes
+              ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}/storage_flush_unittests
             "
 
       - name: Copy runtime binaries
