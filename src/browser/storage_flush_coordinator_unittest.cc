@@ -80,6 +80,28 @@ TEST(ShutdownStateMachineTest, DestructionHasExplicitFinalStates) {
   EXPECT_EQ(machine.summary().result, StorageFlushResult::kComplete);
 }
 
+TEST(ShutdownStateMachineTest, FailedFlushCanStopWithoutMaskingFailure) {
+  ShutdownStateMachine machine;
+
+  EXPECT_TRUE(machine.BeginDrain(1));
+  EXPECT_TRUE(machine.Fail());
+  EXPECT_TRUE(machine.BeginDestroy());
+  EXPECT_TRUE(machine.MarkStopped());
+  EXPECT_EQ(machine.summary().state, ShutdownState::kStopped);
+  EXPECT_EQ(machine.summary().result, StorageFlushResult::kFailed);
+}
+
+TEST(ShutdownStateMachineTest, TimedOutFlushCanStopWithoutMaskingTimeout) {
+  ShutdownStateMachine machine;
+
+  EXPECT_TRUE(machine.BeginDrain(1));
+  EXPECT_TRUE(machine.TimeOut());
+  EXPECT_TRUE(machine.BeginDestroy());
+  EXPECT_TRUE(machine.MarkStopped());
+  EXPECT_EQ(machine.summary().state, ShutdownState::kStopped);
+  EXPECT_EQ(machine.summary().result, StorageFlushResult::kTimedOut);
+}
+
 TEST(ShutdownStateMachineTest, InvalidTransitionsDoNotChangeState) {
   ShutdownStateMachine machine;
 
