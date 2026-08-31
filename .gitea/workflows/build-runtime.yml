@@ -659,12 +659,12 @@ jobs:
             -e CARBONYL_GPU_MODE=cpu \
             "${QA_RUNNER_IMAGE}" \
             bash -c '
-              # Pillow needed by the pixel-histogram assertion. Install in
-              # the running container; the qa-runner base image keeps its
-              # default surface lean.
-              if ! python3 -c "import PIL" 2>/dev/null; then
+              # Pillow and xdotool are needed by the pixel-histogram and
+              # expose/resize lifecycle assertions. The qa-runner base image
+              # keeps its default surface lean.
+              if ! python3 -c "import PIL" 2>/dev/null || ! command -v xdotool >/dev/null 2>&1; then
                 apt-get update >/dev/null 2>&1
-                apt-get install -y --no-install-recommends python3-pil >/dev/null 2>&1
+                apt-get install -y --no-install-recommends python3-pil xdotool >/dev/null 2>&1
               fi
               CAPTURE_SECONDS=12 bash /repo/scripts/test-x-mirror.sh
             '

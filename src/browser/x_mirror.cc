@@ -1,9 +1,17 @@
 #include "carbonyl/src/browser/x_mirror.h"
 
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
+#include <vector>
 
+#include "base/compiler_specific.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr_exclusion.h"
+#include "base/no_destructor.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 
 #if BUILDFLAG(IS_LINUX)
 // Xlib.h pollutes the global namespace heavily (Bool, Status, None, etc.)
@@ -22,8 +30,8 @@ namespace {
 class XMirrorState {
  public:
   static XMirrorState& Get() {
-    static XMirrorState instance;
-    return instance;
+    static base::NoDestructor<XMirrorState> instance;
+    return *instance;
   }
 
   bool enabled() const { return enabled_; }
@@ -32,7 +40,8 @@ class XMirrorState {
     if (!enabled_ || width <= 0 || height <= 0) {
       return;
     }
-    if (window_ != 0 && width == width_ && height == height_) {
+    PumpEvents();
+    if (!enabled_ || (window_ != 0 && width == width_ && height == height_)) {
       return;
     }
 
@@ -47,13 +56,16 @@ class XMirrorState {
       window_ = XCreateSimpleWindow(display_, root, 0, 0, width, height, 0,
                                     black, black);
       XStoreName(display_, window_, "Carbonyl");
-      XSelectInput(display_, window_, ExposureMask);
+      XSelectInput(display_, window_, ExposureMask | StructureNotifyMask);
+      wm_delete_window_ = XInternAtom(display_, "WM_DELETE_WINDOW", False);
+      XSetWMProtocols(display_, window_, &wm_delete_window_, 1);
       XMapWindow(display_, window_);
       gc_ = XDefaultGC(display_, screen);
       visual_ = XDefaultVisual(display_, screen);
       depth_ = XDefaultDepth(display_, screen);
-    } else {
-      XResizeWindow(display_, window_, width, height);
+      window_width_ = width;
+      window_height_ = height;
+      ScheduleEventPump();
     }
 
     // Recreate the XImage descriptor at the new size. We never own the
@@ -70,6 +82,8 @@ class XMirrorState {
                           /*bytes_per_line=*/width * 4);
     width_ = width;
     height_ = height;
+    frame_.assign(static_cast<size_t>(width_) * height_ * 4, 0);
+    has_frame_ = false;
     XFlush(display_);
   }
 
@@ -78,16 +92,133 @@ class XMirrorState {
     if (!enabled_ || !image_ || window_ == 0) {
       return;
     }
-    image_->data = reinterpret_cast<char*>(const_cast<uint8_t*>(pixels));
-    XPutImage(display_, window_, gc_, image_,
-              damage_x, damage_y, damage_x, damage_y,
-              static_cast<unsigned int>(damage_w),
-              static_cast<unsigned int>(damage_h));
-    image_->data = nullptr;
+    PumpEvents();
+    if (!enabled_ || !pixels || damage_w <= 0 || damage_h <= 0) {
+      return;
+    }
+
+    const int left = std::clamp(damage_x, 0, width_);
+    const int top = std::clamp(damage_y, 0, height_);
+    const int right = std::clamp(damage_x + damage_w, 0, width_);
+    const int bottom = std::clamp(damage_y + damage_h, 0, height_);
+    if (left >= right || top >= bottom) {
+      return;
+    }
+    if (!has_frame_) {
+      UNSAFE_BUFFERS(std::memcpy(frame_.data(), pixels, frame_.size()));
+    } else {
+      for (int y = top; y < bottom; ++y) {
+        UNSAFE_BUFFERS(std::memcpy(
+            frame_.data() + (static_cast<size_t>(y) * width_ + left) * 4,
+            pixels + (static_cast<size_t>(y) * width_ + left) * 4,
+            static_cast<size_t>(right - left) * 4));
+      }
+    }
+    has_frame_ = true;
+    Paint(left, top, right - left, bottom - top, /*clear_window=*/false);
     XFlush(display_);
   }
 
+  void PumpEvents() {
+    if (!enabled_ || !display_ || window_ == 0) {
+      return;
+    }
+    bool repaint = false;
+    bool clear_window = false;
+    while (XPending(display_) > 0) {
+      XEvent event;
+      XNextEvent(display_, &event);
+      if (event.xany.window != window_) {
+        continue;
+      }
+      switch (event.type) {
+        case Expose:
+          repaint = repaint || event.xexpose.count == 0;
+          break;
+        case ConfigureNotify:
+          window_width_ = event.xconfigure.width;
+          window_height_ = event.xconfigure.height;
+          repaint = true;
+          clear_window = true;
+          break;
+        case ClientMessage:
+          if (static_cast<Atom>(event.xclient.data.l[0]) ==
+              wm_delete_window_) {
+            XDestroyWindow(display_, window_);
+            window_ = 0;
+            enabled_ = false;
+            return;
+          }
+          break;
+        case DestroyNotify:
+          window_ = 0;
+          enabled_ = false;
+          return;
+      }
+    }
+    if (repaint && has_frame_) {
+      Paint(0, 0, width_, height_, clear_window);
+      XFlush(display_);
+    }
+  }
+
  private:
+  friend class base::NoDestructor<XMirrorState>;
+
+  void Paint(int source_x,
+             int source_y,
+             int paint_width,
+             int paint_height,
+             bool clear_window) {
+    if (!image_ || !has_frame_ || window_ == 0) {
+      return;
+    }
+    if (clear_window) {
+      XClearWindow(display_, window_);
+    }
+    const int crop_x = std::max(0, (width_ - window_width_) / 2);
+    const int crop_y = std::max(0, (height_ - window_height_) / 2);
+    const int offset_x = std::max(0, (window_width_ - width_) / 2);
+    const int offset_y = std::max(0, (window_height_ - height_) / 2);
+    const int clipped_source_x = std::max(source_x, crop_x);
+    const int clipped_source_y = std::max(source_y, crop_y);
+    const int clipped_right =
+        std::min(source_x + paint_width, crop_x + window_width_);
+    const int clipped_bottom =
+        std::min(source_y + paint_height, crop_y + window_height_);
+    if (clipped_source_x >= clipped_right ||
+        clipped_source_y >= clipped_bottom) {
+      return;
+    }
+    image_->data = reinterpret_cast<char*>(frame_.data());
+    XPutImage(display_, window_, gc_, image_, clipped_source_x,
+              clipped_source_y, clipped_source_x - crop_x + offset_x,
+              clipped_source_y - crop_y + offset_y,
+              static_cast<unsigned int>(clipped_right - clipped_source_x),
+              static_cast<unsigned int>(clipped_bottom - clipped_source_y));
+    image_->data = nullptr;
+  }
+
+  void ScheduleEventPump() {
+    if (event_pump_scheduled_) {
+      return;
+    }
+    event_pump_scheduled_ = true;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&XMirrorState::RunScheduledEventPump,
+                       base::Unretained(this)),
+        base::Milliseconds(50));
+  }
+
+  void RunScheduledEventPump() {
+    event_pump_scheduled_ = false;
+    PumpEvents();
+    if (enabled_ && window_ != 0) {
+      ScheduleEventPump();
+    }
+  }
+
   XMirrorState() {
     const char* flag = std::getenv("CARBONYL_X_MIRROR");
     if (!flag || flag[0] == '\0' || flag[0] == '0') {
@@ -117,12 +248,18 @@ class XMirrorState {
   // chromium-rawptr plugin (raw_ptr<T> assumes Chromium-style ownership).
   RAW_PTR_EXCLUSION Display* display_ = nullptr;
   Window window_ = 0;
+  Atom wm_delete_window_ = 0;
   GC gc_ = nullptr;
   RAW_PTR_EXCLUSION Visual* visual_ = nullptr;
   int depth_ = 24;
   RAW_PTR_EXCLUSION XImage* image_ = nullptr;
   int width_ = 0;
   int height_ = 0;
+  int window_width_ = 0;
+  int window_height_ = 0;
+  std::vector<uint8_t> frame_;
+  bool has_frame_ = false;
+  bool event_pump_scheduled_ = false;
 };
 
 }  // namespace

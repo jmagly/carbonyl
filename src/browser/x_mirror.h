@@ -21,9 +21,10 @@ namespace carbonyl::x_mirror {
 
 CARBONYL_VIZ_EXPORT bool Enabled();
 
-// Ensure the mirror window and backing XImage descriptor are sized to
-// (width, height). Safe to call on every frame; creates the window
-// lazily on first call and only reacts when the size changes.
+// Ensure the retained compositor raster and XImage descriptor are sized to
+// (width, height). The initial X window uses this size, but subsequent window
+// manager resizes do not resize the compositor: the raster remains fixed and
+// is centered, clipped, or letterboxed in the independently-sized X window.
 CARBONYL_VIZ_EXPORT void EnsureSize(int width, int height);
 
 // Copy the damaged rect from the Carbonyl compositor shared-memory

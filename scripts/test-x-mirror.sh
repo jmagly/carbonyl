@@ -6,9 +6,9 @@
 #      fixture's marker token (proves the existing bridge path still
 #      works end-to-end).
 #   2. X-window render — a non-blank framebuffer on $DISPLAY whose pixel
-#      histogram contains the fixture's blue background + red banner
-#      colours in expected proportions (proves x_mirror.cc routes
-#      compositor frames to libX11).
+#      histogram contains the fixture's blue background + red banner colours
+#      after WM resize and unmap/map expose cycles (proves x_mirror.cc retains
+#      and repaints compositor frames without disrupting terminal output).
 #
 # Run inside the qa-runner container (Xorg + scrot + python3-PIL +
 # carbonyl on PATH). Outside the container, set CARBONYL_BIN, ensure
@@ -40,7 +40,7 @@ fi
 
 : "${DISPLAY:?DISPLAY must be set (run inside the qa-runner container, or start Xorg/Xvfb first)}"
 
-for cmd in scrot python3 script; do
+for cmd in scrot python3 script xdotool; do
     command -v "$cmd" >/dev/null 2>&1 || {
         echo "FAIL: $cmd not on PATH (qa-runner image provides it)"; exit 1; }
 done
@@ -123,7 +123,18 @@ CARBONYL_PID=$!
 echo "    pid=$CARBONYL_PID, capturing for ${CAPTURE_SECONDS}s.."
 sleep "$CAPTURE_SECONDS"
 
-# ── 2. Capture X framebuffer ─────────────────────────────────────────────────
+# ── 2. Exercise WM lifecycle and capture X framebuffer ──────────────────────
+
+echo "==> Resizing and exposing the Carbonyl mirror window"
+WINDOW_ID="$(xdotool search --sync --onlyvisible --name '^Carbonyl$' | head -n 1)"
+[ -n "$WINDOW_ID" ] || { echo "FAIL: Carbonyl X window not found"; exit 1; }
+xdotool windowsize "$WINDOW_ID" 1500 900
+sleep 1
+xdotool windowunmap "$WINDOW_ID"
+sleep 1
+xdotool windowmap "$WINDOW_ID"
+xdotool windowraise "$WINDOW_ID"
+sleep 1
 
 echo "==> Capturing X framebuffer (scrot)"
 scrot "$FRAME_PNG"
