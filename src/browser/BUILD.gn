@@ -158,6 +158,8 @@ component("storage_flush") {
   output_name = "carbonyl_storage_flush"
   defines = [ "CARBONYL_STORAGE_FLUSH_IMPLEMENTATION" ]
   sources = [
+    "shutdown_state_machine.cc",
+    "shutdown_state_machine.h",
     "storage_flush_coordinator.cc",
     "storage_flush_coordinator.h",
   ]
@@ -170,9 +172,13 @@ component("storage_flush") {
 }
 
 test("storage_flush_unittests") {
-  sources = [ "storage_flush_coordinator_unittest.cc" ]
+  defines = [ "CARBONYL_STORAGE_FLUSH_IMPLEMENTATION" ]
+  sources = [
+    "shutdown_state_machine.cc",
+    "shutdown_state_machine.h",
+    "storage_flush_coordinator_unittest.cc",
+  ]
   deps = [
-    ":storage_flush",
     "//testing/gtest",
     "//testing/gtest:gtest_main",
   ]
