@@ -1,7 +1,6 @@
 import("//build/config/compiler/compiler.gni")
 import("//build/config/ozone.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
-import("//testing/test.gni")
 
 mojom("mojom") {
   sources = [ "carbonyl.mojom" ]
@@ -171,16 +170,12 @@ component("storage_flush") {
   ]
 }
 
-test("storage_flush_unittests") {
+executable("storage_flush_unittests") {
   defines = [ "CARBONYL_STORAGE_FLUSH_IMPLEMENTATION" ]
   sources = [
     "shutdown_state_machine.cc",
     "shutdown_state_machine.h",
     "storage_flush_coordinator_unittest.cc",
-  ]
-  deps = [
-    "//testing/gtest",
-    "//testing/gtest:gtest_main",
   ]
 }
 
