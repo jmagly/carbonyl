@@ -22,11 +22,16 @@ PROFILE_DIR="$WORK_DIR/profile"
 FIRST_LOG="$WORK_DIR/first.log"
 SECOND_LOG="$WORK_DIR/second.log"
 PORT_FILE="$WORK_DIR/port"
+FLUSH_TOKEN="$(python3 -c 'import secrets; print(secrets.token_hex(16))')"
 
 cleanup() {
-    [ -n "${SERVER_PID:-}" ] && kill -TERM "$SERVER_PID" 2>/dev/null || true
-    [ -n "${SERVER_PID:-}" ] && wait "$SERVER_PID" 2>/dev/null || true
-    [ -z "${KEEP_WORK_DIR:-}" ] && rm -rf "$WORK_DIR" || true
+    if [ -n "${SERVER_PID:-}" ]; then
+        kill -TERM "$SERVER_PID" 2>/dev/null || true
+        wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    if [ -z "${KEEP_WORK_DIR:-}" ]; then
+        rm -rf -- "$WORK_DIR"
+    fi
 }
 trap cleanup EXIT
 
@@ -52,14 +57,49 @@ done
 [ -s "$PORT_FILE" ] || { echo "FAIL: fixture server did not start"; exit 1; }
 URL="http://127.0.0.1:$(cat "$PORT_FILE")/storage-flush.html"
 
-"$CARBONYL_BIN" --user-data-dir="$PROFILE_DIR" --dump-text=dom \
-    --idle=500 --max-wait=15000 "$URL" >"$FIRST_LOG" 2>&1
-grep -q 'CARBONYL_STORAGE_INITIALIZED' "$FIRST_LOG"
-grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' "$FIRST_LOG"
+assert_authenticated_flush() {
+    python3 - "$1" "$FLUSH_TOKEN" <<'PY'
+import json
+import pathlib
+import sys
+
+prefix = "CARBONYL_STORAGE_FLUSH_RESULT="
+log_path = pathlib.Path(sys.argv[1])
+expected_token = sys.argv[2]
+payloads = [
+    line.split(prefix, 1)[1].strip()
+    for line in log_path.read_text(errors="replace").splitlines()
+    if prefix in line
+]
+if not payloads:
+    raise SystemExit(f"FAIL: no storage-flush result in {log_path}")
+try:
+    result = json.loads(payloads[-1])
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"FAIL: malformed storage-flush result in {log_path}: {exc}") from exc
+if result.get("schema_version") != 1 or result.get("state") != "stopped":
+    raise SystemExit(f"FAIL: invalid storage-flush state in {log_path}")
+if result.get("result") != "complete":
+    raise SystemExit(f"FAIL: storage flush was not complete in {log_path}")
+if result.get("token") != expected_token:
+    raise SystemExit(f"FAIL: storage-flush token mismatch in {log_path}")
+partitions = result.get("partitions")
+acknowledged = result.get("acknowledged")
+if not isinstance(partitions, int) or partitions < 0 or acknowledged != partitions:
+    raise SystemExit(f"FAIL: inconsistent storage-flush counts in {log_path}")
+PY
+}
 
 "$CARBONYL_BIN" --user-data-dir="$PROFILE_DIR" --dump-text=dom \
+    --carbonyl-storage-flush-token="$FLUSH_TOKEN" \
+    --idle=500 --max-wait=15000 "$URL" >"$FIRST_LOG" 2>&1
+grep -q 'CARBONYL_STORAGE_INITIALIZED' "$FIRST_LOG"
+assert_authenticated_flush "$FIRST_LOG"
+
+"$CARBONYL_BIN" --user-data-dir="$PROFILE_DIR" --dump-text=dom \
+    --carbonyl-storage-flush-token="$FLUSH_TOKEN" \
     --idle=500 --max-wait=15000 "$URL" >"$SECOND_LOG" 2>&1
 grep -q 'CARBONYL_STORAGE_RESTORED' "$SECOND_LOG"
-grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' "$SECOND_LOG"
+assert_authenticated_flush "$SECOND_LOG"
 
 echo "PASS: acknowledged shutdown preserved synthetic cookie and localStorage markers"

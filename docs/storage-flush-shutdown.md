@@ -16,7 +16,7 @@ sequence instead:
 The output contract is a single stderr line with this prefix and JSON schema:
 
 ```text
-CARBONYL_STORAGE_FLUSH_RESULT={"schema_version":1,"state":"stopped","result":"complete","partitions":1,"acknowledged":1,"token":""}
+CARBONYL_STORAGE_FLUSH_RESULT={"schema_version":1,"state":"stopped","result":"complete","partitions":1,"acknowledged":1,"token":"0123456789abcdef0123456789abcdef"}
 ```
 
 `result` is one of `complete`, `timed_out`, or `failed`. Only `complete` proves
@@ -39,6 +39,11 @@ masquerading as a shutdown acknowledgement if the runtime crashes before it
 can emit the real line. Direct/manual launches that omit the switch receive an
 empty token and may use the line for diagnostics, but not as an authenticated
 profile-lease proof.
+
+`scripts/test-storage-flush.sh` generates a fresh token, passes it to both
+local fixture launches, parses the final JSON result, and requires the exact
+token, stopped state, complete result, and consistent partition counts. A
+plain text grep is intentionally insufficient for lease-handoff evidence.
 
 Repeated shutdown requests are idempotent. Attempts to create a page or send
 new page work after draining begins are refused with a stable
