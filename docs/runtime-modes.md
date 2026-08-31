@@ -108,6 +108,13 @@ The terminal rendering pipeline is unchanged — both outputs come from
 the same compositor frame, the same Chromium process, the same TLS
 fingerprint, the same JS state.
 
+The mirror window uses a **fixed compositor-raster policy**. Resizing the X
+window does not change the CSS viewport or terminal geometry: the current
+raster is centered and either clipped or letterboxed. Expose, cover/uncover,
+minimize/restore, and resize events repaint from a retained complete frame, so
+the window manager and compositor do not fight over window size. Closing the X
+window disables only the mirror; the browser and terminal session continue.
+
 **When to use:**
 - Visual regression suites where the assertion is on rendered pixels
 - Operator dashboards (`x11vnc` of `:99` to a VNC viewer)
