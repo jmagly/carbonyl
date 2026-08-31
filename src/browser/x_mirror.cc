@@ -222,7 +222,8 @@ class XMirrorState {
           clear_window = true;
           break;
         case ClientMessage:
-          if (static_cast<Atom>(event.xclient.data.l[0]) == wm_delete_window_) {
+          if (static_cast<Atom>(event.xclient.data.l[0]) ==
+              wm_delete_window_) {
             XDestroyWindow(display_, window_);
             window_ = 0;
             enabled_ = false;
