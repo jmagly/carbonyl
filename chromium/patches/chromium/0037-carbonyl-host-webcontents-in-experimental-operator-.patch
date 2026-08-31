@@ -15,8 +15,8 @@ Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
  headless/app/headless_shell.cc                          | 13 +++++++++++++
  headless/lib/browser/headless_content_browser_client.cc |  9 +++++++++
  headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
- headless/lib/headless_content_main_delegate.cc          |  9 ++++++++-
- 6 files changed, 44 insertions(+), 2 deletions(-)
+headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
+ 6 files changed, 45 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
 index 95182065b322a..1bd765a773afa 100644
@@ -48,12 +48,20 @@ diff --git a/headless/lib/headless_content_main_delegate.cc b/headless/lib/headl
 index 83cecb2..c96513e 100644
 --- a/headless/lib/headless_content_main_delegate.cc
 +++ b/headless/lib/headless_content_main_delegate.cc
+@@ -46,6 +46,7 @@
+ #include "ui/base/l10n/l10n_util.h"
++#include "ui/base/ozone_buildflags.h"
+ #include "ui/base/resource/resource_bundle.h"
+ #include "ui/base/ui_base_switches.h"
+ #include "ui/gfx/switches.h"
+ #include "ui/gl/gl_switches.h"
+ #include "ui/ozone/public/ozone_switches.h"
 @@ -269,7 +269,14 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
  #if BUILDFLAG(IS_OZONE)
    // The headless backend is automatically chosen for a headless build, but also
    // adding it here allows us to run in a non-headless build too.
 -  command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
-+#if BUILDFLAG(IS_LINUX)
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
 +  const bool use_operator_window =
 +      command_line->HasSwitch("carbonyl-operator-window");
 +#else
@@ -116,7 +124,7 @@ index 3255574..86720fe 100644
  
  void HeadlessPlatformDelegate::Initialize(
      const HeadlessBrowser::Options& options) {
-+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE)
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          "carbonyl-operator-window")) {
 +    new aura::ScreenOzone();
