@@ -175,6 +175,7 @@ test("storage_flush_unittests") {
     ":storage_flush",
     "//base/test:test_support",
     "//testing/gtest",
+    "//testing/gtest:gtest_main",
   ]
 }
 
