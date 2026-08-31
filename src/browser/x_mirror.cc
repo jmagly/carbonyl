@@ -9,6 +9,7 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr_exclusion.h"
+#include "base/no_destructor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 
@@ -29,8 +30,8 @@ namespace {
 class XMirrorState {
  public:
   static XMirrorState& Get() {
-    static XMirrorState instance;
-    return instance;
+    static base::NoDestructor<XMirrorState> instance;
+    return *instance;
   }
 
   bool enabled() const { return enabled_; }
@@ -162,6 +163,8 @@ class XMirrorState {
   }
 
  private:
+  friend class base::NoDestructor<XMirrorState>;
+
   void Paint(int source_x,
              int source_y,
              int paint_width,
