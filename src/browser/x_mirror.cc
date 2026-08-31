@@ -62,12 +62,19 @@ class XMirrorState {
       LOG(ERROR) << "CARBONYL_OPERATOR_WINDOW cannot inspect X11 widget "
                  << widget;
       window_ = 0;
+      operator_window_attached_ = false;
       gc_ = nullptr;
       owns_window_ = false;
       owns_gc_ = false;
+      enabled_ = mirror_requested_;
       return;
     }
 
+    if (image_) {
+      image_->data = nullptr;
+      XDestroyImage(image_);
+      image_ = nullptr;
+    }
     window_ = target;
     operator_window_attached_ = true;
     owns_window_ = false;
@@ -78,6 +85,11 @@ class XMirrorState {
     gc_ = XCreateGC(display_, window_, 0, nullptr);
     owns_gc_ = gc_ != nullptr;
     enabled_ = owns_gc_;
+    // Force the first allocation for this compositor to rebuild its XImage
+    // descriptor with the operator widget's visual and depth, even when its
+    // pixel size matches the compositor that was previously attached.
+    width_ = 0;
+    height_ = 0;
     if (enabled_) {
       LOG(INFO) << "CARBONYL_OPERATOR_WINDOW compositor target=" << widget;
     }

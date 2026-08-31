@@ -41,9 +41,13 @@ FRAME_PNG="$WORK_DIR/operator.png"
 CLICK_PNG="$WORK_DIR/operator-click.png"
 
 cleanup() {
-    [ -n "${CARBONYL_PID:-}" ] && kill -TERM "$CARBONYL_PID" 2>/dev/null || true
-    [ -n "${CARBONYL_PID:-}" ] && wait "$CARBONYL_PID" 2>/dev/null || true
-    [ -z "${KEEP_WORK_DIR:-}" ] && rm -rf "$WORK_DIR" || true
+    if [ -n "${CARBONYL_PID:-}" ]; then
+        kill -TERM "$CARBONYL_PID" 2>/dev/null || true
+        wait "$CARBONYL_PID" 2>/dev/null || true
+    fi
+    if [ -z "${KEEP_WORK_DIR:-}" ]; then
+        rm -rf -- "$WORK_DIR"
+    fi
 }
 trap cleanup EXIT
 
