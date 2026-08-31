@@ -25,6 +25,8 @@ for command_name in python3 script xdotool; do
     command -v "$command_name" >/dev/null 2>&1 || {
         echo "FAIL: $command_name not on PATH"; exit 1; }
 done
+python3 -c 'from PIL import Image' >/dev/null 2>&1 || {
+    echo "FAIL: Python Pillow is not installed"; exit 1; }
 if command -v scrot >/dev/null 2>&1; then
     capture_frame() { scrot "$1"; }
 elif command -v import >/dev/null 2>&1; then
@@ -35,6 +37,7 @@ else
 fi
 
 FIXTURE="$CARBONYL_ROOT/tests/fixtures/operator-window.html"
+[ -f "$FIXTURE" ] || { echo "FAIL: fixture missing: $FIXTURE"; exit 1; }
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-operator-test.XXXXXX")"
 TERM_LOG="$WORK_DIR/terminal.log"
 FRAME_PNG="$WORK_DIR/operator.png"
@@ -67,7 +70,13 @@ printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
 COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" &
 CARBONYL_PID=$!
 
-WINDOW_ID="$(xdotool search --sync --onlyvisible --class '^carbonyl$' | head -n 1)"
+WINDOW_ID=""
+for _ in $(seq 1 "${WINDOW_ATTEMPTS:-100}"); do
+    WINDOW_ID="$(xdotool search --onlyvisible --class '^carbonyl$' 2>/dev/null |
+        head -n 1 || true)"
+    [ -n "$WINDOW_ID" ] && break
+    sleep "${WINDOW_INTERVAL:-0.1}"
+done
 [ -n "$WINDOW_ID" ] || { echo "FAIL: Carbonyl operator window not found"; exit 1; }
 
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
