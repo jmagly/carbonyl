@@ -173,7 +173,6 @@ test("storage_flush_unittests") {
   sources = [ "storage_flush_coordinator_unittest.cc" ]
   deps = [
     ":storage_flush",
-    "//base/test:test_support",
     "//testing/gtest",
     "//testing/gtest:gtest_main",
   ]
