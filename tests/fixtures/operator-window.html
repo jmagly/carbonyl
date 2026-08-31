@@ -10,14 +10,23 @@
            color: white; border: 0; font: inherit; }
   input { display: block; width: 140px; height: 28px; margin: 4px;
           font: inherit; }
+  #resize-marker { position: fixed; right: 8px; bottom: 8px; width: 48px;
+                   height: 48px; background: #111111; }
+  #pointer-marker { position: fixed; left: 8px; bottom: 8px; width: 48px;
+                    height: 48px; background: #222222; }
 </style>
 </head>
 <body>
   <button id="target">CLICK_OPERATOR_TARGET</button>
   <input id="keyboard" aria-label="Operator keyboard target">
+  <div id="resize-marker" aria-hidden="true"></div>
+  <div id="pointer-marker" aria-hidden="true"></div>
   <script>
     const target = document.querySelector('#target');
     const keyboard = document.querySelector('#keyboard');
+    const resizeMarker = document.querySelector('#resize-marker');
+    const pointerMarker = document.querySelector('#pointer-marker');
+    const initialSize = [innerWidth, innerHeight];
     target.addEventListener('click', event => {
       if (!event.isTrusted) return;
       target.style.background = '#00aa44';
@@ -27,6 +36,22 @@
       if (!event.isTrusted) return;
       document.body.style.background = '#665500';
     });
+    addEventListener('resize', event => {
+      if (!event.isTrusted) return;
+      if (Math.abs(innerWidth - initialSize[0]) >= 100 ||
+          Math.abs(innerHeight - initialSize[1]) >= 100) {
+        resizeMarker.style.background = '#aa00aa';
+      }
+    });
+    addEventListener('contextmenu', event => {
+      if (!event.isTrusted) return;
+      event.preventDefault();
+      pointerMarker.style.background = '#00aaaa';
+    });
+    addEventListener('wheel', event => {
+      if (!event.isTrusted) return;
+      pointerMarker.style.background = '#aa5500';
+    }, {passive: true});
   </script>
 </body>
 </html>

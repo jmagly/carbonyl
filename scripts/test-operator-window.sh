@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # X11 smoke for the explicitly experimental Views/Aura operator host (#285).
 # Proves one process produces terminal pixels and native-window pixels, then
-# proves XTEST pointer and keyboard events reach the hosted WebContents as
-# trusted events. Profile handoff/crash coverage belongs to QA #37.
+# proves resize/focus recovery and XTEST pointer/keyboard events reach the
+# hosted WebContents as trusted events. Profile handoff/crash coverage belongs
+# to QA #37; composed IME coverage requires an isolated worker with a real IME.
 
 set -euo pipefail
 
@@ -42,6 +43,8 @@ WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-operator-test.XXXXXX")"
 TERM_LOG="$WORK_DIR/terminal.log"
 FRAME_PNG="$WORK_DIR/operator.png"
 CLICK_PNG="$WORK_DIR/operator-click.png"
+RESIZE_PNG="$WORK_DIR/operator-resize.png"
+POINTER_PNG="$WORK_DIR/operator-pointer.png"
 
 cleanup() {
     if [ -n "${CARBONYL_PID:-}" ]; then
@@ -116,6 +119,43 @@ done
 [ "$initial_ready" = 1 ] || {
     echo "FAIL: initial page pixels never reached operator window"; exit 1; }
 
+# The Widget client bounds are the viewport source of truth. A native WM
+# resize must flow through WebView into the existing WebContents, without
+# recreating the profile or disrupting terminal output.
+xdotool windowsize --sync "$WINDOW_ID" 900 600
+resize_ready=0
+for _ in $(seq 1 "${RESIZE_ATTEMPTS:-50}"); do
+    capture_frame "$RESIZE_PNG"
+    if python3 - "$RESIZE_PNG" <<'PY'
+import sys
+from PIL import Image
+
+image = Image.open(sys.argv[1]).convert("RGB")
+colors = image.getcolors(maxcolors=image.width * image.height) or []
+magenta = sum(
+    count for count, color in colors
+    if all(abs(actual - expected) <= 3
+           for actual, expected in zip(color, (170, 0, 170)))
+)
+raise SystemExit(0 if magenta >= 500 else 1)
+PY
+    then
+        resize_ready=1
+        break
+    fi
+    sleep "${RESIZE_INTERVAL:-0.1}"
+done
+[ "$resize_ready" = 1 ] || {
+    echo "FAIL: native resize did not reach hosted WebContents"; exit 1; }
+
+# Minimize/restore exercises the native focus lifecycle. Activation restores
+# the last focused page view rather than synthesizing an input event.
+xdotool windowminimize "$WINDOW_ID"
+sleep "${MINIMIZE_SECONDS:-0.2}"
+xdotool windowmap --sync "$WINDOW_ID"
+xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
+    xdotool windowfocus --sync "$WINDOW_ID"
+
 # This point is inside the rasterized button in the fixed smoke fixture.
 xdotool mousemove --sync --window "$WINDOW_ID" 60 20 click 1
 
@@ -143,6 +183,37 @@ PY
 done
 [ "$click_ready" = 1 ] || {
     echo "FAIL: trusted pointer visual marker missing"; exit 1; }
+
+# Exercise a non-primary button and wheel event through the same native Aura
+# dispatch path. The fixture changes a privacy-safe visual marker only for
+# trusted DOM events.
+xdotool mousemove --sync --window "$WINDOW_ID" 300 200 click 3
+sleep "${POINTER_INTERVAL:-0.1}"
+xdotool click --window "$WINDOW_ID" 4
+pointer_ready=0
+for _ in $(seq 1 "${POINTER_ATTEMPTS:-50}"); do
+    capture_frame "$POINTER_PNG"
+    if python3 - "$POINTER_PNG" <<'PY'
+import sys
+from PIL import Image
+
+image = Image.open(sys.argv[1]).convert("RGB")
+colors = image.getcolors(maxcolors=image.width * image.height) or []
+orange = sum(
+    count for count, color in colors
+    if all(abs(actual - expected) <= 3
+           for actual, expected in zip(color, (170, 85, 0)))
+)
+raise SystemExit(0 if orange >= 500 else 1)
+PY
+    then
+        pointer_ready=1
+        break
+    fi
+    sleep "${POINTER_INTERVAL:-0.1}"
+done
+[ "$pointer_ready" = 1 ] || {
+    echo "FAIL: trusted context-menu/wheel marker missing"; exit 1; }
 
 xdotool type --window "$WINDOW_ID" --delay 30 'trusted-keyboard'
 sleep "${SETTLE_SECONDS:-2}"
@@ -183,4 +254,4 @@ if [ "$quadrants" -lt "${MIN_QUADRANT_RUNS:-50}" ]; then
     exit 1
 fi
 
-echo "PASS: Views/Aura native pixels, trusted pointer/keyboard input, and terminal output"
+echo "PASS: native resize/focus, trusted pointer/keyboard/wheel input, and terminal output"

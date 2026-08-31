@@ -155,10 +155,35 @@ This requires an X11 runtime; a headless-only build rejects the switch with an
 explicit diagnostic. The switch is off by default and does not disable
 sandboxing or site isolation.
 
+### Geometry, focus, and input contract
+
+Operator mode has one geometry path. The native `views::Widget` client bounds
+size its fill-layout `views::WebView`; WebView continuously resizes the already
+hosted `WebContents`. Aura/Ozone applies device scale and translates native
+coordinates into content coordinates. The terminal rows/columns remain a
+separate presentation of the same compositor damage and never resize the
+native page. There is no raw-Xlib input-forwarding path.
+
+The window uses normal window-manager decorations and size controls. Native
+activation restores the page's last focused view; deactivation stores it.
+Minimize/restore therefore preserves focus without injecting a synthetic DOM
+event. Closing the operator window requests orderly browser shutdown instead
+of leaving an invisible process running. Physical X11 and XTEST/uinput events
+enter through the native Aura event dispatcher and retain Chromium's normal
+trusted-event semantics.
+
+The regression harness covers native resize, minimize/restore, focus recovery,
+primary and context-menu clicks, wheel input, keyboard input, native pixels,
+and simultaneous terminal output. Composed Unicode/IME and monitor-scale
+changes remain isolated-worker graduation checks: support depends on the host
+XKB/IME and window-manager configuration and is not claimed from an Xvfb-only
+run.
+
 This is an architecture prototype, not yet the production operator mode. In
 particular, do not open a user-data directory concurrently in operator and
 headless processes. Orderly storage-flush acknowledgement (#292), the external
-profile lease (agent #136), complete geometry/input semantics (#287), and the
+profile lease (agent #136), the remaining isolated geometry/input matrix
+(#287), and the
 round-trip/crash QA matrix (QA #37) remain graduation gates. See
 [ADR-006](adr-006-native-operator-host.md).
 

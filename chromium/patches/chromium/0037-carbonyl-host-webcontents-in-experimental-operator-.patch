@@ -12,11 +12,11 @@ Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
 ---
  content/browser/compositor/viz_process_transport_factory.cc | 2 +-
  headless/BUILD.gn                                       |  1 +
- headless/app/headless_shell.cc                          | 13 +++++++++++++
+ headless/app/headless_shell.cc                          | 15 +++++++++++++++
  headless/lib/browser/headless_content_browser_client.cc |  9 +++++++++
  headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
-headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
- 6 files changed, 45 insertions(+), 2 deletions(-)
+ headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
+ 6 files changed, 47 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
 index 95182065b322a..1bd765a773afa 100644
@@ -154,14 +154,16 @@ index 33b6292..2be6f47 100644
  };
  
  void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
-@@ -141,6 +143,17 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -141,6 +143,19 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
      ShutdownSoon();
    }
  
 +  if (web_contents && carbonyl::OperatorWindow::IsRequested()) {
 +    operator_window_ = carbonyl::OperatorWindow::Create(
 +        HeadlessWebContentsImpl::From(web_contents)->web_contents(),
-+        carbonyl::Renderer::GetCurrent()->GetSize());
++        carbonyl::Renderer::GetCurrent()->GetSize(),
++        base::BindOnce(&HeadlessShell::ShutdownSoon,
++                       base::Unretained(this)));
 +    if (!operator_window_) {
 +      LOG(ERROR) << "Failed to create the experimental operator window.";
 +      ShutdownSoon();
