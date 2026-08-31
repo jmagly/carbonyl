@@ -175,6 +175,11 @@ One binary, three deployment shapes:
 | Terminal-only | `carbonyl <url>` | Read in a terminal; smallest surface |
 | x11 + trusted input | `DISPLAY=:99 carbonyl --ozone-platform=x11 <url>` | Automation against bot-detecting sites (kernel uinput → Xorg → `isTrusted=true` events) |
 | x11 + visual capture | `CARBONYL_X_MIRROR=1 DISPLAY=:99 carbonyl --ozone-platform=x11 <url>` | Same, plus blits compositor frames into an X window so `scrot`/`ffmpeg`/`x11vnc` can capture alongside the terminal render |
+| Experimental operator host | `DISPLAY=:99 carbonyl --ozone-platform=x11 --carbonyl-operator-window <url>` | #285 spike: host the page in a real Views/Aura window while retaining terminal output |
+
+The operator-host switch is experimental and requires an X11 runtime. It does
+not yet authorize concurrent profile use or production mode handoff; see
+[ADR-006](docs/adr-006-native-operator-host.md).
 
 Full operator reference, session-portability rules, and CLI/env-var
 matrix: [docs/runtime-modes.md](docs/runtime-modes.md).

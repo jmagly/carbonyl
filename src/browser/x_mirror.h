@@ -5,6 +5,7 @@
 
 #include "build/build_config.h"
 #include "carbonyl/src/browser/export.h"
+#include "ui/gfx/native_ui_types.h"
 
 namespace carbonyl::x_mirror {
 
@@ -20,6 +21,20 @@ namespace carbonyl::x_mirror {
 // mirror is disabled or fails to initialize.
 
 CARBONYL_VIZ_EXPORT bool Enabled();
+
+// Return whether `widget` currently owns Carbonyl's compositor output. Before
+// an operator window attaches, the synthetic headless compositor remains the
+// owner. Once attached, only the matching native widget may render output.
+CARBONYL_VIZ_EXPORT bool ShouldRenderCompositor(gfx::AcceleratedWidget widget);
+
+// Route mirror pixels to an embedder-owned X11 accelerated widget. This is
+// used by the experimental Views operator host, which owns input and window
+// lifetime while Carbonyl continues consuming the same software frame for the
+// terminal. Calls with a null widget are ignored.
+CARBONYL_VIZ_EXPORT void AttachToWindow(gfx::AcceleratedWidget widget);
+
+// Stop targeting `widget` before its owning Views host is destroyed.
+CARBONYL_VIZ_EXPORT void DetachFromWindow(gfx::AcceleratedWidget widget);
 
 // Ensure the retained compositor raster and XImage descriptor are sized to
 // (width, height). The initial X window uses this size, but subsequent window

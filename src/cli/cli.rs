@@ -1326,6 +1326,19 @@ mod tests {
     }
 
     #[test]
+    fn experimental_operator_switch_reaches_chromium() {
+        let argv = vec![
+            "--ozone-platform=x11".to_string(),
+            "--carbonyl-operator-window".to_string(),
+            "https://example.com".to_string(),
+        ];
+        let cmd = CommandLine::parse_args(argv.clone());
+
+        assert!(matches!(cmd.program, CommandLineProgram::Main));
+        assert_eq!(cmd.args, argv);
+    }
+
+    #[test]
     fn chromium_flag_value_with_extra_equals_is_preserved() {
         // The parser splits on '=' and keeps only the first value segment, but
         // `args` retains the full original token — so a Chromium flag whose
