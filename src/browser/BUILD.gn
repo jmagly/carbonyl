@@ -1,6 +1,7 @@
 import("//build/config/compiler/compiler.gni")
 import("//build/config/ozone.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
 
 mojom("mojom") {
   sources = [ "carbonyl.mojom" ]
@@ -148,6 +149,33 @@ component("operator_window") {
       "//ui/wm",
     ]
   }
+}
+
+# BrowserContext storage barrier used by persistent-profile shutdown (#292).
+# The state-machine portion is independent of Chromium storage implementations
+# so timeout/failure/idempotency behavior has deterministic unit coverage.
+component("storage_flush") {
+  output_name = "carbonyl_storage_flush"
+  defines = [ "CARBONYL_STORAGE_FLUSH_IMPLEMENTATION" ]
+  sources = [
+    "storage_flush_coordinator.cc",
+    "storage_flush_coordinator.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//services/network/public/mojom",
+  ]
+}
+
+test("storage_flush_unittests") {
+  sources = [ "storage_flush_coordinator_unittest.cc" ]
+  deps = [
+    ":storage_flush",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
 }
 
 component("viz") {
