@@ -168,16 +168,25 @@ The window uses normal window-manager decorations and size controls. Native
 activation restores the page's last focused view; deactivation stores it.
 Minimize/restore therefore preserves focus without injecting a synthetic DOM
 event. Closing the operator window requests orderly browser shutdown instead
-of leaving an invisible process running. Physical X11 and XTEST/uinput events
-enter through the native Aura event dispatcher and retain Chromium's normal
-trusted-event semantics.
+of leaving an invisible process running. Native input enters through Aura's
+normal event dispatcher; there is no Carbonyl event-forging path. The smoke
+activates the operator window and uses untargeted `xdotool` key and pointer
+commands, which take xdotool's XTEST path. It deliberately avoids `--window`
+for input because targeted xdotool input uses synthetic XSendEvent delivery.
+Kernel uinput remains a separate isolated-worker graduation check.
 
-The regression harness covers native resize, minimize/restore, focus recovery,
-primary and context-menu clicks, wheel input, keyboard input, native pixels,
-and simultaneous terminal output. Composed Unicode/IME and monitor-scale
-changes remain isolated-worker graduation checks: support depends on the host
-XKB/IME and window-manager configuration and is not claimed from an Xvfb-only
-run.
+Shutdown destroys the shell-owned `OperatorWindow` before
+`HeadlessBrowserImpl::Shutdown()` clears BrowserContexts and WebContents. The
+widget observer also holds a `WebContents::GetWeakPtr()` handle so queued native
+activation notifications cannot outlive the page during the shutdown drain.
+
+The regression harness independently asserts native resize, post-resize
+terminal progress, primary and context-menu clicks, wheel and keyboard input,
+stored-focus recovery across a real WM minimize/restore, native pixels, and
+close-triggered process exit. Composed Unicode/IME, monitor-scale changes, and
+kernel uinput remain isolated-worker graduation checks: support depends on the
+host XKB/IME and window-manager configuration and is not claimed from an
+Xvfb-only run.
 
 This is an architecture prototype, not yet the production operator mode. In
 particular, do not open a user-data directory concurrently in operator and

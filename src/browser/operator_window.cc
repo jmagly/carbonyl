@@ -6,7 +6,7 @@
 #include "base/command_line.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
-#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
@@ -54,7 +54,7 @@ class OperatorWidgetObserver final : public views::WidgetObserver {
   OperatorWidgetObserver(views::Widget* widget,
                          content::WebContents* web_contents,
                          base::OnceClosure close_callback)
-      : web_contents_(web_contents),
+      : web_contents_(web_contents->GetWeakPtr()),
         close_callback_(std::move(close_callback)) {
     observation_.Observe(widget);
   }
@@ -93,7 +93,7 @@ class OperatorWidgetObserver final : public views::WidgetObserver {
 
   void OnWidgetDestroyed(views::Widget*) override {
     observation_.Reset();
-    web_contents_ = nullptr;
+    web_contents_.reset();
     if (close_callback_) {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, std::move(close_callback_));
@@ -101,7 +101,11 @@ class OperatorWidgetObserver final : public views::WidgetObserver {
   }
 
  private:
-  raw_ptr<content::WebContents> web_contents_ = nullptr;
+  // HeadlessBrowserImpl destroys BrowserContexts (and therefore WebContents)
+  // before its posted quit task runs. Keep a weak handle so late native
+  // activation/show-state notifications during that drain cannot dereference
+  // a destroyed page.
+  base::WeakPtr<content::WebContents> web_contents_;
   base::OnceClosure close_callback_;
   base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
       this};

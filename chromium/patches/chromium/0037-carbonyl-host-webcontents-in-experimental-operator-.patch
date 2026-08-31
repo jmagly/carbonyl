@@ -12,11 +12,11 @@ Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
 ---
  content/browser/compositor/viz_process_transport_factory.cc | 2 +-
  headless/BUILD.gn                                       |  1 +
- headless/app/headless_shell.cc                          | 15 +++++++++++++++
+ headless/app/headless_shell.cc                          | 16 ++++++++++++++++
  headless/lib/browser/headless_content_browser_client.cc |  9 +++++++++
  headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
  headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
- 6 files changed, 47 insertions(+), 2 deletions(-)
+ 6 files changed, 48 insertions(+), 2 deletions(-)
 
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
 index 95182065b322a..1bd765a773afa 100644
@@ -174,5 +174,10 @@ index 33b6292..2be6f47 100644
    // Carbonyl issue #88: install the --dump-text observer on the freshly
    // built WebContents. No-op unless --carbonyl-dump-text is on the
    // command line (set by the Rust CLI when the user passed --dump-text).
+@@ -207,3 +222,4 @@
+ void HeadlessShell::Shutdown() {
++  operator_window_.reset();
+   browser_.ExtractAsDangling()->Shutdown();
+ }
 -- 
 2.47.3
