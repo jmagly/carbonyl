@@ -4,23 +4,31 @@
 #include <memory>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "build/build_config.h"
 #include "carbonyl/src/browser/export.h"
 #include "components/viz/host/host_display_client.h"
 #include "services/viz/privileged/mojom/compositing/layered_window_updater.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/ozone_buildflags.h"
 #include "ui/gfx/native_ui_types.h"
+
+namespace ui {
+class Compositor;
+}
 
 namespace carbonyl {
 
 typedef base::RepeatingCallback<void(const gfx::Rect&, const SkBitmap&)>
     OnPaintCallback;
 
-class CARBONYL_VIZ_EXPORT LayeredWindowUpdater : public viz::mojom::LayeredWindowUpdater {
+class CARBONYL_VIZ_EXPORT LayeredWindowUpdater
+    : public viz::mojom::LayeredWindowUpdater {
  public:
   explicit LayeredWindowUpdater(
-      mojo::PendingReceiver<viz::mojom::LayeredWindowUpdater> receiver);
+      mojo::PendingReceiver<viz::mojom::LayeredWindowUpdater> receiver,
+      gfx::AcceleratedWidget widget);
   ~LayeredWindowUpdater() override;
 
   // disable copy
@@ -38,18 +46,18 @@ class CARBONYL_VIZ_EXPORT LayeredWindowUpdater : public viz::mojom::LayeredWindo
   gfx::Size pixel_size_;
   DrawCallback callback_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  base::WeakPtrFactory<LayeredWindowUpdater> weak_ptr_factory_ { this };
+  const gfx::AcceleratedWidget widget_;
+  base::WeakPtrFactory<LayeredWindowUpdater> weak_ptr_factory_{this};
 };
 
 class CARBONYL_VIZ_EXPORT HostDisplayClient : public viz::HostDisplayClient {
  public:
-  explicit HostDisplayClient();
+  explicit HostDisplayClient(ui::Compositor* compositor);
   ~HostDisplayClient() override;
 
   // disable copy
   HostDisplayClient(const HostDisplayClient&) = delete;
-  HostDisplayClient& operator=(const HostDisplayClient&) =
-      delete;
+  HostDisplayClient& operator=(const HostDisplayClient&) = delete;
 
  private:
 #if BUILDFLAG(IS_MAC)
@@ -61,8 +69,12 @@ class CARBONYL_VIZ_EXPORT HostDisplayClient : public viz::HostDisplayClient {
       mojo::PendingReceiver<viz::mojom::LayeredWindowUpdater> receiver)
       override;
 
-// X11 support disabled in this build (ozone_platform_x11 = false).
+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
+  void DidCompleteSwapWithNewSize(const gfx::Size& size) override;
+#endif
 
+  raw_ptr<ui::Compositor> compositor_;
+  gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
   std::unique_ptr<LayeredWindowUpdater> layered_window_updater_;
   OnPaintCallback callback_;
 };

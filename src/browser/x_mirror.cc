@@ -36,6 +36,85 @@ class XMirrorState {
 
   bool enabled() const { return enabled_; }
 
+  bool ShouldRenderCompositor(gfx::AcceleratedWidget widget) const {
+    return !operator_window_attached_ || window_ == static_cast<Window>(widget);
+  }
+
+  void AttachToWindow(gfx::AcceleratedWidget widget) {
+    if (widget == gfx::kNullAcceleratedWidget ||
+        !EnsureDisplay("--carbonyl-operator-window")) {
+      return;
+    }
+
+    const Window target = static_cast<Window>(widget);
+    if (window_ == target && !owns_window_) {
+      return;
+    }
+    if (owns_window_ && window_ != 0) {
+      XDestroyWindow(display_, window_);
+    }
+    if (owns_gc_ && gc_) {
+      XFreeGC(display_, gc_);
+    }
+
+    XWindowAttributes attributes;
+    if (!XGetWindowAttributes(display_, target, &attributes)) {
+      LOG(ERROR) << "CARBONYL_OPERATOR_WINDOW cannot inspect X11 widget "
+                 << widget;
+      window_ = 0;
+      operator_window_attached_ = false;
+      gc_ = nullptr;
+      owns_window_ = false;
+      owns_gc_ = false;
+      enabled_ = mirror_requested_;
+      return;
+    }
+
+    if (image_) {
+      image_->data = nullptr;
+      XDestroyImage(image_);
+      image_ = nullptr;
+    }
+    window_ = target;
+    operator_window_attached_ = true;
+    owns_window_ = false;
+    visual_ = attributes.visual;
+    depth_ = attributes.depth;
+    window_width_ = attributes.width;
+    window_height_ = attributes.height;
+    gc_ = XCreateGC(display_, window_, 0, nullptr);
+    owns_gc_ = gc_ != nullptr;
+    enabled_ = owns_gc_;
+    // Force the first allocation for this compositor to rebuild its XImage
+    // descriptor with the operator widget's visual and depth, even when its
+    // pixel size matches the compositor that was previously attached.
+    width_ = 0;
+    height_ = 0;
+    if (enabled_) {
+      LOG(INFO) << "CARBONYL_OPERATOR_WINDOW compositor target=" << widget;
+    }
+  }
+
+  void DetachFromWindow(gfx::AcceleratedWidget widget) {
+    if (owns_window_ || window_ == 0 ||
+        window_ != static_cast<Window>(widget)) {
+      return;
+    }
+    if (owns_gc_ && gc_) {
+      XFreeGC(display_, gc_);
+    }
+    if (image_) {
+      image_->data = nullptr;
+      XDestroyImage(image_);
+    }
+    window_ = 0;
+    operator_window_attached_ = false;
+    gc_ = nullptr;
+    image_ = nullptr;
+    owns_gc_ = false;
+    enabled_ = mirror_requested_;
+  }
+
   void EnsureSize(int width, int height) {
     if (!enabled_ || width <= 0 || height <= 0) {
       return;
@@ -55,17 +134,27 @@ class XMirrorState {
       unsigned long black = XBlackPixel(display_, screen);
       window_ = XCreateSimpleWindow(display_, root, 0, 0, width, height, 0,
                                     black, black);
+      owns_window_ = true;
       XStoreName(display_, window_, "Carbonyl");
       XSelectInput(display_, window_, ExposureMask | StructureNotifyMask);
       wm_delete_window_ = XInternAtom(display_, "WM_DELETE_WINDOW", False);
       XSetWMProtocols(display_, window_, &wm_delete_window_, 1);
       XMapWindow(display_, window_);
       gc_ = XDefaultGC(display_, screen);
+      owns_gc_ = false;
       visual_ = XDefaultVisual(display_, screen);
       depth_ = XDefaultDepth(display_, screen);
       window_width_ = width;
       window_height_ = height;
       ScheduleEventPump();
+    } else if (!owns_window_) {
+      XWindowAttributes attributes;
+      if (XGetWindowAttributes(display_, window_, &attributes)) {
+        visual_ = attributes.visual;
+        depth_ = attributes.depth;
+        window_width_ = attributes.width;
+        window_height_ = attributes.height;
+      }
     }
 
     // Recreate the XImage descriptor at the new size. We never own the
@@ -87,8 +176,11 @@ class XMirrorState {
     XFlush(display_);
   }
 
-  void Blit(const uint8_t* pixels, int damage_x, int damage_y,
-            int damage_w, int damage_h) {
+  void Blit(const uint8_t* pixels,
+            int damage_x,
+            int damage_y,
+            int damage_w,
+            int damage_h) {
     if (!enabled_ || !image_ || window_ == 0) {
       return;
     }
@@ -120,7 +212,7 @@ class XMirrorState {
   }
 
   void PumpEvents() {
-    if (!enabled_ || !display_ || window_ == 0) {
+    if (!enabled_ || !display_ || window_ == 0 || !owns_window_) {
       return;
     }
     bool repaint = false;
@@ -224,32 +316,48 @@ class XMirrorState {
     if (!flag || flag[0] == '\0' || flag[0] == '0') {
       return;
     }
-    const char* display_env = std::getenv("DISPLAY");
-    if (!display_env || !*display_env) {
-      LOG(WARNING) << "CARBONYL_X_MIRROR set but DISPLAY unset";
-      return;
-    }
-    display_ = XOpenDisplay(display_env);
-    if (!display_) {
-      LOG(WARNING) << "CARBONYL_X_MIRROR: XOpenDisplay(" << display_env
-                   << ") failed";
+    mirror_requested_ = true;
+    if (!EnsureDisplay("CARBONYL_X_MIRROR")) {
       return;
     }
     enabled_ = true;
-    LOG(INFO) << "CARBONYL_X_MIRROR enabled on DISPLAY=" << display_env;
+    LOG(INFO) << "CARBONYL_X_MIRROR enabled on DISPLAY="
+              << std::getenv("DISPLAY");
+  }
+
+  bool EnsureDisplay(const char* requester) {
+    if (display_) {
+      return true;
+    }
+    const char* display_env = std::getenv("DISPLAY");
+    if (!display_env || !*display_env) {
+      LOG(WARNING) << requester << " requested but DISPLAY unset";
+      return false;
+    }
+    display_ = XOpenDisplay(display_env);
+    if (!display_) {
+      LOG(WARNING) << requester << ": XOpenDisplay(" << display_env
+                   << ") failed";
+      return false;
+    }
+    return true;
   }
 
   // Process-lifetime; no explicit cleanup. X server reclaims on exit.
   ~XMirrorState() = default;
 
   bool enabled_ = false;
-  // Xlib-owned handles; lifetime managed by the X server / libX11, not by
-  // this process. RAW_PTR_EXCLUSION opts these fields out of the
-  // chromium-rawptr plugin (raw_ptr<T> assumes Chromium-style ownership).
+  bool mirror_requested_ = false;
+  // Xlib handle types. The optional operator `window_` is Ozone-owned;
+  // `owns_window_` distinguishes it from the legacy mirror we create.
+  // RAW_PTR_EXCLUSION opts Xlib pointers out of the chromium-rawptr plugin.
   RAW_PTR_EXCLUSION Display* display_ = nullptr;
   Window window_ = 0;
+  bool owns_window_ = false;
+  bool operator_window_attached_ = false;
   Atom wm_delete_window_ = 0;
   GC gc_ = nullptr;
+  bool owns_gc_ = false;
   RAW_PTR_EXCLUSION Visual* visual_ = nullptr;
   int depth_ = 24;
   RAW_PTR_EXCLUSION XImage* image_ = nullptr;
@@ -268,18 +376,40 @@ bool Enabled() {
   return XMirrorState::Get().enabled();
 }
 
+bool ShouldRenderCompositor(gfx::AcceleratedWidget widget) {
+  return XMirrorState::Get().ShouldRenderCompositor(widget);
+}
+
+void AttachToWindow(gfx::AcceleratedWidget widget) {
+  XMirrorState::Get().AttachToWindow(widget);
+}
+
+void DetachFromWindow(gfx::AcceleratedWidget widget) {
+  XMirrorState::Get().DetachFromWindow(widget);
+}
+
 void EnsureSize(int width, int height) {
   XMirrorState::Get().EnsureSize(width, height);
 }
 
-void Blit(const uint8_t* pixels, int damage_x, int damage_y,
-          int damage_w, int damage_h) {
+void Blit(const uint8_t* pixels,
+          int damage_x,
+          int damage_y,
+          int damage_w,
+          int damage_h) {
   XMirrorState::Get().Blit(pixels, damage_x, damage_y, damage_w, damage_h);
 }
 
 #else  // !BUILDFLAG(IS_LINUX)
 
-bool Enabled() { return false; }
+bool Enabled() {
+  return false;
+}
+bool ShouldRenderCompositor(gfx::AcceleratedWidget) {
+  return true;
+}
+void AttachToWindow(gfx::AcceleratedWidget) {}
+void DetachFromWindow(gfx::AcceleratedWidget) {}
 void EnsureSize(int, int) {}
 void Blit(const uint8_t*, int, int, int, int) {}
 

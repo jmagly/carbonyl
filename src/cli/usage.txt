@@ -130,6 +130,8 @@ Runtime modes (see docs/runtime-modes.md for the full operator guide):
     terminal-only              carbonyl <url>
     x11 + trusted input        carbonyl --ozone-platform=x11 <url>
     x11 + visual capture       CARBONYL_X_MIRROR=1 carbonyl --ozone-platform=x11 <url>
+    experimental operator     carbonyl --ozone-platform=x11 --carbonyl-operator-window <url>
+       (Views/Aura spike)      requires the x11 runtime; see ADR-006
     dump-text                  carbonyl --dump-text <url>
        (text-only extraction)  (see docs/runtime-modes.md Mode 4)
     dump-frame                 carbonyl --dump --viewport=1280x800 <url> > page.png

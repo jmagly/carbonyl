@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Carbonyl operator-window input test</title>
+<style>
+  html, body { width: 100%; height: 100%; margin: 0; }
+  body { background: #003366; color: white; font: 12px sans-serif; }
+  button { width: 120px; height: 40px; margin: 4px; background: #aa0000;
+           color: white; border: 0; font: inherit; }
+  input { display: block; width: 140px; height: 28px; margin: 4px;
+          font: inherit; }
+</style>
+</head>
+<body>
+  <button id="target">CLICK_OPERATOR_TARGET</button>
+  <input id="keyboard" aria-label="Operator keyboard target">
+  <script>
+    const target = document.querySelector('#target');
+    const keyboard = document.querySelector('#keyboard');
+    target.addEventListener('click', event => {
+      if (!event.isTrusted) return;
+      target.style.background = '#00aa44';
+      keyboard.focus();
+    });
+    keyboard.addEventListener('keydown', event => {
+      if (!event.isTrusted) return;
+      document.body.style.background = '#665500';
+    });
+  </script>
+</body>
+</html>

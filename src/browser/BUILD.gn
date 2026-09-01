@@ -1,4 +1,5 @@
 import("//build/config/compiler/compiler.gni")
+import("//build/config/ozone.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
@@ -122,6 +123,33 @@ component("network") {
   ]
 }
 
+# Feature-gated native Views/Aura host for the #285 operator-window spike.
+# The canonical headless build compiles a small unsupported-platform stub;
+# Views and desktop Aura enter the graph only for the x11 Ozone variant.
+component("operator_window") {
+  output_name = "carbonyl_operator_window"
+  defines = [ "CARBONYL_OPERATOR_IMPLEMENTATION" ]
+  sources = [
+    "operator_window.cc",
+    "operator_window.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//ui/gfx",
+  ]
+
+  if (is_linux && ozone_platform_x11) {
+    deps += [
+      "//ui/aura",
+      "//ui/views",
+      "//ui/views/controls/webview",
+      "//ui/wm",
+    ]
+  }
+}
+
 component("viz") {
   output_name = "carbonyl_viz"
   defines = [ "CARBONYL_VIZ_IMPLEMENTATION" ]
@@ -137,6 +165,7 @@ component("viz") {
     "//base",
     "//components/viz/host",
     "//services/viz/privileged/mojom",
+    "//ui/compositor",
     "//ui/gfx",
   ]
 

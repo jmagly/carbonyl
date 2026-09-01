@@ -19,6 +19,7 @@ notes before switching modes mid-engagement.
 | Read a webpage in a tmux pane | **Terminal-only** | terminal keystrokes (`isTrusted=false`) | none | full |
 | Automation against bot-detecting sites | **x11 + uinput** | kernel uinput → Xorg → Chromium (`isTrusted=true`) | none (X window stays blank) | full |
 | Automation **and** screenshot/video capture | **x11 + uinput + X-mirror** | same as above | `scrot`, `ffmpeg`, `x11vnc` against `$DISPLAY` | full |
+| Experimental human operator window | **Views/Aura operator spike** | native X11 keyboard/pointer | the hosted native window plus terminal | full |
 | Text-only extraction (scraping, LLM pipes) | **`--dump-text`** | none — single-shot navigation | none — bypasses renderer | full |
 | Visual frame dump (screenshots, mailcap filters) | **`--dump`** | none — single-shot navigation | none — bypasses terminal renderer | full compositor frame |
 | Terminal image protocols | **`--sixel[=auto]`**, **`--terminal-image=<mode>`**, or **`--dump=<mode>`** | terminal with matching image support | matching terminal emulator | full compositor frame |
@@ -133,6 +134,33 @@ var.
 | `CARBONYL_X_MIRROR=1` | Enable. Any other value (or unset) → disabled. |
 | `DISPLAY` | Required when enabled. Mirror opens this display. |
 | `--viewport=WxH` | Pin the CSS viewport so framebuffer captures are size-stable across terminal-cell variation. |
+
+---
+
+## Experimental Views/Aura operator host
+
+The #285 spike can host the active page in a real Carbonyl-owned Views/Aura
+window while the terminal renderer consumes the same software compositor
+frames:
+
+```bash
+DISPLAY=:99 carbonyl \
+  --ozone-platform=x11 \
+  --carbonyl-operator-window \
+  --viewport=1280x720 \
+  https://example.com
+```
+
+This requires an X11 runtime; a headless-only build rejects the switch with an
+explicit diagnostic. The switch is off by default and does not disable
+sandboxing or site isolation.
+
+This is an architecture prototype, not yet the production operator mode. In
+particular, do not open a user-data directory concurrently in operator and
+headless processes. Orderly storage-flush acknowledgement (#292), the external
+profile lease (agent #136), complete geometry/input semantics (#287), and the
+round-trip/crash QA matrix (QA #37) remain graduation gates. See
+[ADR-006](adr-006-native-operator-host.md).
 
 ---
 

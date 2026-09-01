@@ -1,0 +1,176 @@
+From 0000000000000000000000000000000000000037 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Mon, 31 Aug 2026 12:00:00 -0400
+Subject: [PATCH 37/37] carbonyl: host WebContents in experimental operator window
+
+Keep the default headless path unchanged. When the explicitly experimental
+--carbonyl-operator-window switch is present, attach the one shell
+WebContents to Carbonyl's X11 Views/Aura host and keep that host alive for
+the lifetime of HeadlessShell.
+
+Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
+---
+ content/browser/compositor/viz_process_transport_factory.cc | 2 +-
+ headless/BUILD.gn                                       |  1 +
+ headless/app/headless_shell.cc                          | 13 +++++++++++++
+ headless/lib/browser/headless_content_browser_client.cc |  9 +++++++++
+ headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
+headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
+ 6 files changed, 45 insertions(+), 2 deletions(-)
+
+diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
+index 95182065b322a..1bd765a773afa 100644
+--- a/content/browser/compositor/viz_process_transport_factory.cc
++++ b/content/browser/compositor/viz_process_transport_factory.cc
+@@ -407,7 +407,7 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
+   root_params->display_private =
+       display_private.BindNewEndpointAndPassReceiver();
+   compositor_data.display_client =
+-      std::make_unique<carbonyl::HostDisplayClient>();
++      std::make_unique<carbonyl::HostDisplayClient>(compositor);
+   root_params->display_client =
+       compositor_data.display_client->GetBoundRemote(resize_task_runner_);
+   mojo::AssociatedRemote<viz::mojom::ExternalBeginFrameController>
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index d9fad57..485e8ac 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -911,6 +911,7 @@ executable("headless_shell") {
+     "//carbonyl/src/browser:dump_text",
+     "//carbonyl/src/browser:javascript",
+     "//carbonyl/src/browser:network",
++    "//carbonyl/src/browser:operator_window",
+     "//carbonyl/src/browser:renderer",
+     "//build:branding_buildflags",
+     "//components/os_crypt/common:switches",
+diff --git a/headless/lib/headless_content_main_delegate.cc b/headless/lib/headless_content_main_delegate.cc
+index 83cecb2..c96513e 100644
+--- a/headless/lib/headless_content_main_delegate.cc
++++ b/headless/lib/headless_content_main_delegate.cc
+@@ -46,6 +46,7 @@
+ #include "ui/base/l10n/l10n_util.h"
++#include "ui/base/ozone_buildflags.h"
+ #include "ui/base/resource/resource_bundle.h"
+ #include "ui/base/ui_base_switches.h"
+ #include "ui/gfx/switches.h"
+ #include "ui/gl/gl_switches.h"
+ #include "ui/ozone/public/ozone_switches.h"
+@@ -269,7 +269,14 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
+ #if BUILDFLAG(IS_OZONE)
+   // The headless backend is automatically chosen for a headless build, but also
+   // adding it here allows us to run in a non-headless build too.
+-  command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
++  const bool use_operator_window =
++      command_line->HasSwitch("carbonyl-operator-window");
++#else
++  constexpr bool use_operator_window = false;
++#endif
++  command_line->AppendSwitchASCII(
++      ::switches::kOzonePlatform, use_operator_window ? "x11" : "headless");
+ #endif
+ 
+   // When running headless there is no need to suppress input until content
+diff --git a/headless/lib/browser/headless_content_browser_client.cc b/headless/lib/browser/headless_content_browser_client.cc
+index 964208a..0000000 100644
+--- a/headless/lib/browser/headless_content_browser_client.cc
++++ b/headless/lib/browser/headless_content_browser_client.cc
+@@ -50,6 +50,7 @@
+ #include "third_party/blink/public/mojom/picture_in_picture/picture_in_picture.mojom.h"
+ #include "ui/base/ui_base_switches.h"
+ #include "ui/gfx/switches.h"
++#include "ui/ozone/public/ozone_switches.h"
+ 
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+ #include "components/crash/core/app/crash_switches.h"  // nogncheck
+@@ -268,6 +269,14 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+     command_line->AppendSwitchASCII(::switches::kHeadless, "old");
+   }
+ 
++#if BUILDFLAG(IS_LINUX)
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "carbonyl-operator-window")) {
++    command_line->RemoveSwitch(::switches::kOzonePlatform);
++    command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
++  }
++#endif
++
+ #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+   int fd;
+   pid_t pid;
+diff --git a/headless/lib/browser/headless_platform_delegate_aura.cc b/headless/lib/browser/headless_platform_delegate_aura.cc
+index 3255574..86720fe 100644
+--- a/headless/lib/browser/headless_platform_delegate_aura.cc
++++ b/headless/lib/browser/headless_platform_delegate_aura.cc
+@@ -6,6 +6,8 @@
+ 
+ #include <memory>
+ 
++#include "base/command_line.h"
++#include "build/build_config.h"
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
+ #include "headless/lib/browser/headless_screen.h"
+@@ -14,5 +16,7 @@
+ #include "ui/aura/env.h"
++#include "ui/aura/screen_ozone.h"
+ #include "ui/aura/window.h"
++#include "ui/base/ozone_buildflags.h"
+ #include "ui/display/screen.h"
+ #include "ui/events/devices/device_data_manager.h"
+ #include "ui/gfx/geometry/rect.h"
+@@ -24,6 +28,13 @@ namespace headless {
+ 
+ void HeadlessPlatformDelegate::Initialize(
+     const HeadlessBrowser::Options& options) {
++#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "carbonyl-operator-window")) {
++    new aura::ScreenOzone();
++    return;
++  }
++#endif
+   HeadlessScreen* screen =
+       HeadlessScreen::Create(options.window_size, options.screen_info_spec);
+   display::Screen::SetScreenInstance(screen);
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+index 33b6292..2be6f47 100644
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -8,6 +8,7 @@
+ #include "carbonyl/src/browser/dump_text_handler.h"
+ #include "carbonyl/src/browser/javascript_handler.h"
+ #include "carbonyl/src/browser/network_handler.h"
++#include "carbonyl/src/browser/operator_window.h"
+ #include "carbonyl/src/browser/renderer.h"
+ 
+ #include <memory>
+@@ -91,6 +92,7 @@ class HeadlessShell {
+   void Shutdown();
+ 
+   raw_ptr<HeadlessBrowser> browser_ = nullptr;
++  std::unique_ptr<carbonyl::OperatorWindow> operator_window_;
+ };
+ 
+ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -141,6 +143,17 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+     ShutdownSoon();
+   }
+ 
++  if (web_contents && carbonyl::OperatorWindow::IsRequested()) {
++    operator_window_ = carbonyl::OperatorWindow::Create(
++        HeadlessWebContentsImpl::From(web_contents)->web_contents(),
++        carbonyl::Renderer::GetCurrent()->GetSize());
++    if (!operator_window_) {
++      LOG(ERROR) << "Failed to create the experimental operator window.";
++      ShutdownSoon();
++      return;
++    }
++  }
++
+   // Carbonyl issue #88: install the --dump-text observer on the freshly
+   // built WebContents. No-op unless --carbonyl-dump-text is on the
+   // command line (set by the Rust CLI when the user passed --dump-text).
+-- 
+2.47.3
