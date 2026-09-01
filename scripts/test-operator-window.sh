@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# X11 smoke for the explicitly experimental Views/Aura operator host (#285).
+# X11 smoke for the experimental Views/Aura host and dedicated shell (#285,
+# #286).
 # Proves one process produces terminal pixels and native-window pixels, then
 # proves XTEST pointer and keyboard events reach the hosted WebContents as
 # trusted events. Profile handoff/crash coverage belongs to QA #37.
@@ -9,7 +10,15 @@ set -euo pipefail
 CARBONYL_ROOT="$(cd "$(dirname -- "$0")" && dirname -- "$(pwd)")"
 cd "$CARBONYL_ROOT"
 
-if [ -z "${CARBONYL_BIN:-}" ]; then
+USE_DEDICATED_OPERATOR_SHELL=0
+if [ -n "${CARBONYL_OPERATOR_SHELL_BIN:-}" ]; then
+    CARBONYL_BIN="$CARBONYL_OPERATOR_SHELL_BIN"
+    USE_DEDICATED_OPERATOR_SHELL=1
+elif [ -n "${CARBONYL_BIN:-}" ] &&
+    [ -x "$(dirname -- "$CARBONYL_BIN")/carbonyl_operator_shell" ]; then
+    CARBONYL_BIN="$(dirname -- "$CARBONYL_BIN")/carbonyl_operator_shell"
+    USE_DEDICATED_OPERATOR_SHELL=1
+elif [ -z "${CARBONYL_BIN:-}" ]; then
     if command -v carbonyl >/dev/null 2>&1; then
         CARBONYL_BIN="$(command -v carbonyl)"
     else
@@ -60,10 +69,12 @@ trap cleanup EXIT
 CARBONYL_CMD=(
     "$CARBONYL_BIN"
     --ozone-platform=x11
-    --carbonyl-operator-window
     "--user-data-dir=$WORK_DIR/profile"
     --viewport=1280x720
 )
+if [ "$USE_DEDICATED_OPERATOR_SHELL" = 0 ]; then
+    CARBONYL_CMD+=(--carbonyl-operator-window)
+fi
 if [ "${CARBONYL_TEST_NO_SANDBOX:-0}" = 1 ]; then
     CARBONYL_CMD+=(--no-sandbox)
 fi
