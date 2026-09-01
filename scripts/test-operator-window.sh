@@ -14,6 +14,10 @@ USE_DEDICATED_OPERATOR_SHELL=0
 if [ -n "${CARBONYL_OPERATOR_SHELL_BIN:-}" ]; then
     CARBONYL_BIN="$CARBONYL_OPERATOR_SHELL_BIN"
     USE_DEDICATED_OPERATOR_SHELL=1
+elif [ -n "${CARBONYL_BIN:-}" ] &&
+    [ -x "$(dirname -- "$CARBONYL_BIN")/carbonyl_operator_shell" ]; then
+    CARBONYL_BIN="$(dirname -- "$CARBONYL_BIN")/carbonyl_operator_shell"
+    USE_DEDICATED_OPERATOR_SHELL=1
 elif [ -z "${CARBONYL_BIN:-}" ]; then
     if command -v carbonyl >/dev/null 2>&1; then
         CARBONYL_BIN="$(command -v carbonyl)"
