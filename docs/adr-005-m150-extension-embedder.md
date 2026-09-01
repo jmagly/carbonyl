@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-30
 
-**Status:** Accepted; fail-closed client linkage implemented, runtime enablement remains gated
+**Status:** Accepted; fail-closed client linkage and opt-in unpacked MV3 runtime implemented
 
 **Related:** Carbonyl `#156`, `#285`, `#289`, `#290`
 
@@ -73,38 +73,40 @@ policy across `//headless` and `//extensions`.
 - Diagnostics expose only extension ID, declared version, canonical path, and
   source-tree hash. They do not emit extension storage, page data, cookies, or
   requested secrets.
-- The profile-continuity and storage-flush contract is supplied by `#285` and
-  its follow-up lifecycle work. `#289` must not enable persistent extension
-  state before that contract is accepted and implemented.
+- The profile-continuity and storage-flush contract is supplied by `#285`.
+  Extension preferences, API storage, DNR rules, and user-script state are
+  profile-owned and are torn down before the profile lease is released.
 
 ## Build slices
 
 The implementation should land in independently testable slices:
 
-1. **Implemented:** link core `//extensions` common/browser/renderer targets
-   into headless shell and install no-op, fail-closed Carbonyl clients. The
-   browser client unconditionally reports extensions disabled, rejects
-   installation, owns no `ExtensionSystem`, and enters teardown before the
-   `BrowserContext` collection is destroyed. The renderer client reserves the
-   isolated-world boundary but creates no dispatcher and receives no execution
-   hooks. Default behavior remains disabled regardless of extension flags.
-2. Add a test-only in-memory `ExtensionSystem` and prove browser/renderer
-   startup plus orderly teardown without loading an extension.
-3. Implement the constrained unpacked-MV3 loader from `#289`, including
-   content scripts, service workers, messaging, storage, permissions, and DNR.
-4. Add management/action surfaces from `#290` only after runtime semantics and
-   browser-owned controls are stable.
+1. **Implemented in patch 0039:** link core `//extensions`
+   common/browser/renderer targets into headless shell and install fail-closed
+   Carbonyl clients while keeping extension loading disabled.
+2. **Implemented in patch 0040:** create the profile-owned `ExtensionSystem`,
+   state stores, service-worker and user-script managers, scheme/factory/frame
+   hooks, and isolated-world renderer dispatcher.
+3. **Implemented by `#289`:** require identical canonical
+   `--load-extension` and `--disable-extensions-except` paths; reject symlinks,
+   malformed manifests, non-MV3 types, and remote/update installation; index
+   DNR rules and grant only the extension's declared API and host permissions.
+4. Add live management/action surfaces from `#290` only after runtime
+   semantics and browser-owned controls are stable.
 
-The linkage is implemented under `src/extensions/` and connected by Chromium
-patch 0039. `scripts/audit-extension-embedder.sh` now runs against the applied
-patch stack and proves the no-Chrome, no-`ExtensionSystem`, no-renderer-hook,
-unconditionally-disabled boundary. This completes the fail-closed linkage
-slice of `#156`; the epic remains open while runtime functionality proceeds in
-`#289` and `#290`.
+The Carbonyl-owned implementation lives under `src/extensions/`; patches 0039
+and 0040 connect its fail-closed client linkage and opt-in runtime hooks to
+Headless. `scripts/audit-extension-embedder.sh` runs against the applied patch
+stack and proves the no-Chrome boundary, default-deny activation, profile-owned
+services, dedicated extension-process policy, worker/frame binders, DNR proxy,
+and renderer lifecycle seams. This completes the fail-closed linkage slice of
+`#156` and the unpacked runtime slice of `#289`; live controls remain in `#290`.
 
 `scripts/audit-extension-embedder.sh` records the current M150 baseline and
 fails when an upgrade invalidates one of the source or build assumptions used
-by this decision.
+by this decision. `scripts/test-extension-runtime-contract.sh` validates the
+opt-in contract and committed MV3 content-script, worker, messaging,
+`storage.local`, and DNR fixture.
 
 ## Rejected alternatives
 
@@ -129,12 +131,12 @@ diagnostics, and operator-control decisions.
 ## Consequences
 
 - Extension support is a real embedder project, not a command-line switch.
-- The first code slice can be build- and lifecycle-tested while keeping all
-  extension loading disabled.
+- Default startup remains extension-free; activation is an explicit paired
+  command-line decision.
 - M150 upgrades get a small set of auditable integration hooks and a scripted
   source-surface check.
-- Persistent extension functionality remains blocked on the profile lifecycle
-  gate rather than silently inventing storage semantics in `#156`.
+- Persistent extension functionality uses the accepted profile lifecycle and
+  stays isolated by `BrowserContext` and profile path.
 
 ## Upstream references (Chromium 150.0.7871.47)
 

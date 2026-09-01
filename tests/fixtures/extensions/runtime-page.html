@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Carbonyl extension runtime fixture</title>
+<script>
+  window.addEventListener("load", async () => {
+    try {
+      await fetch("/carbonyl-extension-blocked");
+      document.documentElement.dataset.carbonylDnr = "failed";
+    } catch (_error) {
+      document.documentElement.dataset.carbonylDnr = "blocked";
+    }
+  });
+</script>

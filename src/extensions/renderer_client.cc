@@ -1,6 +1,15 @@
 #include "carbonyl/src/extensions/renderer_client.h"
 
+#include <memory>
+#include <string>
+
+#include "base/command_line.h"
+#include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_frame_observer.h"
+#include "extensions/common/switches.h"
+#include "extensions/renderer/api/core_extensions_renderer_api_provider.h"
 #include "extensions/renderer/extensions_renderer_client.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace extensions {
 namespace {
@@ -10,9 +19,8 @@ class CarbonylExtensionsRendererClient : public ExtensionsRendererClient {
   bool IsIncognitoProcess() const override { return false; }
 
   int GetLowestIsolatedWorldId() const override {
-    // World zero is Blink's main world. This ID is reserved now so #289 cannot
-    // accidentally regress dump-text's existing main-world assumption while
-    // adding isolated-world execution.
+    // World zero is Blink's main world. Content scripts start at world one so
+    // terminal extraction never aliases extension execution with page JS.
     return 1;
   }
 };
@@ -21,11 +29,83 @@ class CarbonylExtensionsRendererClient : public ExtensionsRendererClient {
 }  // namespace extensions
 
 namespace carbonyl {
+namespace {
+
+extensions::CarbonylExtensionsRendererClient* g_client = nullptr;
+
+bool RuntimeEnabled() {
+  const auto& command_line = *base::CommandLine::ForCurrentProcess();
+  return !command_line.HasSwitch(extensions::switches::kDisableExtensions) &&
+         command_line.HasSwitch(extensions::switches::kLoadExtension);
+}
+
+class CarbonylRenderFrameObserver : public content::RenderFrameObserver {
+ public:
+  explicit CarbonylRenderFrameObserver(content::RenderFrame* render_frame)
+      : content::RenderFrameObserver(render_frame) {}
+
+  service_manager::BinderRegistry* registry() { return &registry_; }
+
+ private:
+  void OnInterfaceRequestForFrame(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle* interface_pipe) override {
+    registry_.TryBindInterface(interface_name, interface_pipe);
+  }
+
+  void OnDestruct() override { delete this; }
+
+  service_manager::BinderRegistry registry_;
+};
+
+}  // namespace
 
 void InstallExtensionsRendererClient() {
-  static auto* const client =
-      new extensions::CarbonylExtensionsRendererClient();
-  extensions::ExtensionsRendererClient::Set(client);
+  if (!g_client) {
+    g_client = new extensions::CarbonylExtensionsRendererClient();
+    g_client->AddAPIProvider(
+        std::make_unique<extensions::CoreExtensionsRendererAPIProvider>());
+    extensions::ExtensionsRendererClient::Set(g_client);
+  }
+}
+
+void ExtensionsRenderThreadStarted() {
+  if (RuntimeEnabled()) {
+    g_client->RenderThreadStarted();
+  }
+}
+
+void ExtensionsRenderFrameCreated(content::RenderFrame* render_frame) {
+  if (!RuntimeEnabled()) {
+    return;
+  }
+  auto* observer = new CarbonylRenderFrameObserver(render_frame);
+  g_client->RenderFrameCreated(render_frame, observer->registry());
+}
+
+void ExtensionsWebViewCreated(blink::WebView* web_view,
+                              const url::Origin* outermost_origin) {
+  if (RuntimeEnabled()) {
+    g_client->WebViewCreated(web_view, outermost_origin);
+  }
+}
+
+void RunExtensionScriptsAtDocumentStart(content::RenderFrame* render_frame) {
+  if (RuntimeEnabled()) {
+    g_client->RunScriptsAtDocumentStart(render_frame);
+  }
+}
+
+void RunExtensionScriptsAtDocumentEnd(content::RenderFrame* render_frame) {
+  if (RuntimeEnabled()) {
+    g_client->RunScriptsAtDocumentEnd(render_frame);
+  }
+}
+
+void RunExtensionScriptsAtDocumentIdle(content::RenderFrame* render_frame) {
+  if (RuntimeEnabled()) {
+    g_client->RunScriptsAtDocumentIdle(render_frame);
+  }
 }
 
 }  // namespace carbonyl

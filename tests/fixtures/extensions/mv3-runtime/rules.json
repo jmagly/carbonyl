@@ -1,0 +1,15 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "|http://127.0.0.1*/carbonyl-extension-blocked",
+      "resourceTypes": [
+        "xmlhttprequest"
+      ]
+    }
+  }
+]

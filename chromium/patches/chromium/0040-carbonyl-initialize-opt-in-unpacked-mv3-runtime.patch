@@ -1,0 +1,501 @@
+From 654f561ffd347b514407e2c7f210e830438bf3f4 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Tue, 1 Sep 2026 15:50:42 -0400
+Subject: [PATCH] carbonyl: initialize opt-in unpacked MV3 runtime
+
+---
+ .../browser/headless_browser_context_impl.cc  |  16 +-
+ .../browser/headless_browser_context_impl.h   |   5 +
+ .../headless_content_browser_client.cc        | 155 ++++++++++++++++++
+ .../browser/headless_content_browser_client.h |  71 ++++++++
+ .../lib/browser/headless_web_contents_impl.cc |   2 +
+ headless/lib/headless_content_client.cc       |  11 ++
+ headless/lib/headless_content_client.h        |   1 +
+ .../headless_content_renderer_client.cc       |  27 +++
+ .../headless_content_renderer_client.h        |   7 +
+ 9 files changed, 294 insertions(+), 1 deletion(-)
+
+diff --git a/headless/lib/browser/headless_browser_context_impl.cc b/headless/lib/browser/headless_browser_context_impl.cc
+index cb9b100e58492..f1b8c9935d348 100644
+--- a/headless/lib/browser/headless_browser_context_impl.cc
++++ b/headless/lib/browser/headless_browser_context_impl.cc
+@@ -10,12 +10,16 @@
+ #include <vector>
+ 
+ #include "base/memory/ptr_util.h"
++#include "base/logging.h"
+ #include "base/not_fatal_until.h"
+ #include "base/path_service.h"
++#include "carbonyl/src/extensions/browser_client.h"
++#include "carbonyl/src/extensions/extension_system.h"
+ #include "components/keyed_service/content/browser_context_dependency_manager.h"
+ #include "components/keyed_service/core/simple_key_map.h"
+ #include "components/origin_trials/browser/leveldb_persistence_provider.h"
+ #include "components/origin_trials/browser/origin_trials.h"
++#include "components/prefs/pref_service.h"
+ #include "components/profile_metrics/browser_profile_type.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+@@ -64,8 +68,10 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
+           std::make_unique<HeadlessPermissionManager>()),
+       hints_delegate_(
+           std::make_unique<HeadlessClientHintsControllerDelegate>()) {
+-  BrowserContextDependencyManager::GetInstance()->MarkBrowserContextLive(this);
+   InitWhileIOAllowed();
++  extension_prefs_ = carbonyl::CreateExtensionProfilePrefs(this);
++  carbonyl::RegisterExtensionContext(this);
++  BrowserContextDependencyManager::GetInstance()->MarkBrowserContextLive(this);
+   simple_factory_key_ =
+       std::make_unique<SimpleFactoryKey>(GetPath(), IsOffTheRecord());
+   SimpleKeyMap::GetInstance()->Associate(this, simple_factory_key_.get());
+@@ -82,6 +88,12 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
+   // Ensure the delegate is initialized early to give it time to load its
+   // persistence.
+   GetOriginTrialsControllerDelegate();
++
++  std::string extension_error;
++  if (!carbonyl::InitializeExtensionContext(this, &extension_error)) {
++    LOG(ERROR) << "CARBONYL_EXTENSION_ERROR " << extension_error;
++    browser_->ShutdownWithExitCode(EXIT_FAILURE);
++  }
+ }
+ 
+ HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
+@@ -105,6 +117,8 @@ HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
+ 
+   BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
+       this);
++  carbonyl::UnregisterExtensionContext(this);
++  extension_prefs_->CommitPendingWrite();
+ }
+ 
+ // static
+diff --git a/headless/lib/browser/headless_browser_context_impl.h b/headless/lib/browser/headless_browser_context_impl.h
+index a2b59dcbc2403..7b54a88f23c86 100644
+--- a/headless/lib/browser/headless_browser_context_impl.h
++++ b/headless/lib/browser/headless_browser_context_impl.h
+@@ -21,6 +21,8 @@
+ #include "headless/public/headless_browser_context.h"
+ #include "headless/public/headless_export.h"
+ 
++class PrefService;
++
+ namespace content {
+ class WebContents;
+ }  // namespace content
+@@ -127,6 +129,9 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+ 
+   std::unique_ptr<HeadlessClientHintsControllerDelegate> hints_delegate_;
+   std::unique_ptr<HeadlessDownloadManagerDelegate> download_manager_delegate_;
++
++  // Outlives every extension BrowserContext keyed service.
++  std::unique_ptr<PrefService> extension_prefs_;
+ };
+ 
+ }  // namespace headless
+diff --git a/headless/lib/browser/headless_content_browser_client.cc b/headless/lib/browser/headless_content_browser_client.cc
+index b8bc4d18c576d..5065521abf7e6 100644
+--- a/headless/lib/browser/headless_content_browser_client.cc
++++ b/headless/lib/browser/headless_content_browser_client.cc
+@@ -21,6 +21,7 @@
+ #include "base/strings/string_split.h"
+ #include "build/build_config.h"
+ #include "carbonyl/src/extensions/browser_client.h"
++#include "carbonyl/src/extensions/content_browser_client_hooks.h"
+ #include "components/embedder_support/switches.h"
+ #include "components/headless/command_handler/headless_command_switches.h"
+ #include "content/public/browser/browser_context.h"
+@@ -214,6 +215,8 @@ void HeadlessContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+   map->Add<blink::mojom::PersistentRendererPrefsService>(base::BindRepeating(
+       &HeadlessContentBrowserClient::BindPersistentRendererPrefsService,
+       base::Unretained(this)));
++  carbonyl::RegisterExtensionBrowserInterfaceBindersForFrame(
++      render_frame_host, map);
+ }
+ 
+ void HeadlessContentBrowserClient::
+@@ -233,6 +236,156 @@ void HeadlessContentBrowserClient::
+           },
+           &render_frame_host));
+ #endif
++  carbonyl::RegisterExtensionAssociatedFrameBinders(render_frame_host,
++                                                     associated_registry);
++}
++
++void HeadlessContentBrowserClient::
++    RegisterAssociatedInterfaceBindersForServiceWorker(
++        const content::ServiceWorkerVersionBaseInfo&
++            service_worker_version_info,
++        blink::AssociatedInterfaceRegistry& associated_registry) {
++  carbonyl::RegisterExtensionAssociatedServiceWorkerBinders(
++      service_worker_version_info, associated_registry);
++}
++
++bool HeadlessContentBrowserClient::IsHandledURL(const GURL& url) {
++  return ContentBrowserClient::IsHandledURL(url) ||
++         carbonyl::IsExtensionHandledURL(url);
++}
++
++std::optional<GURL> HeadlessContentBrowserClient::GetEffectiveURL(
++    content::BrowserContext* browser_context,
++    const GURL& url) {
++  return carbonyl::GetExtensionEffectiveURL(browser_context, url);
++}
++
++bool HeadlessContentBrowserClient::ShouldUseProcessPerSite(
++    content::BrowserContext* browser_context,
++    const GURL& site_url) {
++  return carbonyl::ShouldUseExtensionProcessPerSite(browser_context, site_url);
++}
++
++bool HeadlessContentBrowserClient::ShouldUseSpareRenderProcessHost(
++    content::BrowserContext* browser_context,
++    const GURL& site_url,
++    std::optional<SpareProcessRefusedByEmbedderReason>& refused_reason) {
++  if (!carbonyl::ShouldUseSpareProcessForExtensionURL(site_url)) {
++    refused_reason = SpareProcessRefusedByEmbedderReason::ExtensionProcess;
++    return false;
++  }
++  return true;
++}
++
++bool HeadlessContentBrowserClient::DoesSiteRequireDedicatedProcess(
++    content::BrowserContext* browser_context,
++    const GURL& effective_site_url) {
++  return carbonyl::DoesExtensionSiteRequireDedicatedProcess(
++      browser_context, effective_site_url);
++}
++
++bool HeadlessContentBrowserClient::CanCommitURL(
++    content::RenderProcessHost* process_host,
++    const GURL& url) {
++  return carbonyl::CanCommitExtensionURL(process_host, url);
++}
++
++void HeadlessContentBrowserClient::CreateThrottlesForNavigation(
++    content::NavigationThrottleRegistry& registry) {
++  carbonyl::AddExtensionNavigationThrottle(registry);
++}
++
++bool HeadlessContentBrowserClient::HasWebRequestAPIProxy(
++    content::BrowserContext* browser_context) {
++  return carbonyl::HasExtensionWebRequestAPIProxy(browser_context);
++}
++
++void HeadlessContentBrowserClient::WillCreateURLLoaderFactory(
++    content::BrowserContext* browser_context,
++    content::RenderFrameHost* frame,
++    int render_process_id,
++    URLLoaderFactoryType type,
++    const url::Origin& request_initiator,
++    const net::IsolationInfo&,
++    std::optional<int64_t> navigation_id,
++    ukm::SourceIdObj ukm_source_id,
++    network::URLLoaderFactoryBuilder& factory_builder,
++    mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
++        header_client,
++    bool* bypass_redirect_checks,
++    bool*,
++    network::mojom::URLLoaderFactoryOverridePtr*,
++    scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
++  carbonyl::MaybeProxyExtensionURLLoaderFactory(
++      browser_context, frame, render_process_id, type, request_initiator,
++      std::move(navigation_id), ukm_source_id, factory_builder, header_client,
++      bypass_redirect_checks, std::move(navigation_response_task_runner));
++}
++
++bool HeadlessContentBrowserClient::IsSuitableHost(
++    content::RenderProcessHost* process_host,
++    const GURL& site_url) {
++  return carbonyl::IsSuitableExtensionProcessHost(process_host, site_url);
++}
++
++void HeadlessContentBrowserClient::SiteInstanceGotProcessAndSite(
++    content::SiteInstance* site_instance) {
++  carbonyl::ExtensionSiteInstanceGotProcessAndSite(site_instance);
++}
++
++void HeadlessContentBrowserClient::ExposeInterfacesToRenderer(
++    service_manager::BinderRegistry* registry,
++    blink::AssociatedInterfaceRegistry* associated_registry,
++    content::RenderProcessHost* render_process_host) {
++  carbonyl::ExposeExtensionInterfacesToRenderer(associated_registry,
++                                                render_process_host);
++}
++
++mojo::PendingRemote<network::mojom::URLLoaderFactory>
++HeadlessContentBrowserClient::CreateNonNetworkNavigationURLLoaderFactory(
++    const std::string& scheme,
++    content::FrameTreeNodeId frame_tree_node_id) {
++  return carbonyl::CreateExtensionNavigationFactory(scheme,
++                                                     frame_tree_node_id);
++}
++
++void HeadlessContentBrowserClient::
++    RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
++        content::BrowserContext* browser_context,
++        const std::optional<url::Origin>& request_initiator,
++        network::mojom::RequestDestination request_destination,
++        NonNetworkURLLoaderFactoryMap* factories) {
++  carbonyl::RegisterExtensionWorkerFactories(browser_context,
++                                             request_initiator, factories);
++}
++
++void HeadlessContentBrowserClient::
++    RegisterNonNetworkServiceWorkerUpdateURLLoaderFactories(
++        content::BrowserContext* browser_context,
++        NonNetworkURLLoaderFactoryMap* factories) {
++  carbonyl::RegisterExtensionServiceWorkerUpdateFactories(browser_context,
++                                                          factories);
++}
++
++void HeadlessContentBrowserClient::
++    RegisterNonNetworkSubresourceURLLoaderFactories(
++        int render_process_id,
++        int render_frame_id,
++        const std::optional<url::Origin>& request_initiator_origin,
++        NonNetworkURLLoaderFactoryMap* factories) {
++  carbonyl::RegisterExtensionSubresourceFactories(
++      render_process_id, render_frame_id, factories);
++}
++
++void HeadlessContentBrowserClient::OverrideURLLoaderFactoryParams(
++    content::BrowserContext* browser_context,
++    const url::Origin& origin,
++    bool is_for_isolated_world,
++    bool is_for_service_worker,
++    network::mojom::URLLoaderFactoryParams* factory_params) {
++  carbonyl::OverrideExtensionURLLoaderFactoryParams(
++      browser_context, origin, is_for_isolated_world, is_for_service_worker,
++      factory_params);
+ }
+ 
+ std::unique_ptr<content::DevToolsManagerDelegate>
+@@ -322,6 +475,8 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+     content::RenderProcessHost* render_process_host =
+         content::RenderProcessHost::FromID(child_process_id);
+     if (render_process_host) {
++      carbonyl::AppendExtensionRendererCommandLineSwitches(command_line,
++                                                           render_process_host);
+       HeadlessBrowserContextImpl* headless_browser_context_impl =
+           HeadlessBrowserContextImpl::From(
+               render_process_host->GetBrowserContext());
+diff --git a/headless/lib/browser/headless_content_browser_client.h b/headless/lib/browser/headless_content_browser_client.h
+index 8e1954676c6bf..838282a52d418 100644
+--- a/headless/lib/browser/headless_content_browser_client.h
++++ b/headless/lib/browser/headless_content_browser_client.h
+@@ -35,6 +35,74 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
+   // content::ContentBrowserClient implementation:
+   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
+       bool is_integration_test) override;
++  bool IsHandledURL(const GURL& url) override;
++  std::optional<GURL> GetEffectiveURL(
++      content::BrowserContext* browser_context,
++      const GURL& url) override;
++  bool ShouldUseProcessPerSite(content::BrowserContext* browser_context,
++                               const GURL& site_url) override;
++  bool ShouldUseSpareRenderProcessHost(
++      content::BrowserContext* browser_context,
++      const GURL& site_url,
++      std::optional<SpareProcessRefusedByEmbedderReason>& refused_reason)
++      override;
++  bool DoesSiteRequireDedicatedProcess(
++      content::BrowserContext* browser_context,
++      const GURL& effective_site_url) override;
++  bool CanCommitURL(content::RenderProcessHost* process_host,
++                    const GURL& url) override;
++  void CreateThrottlesForNavigation(
++      content::NavigationThrottleRegistry& registry) override;
++  bool HasWebRequestAPIProxy(
++      content::BrowserContext* browser_context) override;
++  void WillCreateURLLoaderFactory(
++      content::BrowserContext* browser_context,
++      content::RenderFrameHost* frame,
++      int render_process_id,
++      URLLoaderFactoryType type,
++      const url::Origin& request_initiator,
++      const net::IsolationInfo& isolation_info,
++      std::optional<int64_t> navigation_id,
++      ukm::SourceIdObj ukm_source_id,
++      network::URLLoaderFactoryBuilder& factory_builder,
++      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
++          header_client,
++      bool* bypass_redirect_checks,
++      bool* disable_secure_dns,
++      network::mojom::URLLoaderFactoryOverridePtr* factory_override,
++      scoped_refptr<base::SequencedTaskRunner>
++          navigation_response_task_runner) override;
++  bool IsSuitableHost(content::RenderProcessHost* process_host,
++                      const GURL& site_url) override;
++  void SiteInstanceGotProcessAndSite(
++      content::SiteInstance* site_instance) override;
++  void ExposeInterfacesToRenderer(
++      service_manager::BinderRegistry* registry,
++      blink::AssociatedInterfaceRegistry* associated_registry,
++      content::RenderProcessHost* render_process_host) override;
++  mojo::PendingRemote<network::mojom::URLLoaderFactory>
++  CreateNonNetworkNavigationURLLoaderFactory(
++      const std::string& scheme,
++      content::FrameTreeNodeId frame_tree_node_id) override;
++  void RegisterNonNetworkWorkerMainResourceURLLoaderFactories(
++      content::BrowserContext* browser_context,
++      const std::optional<url::Origin>& request_initiator,
++      network::mojom::RequestDestination request_destination,
++      NonNetworkURLLoaderFactoryMap* factories) override;
++  void RegisterNonNetworkServiceWorkerUpdateURLLoaderFactories(
++      content::BrowserContext* browser_context,
++      NonNetworkURLLoaderFactoryMap* factories) override;
++  void RegisterNonNetworkSubresourceURLLoaderFactories(
++      int render_process_id,
++      int render_frame_id,
++      const std::optional<url::Origin>& request_initiator_origin,
++      NonNetworkURLLoaderFactoryMap* factories) override;
++  void OverrideURLLoaderFactoryParams(
++      content::BrowserContext* browser_context,
++      const url::Origin& origin,
++      bool is_for_isolated_world,
++      bool is_for_service_worker,
++      network::mojom::URLLoaderFactoryParams* factory_params) override;
+   void OverrideWebPreferences(content::WebContents* web_contents,
+                               content::SiteInstance& main_frame_site,
+                               blink::web_pref::WebPreferences* prefs) override;
+@@ -44,6 +112,9 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
+   void RegisterAssociatedInterfaceBindersForRenderFrameHost(
+       content::RenderFrameHost& render_frame_host,
+       blink::AssociatedInterfaceRegistry& associated_registry) override;
++  void RegisterAssociatedInterfaceBindersForServiceWorker(
++      const content::ServiceWorkerVersionBaseInfo& service_worker_version_info,
++      blink::AssociatedInterfaceRegistry& associated_registry) override;
+   std::unique_ptr<content::DevToolsManagerDelegate>
+   CreateDevToolsManagerDelegate() override;
+   content::GeneratedCodeCacheSettings GetGeneratedCodeCacheSettings(
+diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
+index 55bc40666613f..30b8d30392767 100644
+--- a/headless/lib/browser/headless_web_contents_impl.cc
++++ b/headless/lib/browser/headless_web_contents_impl.cc
+@@ -26,6 +26,7 @@
+ #include "carbonyl/src/browser/renderer.h"
+ #include "components/zoom/zoom_controller.h"
+ #include "carbonyl/src/browser/bridge.h"
++#include "carbonyl/src/extensions/browser_client.h"
+ #include "components/headless/console_message_logger/headless_console_message_logger.h"
+ #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
+ #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
+@@ -453,6 +454,7 @@ HeadlessWebContentsImpl::HeadlessWebContentsImpl(
+     : web_contents_delegate_(new HeadlessWebContentsImpl::Delegate(this)),
+       headless_window_(std::make_unique<HeadlessWindow>(this)),
+       web_contents_(std::move(web_contents)) {
++  carbonyl::CreateExtensionWebContentsObserver(web_contents_.get());
+ #if BUILDFLAG(ENABLE_PRINTING)
+   HeadlessPrintManager::CreateForWebContents(web_contents_.get());
+ #endif
+diff --git a/headless/lib/headless_content_client.cc b/headless/lib/headless_content_client.cc
+index 51987166383e1..67c18b6245fda 100644
+--- a/headless/lib/headless_content_client.cc
++++ b/headless/lib/headless_content_client.cc
+@@ -5,6 +5,7 @@
+ #include "headless/lib/headless_content_client.h"
+ 
+ #include "components/embedder_support/origin_trials/origin_trial_policy_impl.h"
++#include "extensions/common/constants.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/resource/resource_bundle.h"
+ 
+@@ -14,6 +15,16 @@ HeadlessContentClient::HeadlessContentClient() = default;
+ 
+ HeadlessContentClient::~HeadlessContentClient() = default;
+ 
++void HeadlessContentClient::AddAdditionalSchemes(Schemes* schemes) {
++  schemes->standard_schemes.push_back(extensions::kExtensionScheme);
++  schemes->savable_schemes.push_back(extensions::kExtensionScheme);
++  schemes->secure_schemes.push_back(extensions::kExtensionScheme);
++  schemes->cors_enabled_schemes.push_back(extensions::kExtensionScheme);
++  schemes->csp_bypassing_schemes.push_back(extensions::kExtensionScheme);
++  schemes->service_worker_schemes.push_back(extensions::kExtensionScheme);
++  schemes->extension_schemes.push_back(extensions::kExtensionScheme);
++}
++
+ std::u16string HeadlessContentClient::GetLocalizedString(int message_id) {
+   return l10n_util::GetStringUTF16(message_id);
+ }
+diff --git a/headless/lib/headless_content_client.h b/headless/lib/headless_content_client.h
+index 985c0e42d8ae4..cd6e6494e08d9 100644
+--- a/headless/lib/headless_content_client.h
++++ b/headless/lib/headless_content_client.h
+@@ -27,6 +27,7 @@ class HeadlessContentClient : public content::ContentClient {
+   ~HeadlessContentClient() override;
+ 
+   // content::ContentClient implementation:
++  void AddAdditionalSchemes(Schemes* schemes) override;
+   std::u16string GetLocalizedString(int message_id) override;
+   std::string_view GetDataResource(
+       int resource_id,
+diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headless/lib/renderer/headless_content_renderer_client.cc
+index 60ab08e530677..f493eb736c5c8 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.cc
++++ b/headless/lib/renderer/headless_content_renderer_client.cc
+@@ -105,14 +105,41 @@ HeadlessContentRendererClient::HeadlessContentRendererClient() {
+ 
+ HeadlessContentRendererClient::~HeadlessContentRendererClient() = default;
+ 
++void HeadlessContentRendererClient::RenderThreadStarted() {
++  carbonyl::ExtensionsRenderThreadStarted();
++}
++
+ void HeadlessContentRendererClient::RenderFrameCreated(
+     content::RenderFrame* render_frame) {
++  carbonyl::ExtensionsRenderFrameCreated(render_frame);
+ #if BUILDFLAG(ENABLE_PRINTING)
+   new printing::PrintRenderFrameHelper(
+       render_frame, std::make_unique<HeadlessPrintRenderFrameHelperDelegate>());
+ #endif
+ }
+ 
++void HeadlessContentRendererClient::WebViewCreated(
++    blink::WebView* web_view,
++    bool was_created_by_renderer,
++    const url::Origin* outermost_origin) {
++  carbonyl::ExtensionsWebViewCreated(web_view, outermost_origin);
++}
++
++void HeadlessContentRendererClient::RunScriptsAtDocumentStart(
++    content::RenderFrame* render_frame) {
++  carbonyl::RunExtensionScriptsAtDocumentStart(render_frame);
++}
++
++void HeadlessContentRendererClient::RunScriptsAtDocumentEnd(
++    content::RenderFrame* render_frame) {
++  carbonyl::RunExtensionScriptsAtDocumentEnd(render_frame);
++}
++
++void HeadlessContentRendererClient::RunScriptsAtDocumentIdle(
++    content::RenderFrame* render_frame) {
++  carbonyl::RunExtensionScriptsAtDocumentIdle(render_frame);
++}
++
+ bool HeadlessContentRendererClient::IsDecoderSupportedVideoType(
+     const media::VideoType& type) {
+   const bool allowed_by_flags =
+diff --git a/headless/lib/renderer/headless_content_renderer_client.h b/headless/lib/renderer/headless_content_renderer_client.h
+index a4fc6a76826af..2ce24d0ade99e 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.h
++++ b/headless/lib/renderer/headless_content_renderer_client.h
+@@ -22,9 +22,16 @@ class HeadlessContentRendererClient : public content::ContentRendererClient {
+ 
+  private:
+   // content::ContentRendererClient overrides.
++  void RenderThreadStarted() override;
+   bool IsDecoderSupportedVideoType(const media::VideoType& type) override;
+   bool ShouldSuppressAudioTracks() override;
+   void RenderFrameCreated(content::RenderFrame* render_frame) override;
++  void WebViewCreated(blink::WebView* web_view,
++                      bool was_created_by_renderer,
++                      const url::Origin* outermost_origin) override;
++  void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
++  void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
++  void RunScriptsAtDocumentIdle(content::RenderFrame* render_frame) override;
+   std::unique_ptr<blink::URLLoaderThrottleProvider>
+   CreateURLLoaderThrottleProvider(
+       blink::URLLoaderThrottleProviderType provider_type) override;
+-- 
+2.43.0
