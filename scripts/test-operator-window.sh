@@ -72,12 +72,35 @@ CARBONYL_PID=$!
 
 WINDOW_ID=""
 for _ in $(seq 1 "${WINDOW_ATTEMPTS:-100}"); do
-    WINDOW_ID="$(xdotool search --onlyvisible --class '^carbonyl$' 2>/dev/null |
-        head -n 1 || true)"
+    mapfile -t window_candidates < <(
+        {
+            xdotool search --onlyvisible --name '^Carbonyl(OperatorWindow)?$'
+            xdotool search --onlyvisible --class '^carbonyl$'
+            xdotool search --onlyvisible --classname '^Carbonyl$'
+        } 2>/dev/null | awk '!seen[$0]++' || true
+    )
+    for candidate in "${window_candidates[@]}"; do
+        if xdotool getwindowgeometry "$candidate" >/dev/null 2>&1; then
+            WINDOW_ID="$candidate"
+            break
+        fi
+    done
     [ -n "$WINDOW_ID" ] && break
     sleep "${WINDOW_INTERVAL:-0.1}"
 done
-[ -n "$WINDOW_ID" ] || { echo "FAIL: Carbonyl operator window not found"; exit 1; }
+if [ -z "$WINDOW_ID" ]; then
+    echo "Visible X11 windows at operator-window discovery failure:"
+    while IFS= read -r candidate; do
+        name="$(xdotool getwindowname "$candidate" 2>/dev/null || true)"
+        class="$(xdotool getwindowclassname "$candidate" 2>/dev/null || true)"
+        geometry="$(xdotool getwindowgeometry --shell "$candidate" 2>/dev/null |
+            tr '\n' ' ' || true)"
+        printf '  id=%s name=%q class=%q %s\n' \
+            "$candidate" "$name" "$class" "$geometry"
+    done < <(xdotool search --onlyvisible --name '.*' 2>/dev/null || true)
+    echo "FAIL: Carbonyl operator window not found"
+    exit 1
+fi
 
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
     xdotool windowfocus --sync "$WINDOW_ID"
