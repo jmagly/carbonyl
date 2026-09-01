@@ -175,6 +175,12 @@ commands, which take xdotool's XTEST path. It deliberately avoids `--window`
 for input because targeted xdotool input uses synthetic XSendEvent delivery.
 Kernel uinput remains a separate isolated-worker graduation check.
 
+The operator browser process intentionally omits Chromium's internal
+`--headless` marker. Chromium otherwise installs its mock input method, which
+forwards key events but cannot commit XKB/IME text. Renderer and utility child
+processes retain their normal headless marker, and the GPU child uses the X11
+UI message pump required by this explicit mode.
+
 Shutdown destroys the shell-owned `OperatorWindow` before
 `HeadlessBrowserImpl::Shutdown()` clears BrowserContexts and WebContents. The
 widget observer also holds a `WebContents::GetWeakPtr()` handle so queued native

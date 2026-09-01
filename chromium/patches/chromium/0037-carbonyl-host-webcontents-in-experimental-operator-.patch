@@ -15,8 +15,8 @@ Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
  headless/app/headless_shell.cc                          | 16 ++++++++++++++++
  headless/lib/browser/headless_content_browser_client.cc | 29 +++++++++++++++++++++++++----
  headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
- headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
- 6 files changed, 63 insertions(+), 6 deletions(-)
+ headless/lib/headless_content_main_delegate.cc          | 16 +++++++++++++---
+ 6 files changed, 67 insertions(+), 8 deletions(-)
 
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
 index 95182065b322a..1bd765a773afa 100644
@@ -56,17 +56,26 @@ index 83cecb2..c96513e 100644
  #include "ui/gfx/switches.h"
  #include "ui/gl/gl_switches.h"
  #include "ui/ozone/public/ozone_switches.h"
-@@ -269,7 +269,14 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
- #if BUILDFLAG(IS_OZONE)
-   // The headless backend is automatically chosen for a headless build, but also
-   // adding it here allows us to run in a non-headless build too.
--  command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
+@@ -254,4 +255,12 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
+-  // Make sure all processes know that we're in headless mode.
+-  if (!command_line->HasSwitch(::switches::kHeadless)) {
 +#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
 +  const bool use_operator_window =
 +      command_line->HasSwitch("carbonyl-operator-window");
 +#else
 +  constexpr bool use_operator_window = false;
 +#endif
++  // The visible operator browser needs Ozone's real Linux input method.
++  // Child processes retain --headless through AppendExtraCommandLineSwitches.
++  if (!command_line->HasSwitch(::switches::kHeadless) &&
++      !use_operator_window) {
+     command_line->AppendSwitchASCII(::switches::kHeadless, "old");
+   }
+@@ -269,7 +278,8 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
+ #if BUILDFLAG(IS_OZONE)
+   // The headless backend is automatically chosen for a headless build, but also
+   // adding it here allows us to run in a non-headless build too.
+-  command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
 +  command_line->AppendSwitchASCII(
 +      ::switches::kOzonePlatform, use_operator_window ? "x11" : "headless");
  #endif

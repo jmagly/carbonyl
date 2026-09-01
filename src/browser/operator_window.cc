@@ -174,6 +174,7 @@ bool OperatorWindow::Initialize(content::WebContents* web_contents,
       std::make_unique<views::WebView>(web_contents->GetBrowserContext());
   web_view->SetWebContents(web_contents);
   web_view->SetFastResize(false);
+  views::WebView* web_view_ptr = web_view.get();
 
   impl_->widget_delegate = std::make_unique<views::WidgetDelegate>();
   impl_->widget_delegate->SetContentsView(std::move(web_view));
@@ -191,7 +192,10 @@ bool OperatorWindow::Initialize(content::WebContents* web_contents,
       impl_->widget.get(), web_contents, std::move(close_callback));
   impl_->widget->Show();
   impl_->widget->Activate();
-  web_contents->Focus();
+  // Enter the Views focus chain so WebView and the RenderWidgetHost agree on
+  // the focused text-input client. Calling WebContents::Focus() directly
+  // bypasses the FocusManager side of that contract.
+  web_view_ptr->RequestFocus();
 
   aura::Window* native_window = impl_->widget->GetNativeWindow();
   if (!native_window || !native_window->GetHost() ||

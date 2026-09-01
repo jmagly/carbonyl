@@ -57,6 +57,13 @@ if reset < 0 or shutdown < 0 or reset > shutdown:
     raise SystemExit(
         "OperatorWindow must be destroyed before HeadlessBrowser contexts"
     )
+operator_mode = text.find("+  const bool use_operator_window =")
+real_ime = text.find("+      !use_operator_window) {", operator_mode)
+ozone_x11 = text.find('use_operator_window ? "x11" : "headless"', real_ime)
+if operator_mode < 0 or real_ime < 0 or ozone_x11 < 0:
+    raise SystemExit(
+        "Operator browser must omit --headless and select Ozone X11 for IME"
+    )
 PY
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-operator-test.XXXXXX")"
 TERM_LOG="$WORK_DIR/terminal.log"
