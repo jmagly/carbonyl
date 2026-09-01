@@ -1,7 +1,9 @@
 # Titan host-runner stop during Chromium validation
 
-**Incident:** Carbonyl #299  
-**Window:** 2026-08-31 20:49:37–20:49:51 UTC  
+**Incident:** Carbonyl #299
+
+**Window:** 2026-08-31 20:49:37–20:49:51 UTC
+
 **Host:** Titan
 
 ## Finding
