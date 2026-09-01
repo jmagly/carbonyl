@@ -28,7 +28,10 @@ done
 python3 -c 'from PIL import Image' >/dev/null 2>&1 || {
     echo "FAIL: Python Pillow is not installed"; exit 1; }
 if command -v scrot >/dev/null 2>&1; then
-    capture_frame() { scrot "$1"; }
+    # Polling reuses the same path.  scrot otherwise preserves the first frame
+    # and writes numbered siblings, causing every readiness check to inspect a
+    # stale pre-render screenshot.
+    capture_frame() { scrot --overwrite "$1"; }
 elif command -v import >/dev/null 2>&1; then
     capture_frame() { import -window root "$1"; }
 else
