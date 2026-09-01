@@ -2,7 +2,7 @@
 
 Carbonyl's first extension runtime is deliberately opt-in and local-only. It
 supports unpacked Manifest V3 content scripts, extension pages, service
-workers, one-off and port messaging, `storage.local`, declared HTTP/HTTPS/file
+workers, one-off and port messaging, `storage.local`, declared HTTP/HTTPS
 host permissions, and static `declarativeNetRequest` rules.
 
 Pass the same ordered set of absolute canonical directories to both standard
