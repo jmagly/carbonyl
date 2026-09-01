@@ -116,11 +116,70 @@ FIRST_EXTENSION_ID="$(rg -o ' id=[a-p]{32}' "$TEST_ROOT/first.out" | head -1)"
   echo "extension diagnostic did not contain a stable ID" >&2
   exit 1
 }
+EXTENSION_ID=${FIRST_EXTENSION_ID# id=}
 
 run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
   "$TEST_ROOT/restart.out" "${extension_flags[@]}"
 assert_contains "$TEST_ROOT/restart.out" 'data-carbonyl-extension-storage="2"'
 assert_contains "$TEST_ROOT/restart.out" "$FIRST_EXTENSION_ID"
+
+run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
+  "$TEST_ROOT/disable-request.out" "${extension_flags[@]}" \
+  "--carbonyl-extension-management=restart" \
+  "--carbonyl-extension-list" \
+  "--carbonyl-extension-mutation=disable:$EXTENSION_ID"
+assert_contains "$TEST_ROOT/disable-request.out" \
+  'operation=disable id='"$EXTENSION_ID"' result=restart_required'
+
+run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
+  "$TEST_ROOT/disabled.out" "${extension_flags[@]}" \
+  "--carbonyl-extension-management=read-only" \
+  "--carbonyl-extension-list"
+assert_contains "$TEST_ROOT/disabled.out" 'state=disabled_restart'
+if rg -q -- 'data-carbonyl-extension-content' "$TEST_ROOT/disabled.out"; then
+  echo "restart-disabled extension unexpectedly executed" >&2
+  exit 1
+fi
+
+run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
+  "$TEST_ROOT/enable-request.out" "${extension_flags[@]}" \
+  "--carbonyl-extension-management=restart" \
+  "--carbonyl-extension-mutation=enable:$EXTENSION_ID"
+assert_contains "$TEST_ROOT/enable-request.out" \
+  'operation=enable id='"$EXTENSION_ID"' result=restart_required'
+
+run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
+  "$TEST_ROOT/re-enabled.out" "${extension_flags[@]}" \
+  "--carbonyl-extension-management=read-only" \
+  "--carbonyl-extension-list"
+assert_contains "$TEST_ROOT/re-enabled.out" 'data-carbonyl-extension-storage="4"'
+assert_contains "$TEST_ROOT/re-enabled.out" 'CARBONYL_EXTENSION_STATUS state=loaded'
+
+run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
+  "$TEST_ROOT/remove-request.out" "${extension_flags[@]}" \
+  "--carbonyl-extension-management=restart" \
+  "--carbonyl-extension-mutation=remove:$EXTENSION_ID"
+assert_contains "$TEST_ROOT/remove-request.out" \
+  'operation=remove id='"$EXTENSION_ID"' result=restart_required'
+
+run_browser "$TEST_ROOT/persistent-profile" 127.0.0.1 \
+  "$TEST_ROOT/removed.out" "${extension_flags[@]}" \
+  "--carbonyl-extension-management=read-only" \
+  "--carbonyl-extension-list"
+assert_contains "$TEST_ROOT/removed.out" 'state=removed_restart'
+if rg -q -- 'data-carbonyl-extension-content' "$TEST_ROOT/removed.out"; then
+  echo "restart-removed extension unexpectedly executed" >&2
+  exit 1
+fi
+
+if run_browser "$TEST_ROOT/policy-denied-profile" 127.0.0.1 \
+    "$TEST_ROOT/policy-denied.out" "${extension_flags[@]}" \
+    "--carbonyl-extension-management=read-only" \
+    "--carbonyl-extension-mutation=disable:$EXTENSION_ID"; then
+  echo "read-only daemon policy unexpectedly accepted mutation" >&2
+  exit 1
+fi
+assert_contains "$TEST_ROOT/policy-denied.out" 'management_read_only'
 
 run_browser "$TEST_ROOT/isolated-profile" 127.0.0.1 \
   "$TEST_ROOT/isolated.out" "${extension_flags[@]}"

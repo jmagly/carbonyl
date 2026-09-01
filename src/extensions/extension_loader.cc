@@ -14,6 +14,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "carbonyl/src/extensions/management.h"
 #include "content/public/browser/browser_context.h"
 #include "crypto/sha2.h"
 #include "extensions/browser/api/declarative_net_request/install_index_helper.h"
@@ -83,8 +84,8 @@ bool ValidatePermissions(const Extension* extension, std::string* error) {
                     "unsupported API permission: " + permission);
       }
     }
-    for (const URLPatternSet* patterns : {&permissions->explicit_hosts(),
-                                          &permissions->scriptable_hosts()}) {
+    for (const URLPatternSet* patterns :
+         {&permissions->explicit_hosts(), &permissions->scriptable_hosts()}) {
       for (const URLPattern& pattern : *patterns) {
         if (pattern.scheme() != "http" && pattern.scheme() != "https") {
           return Fail(error, "unsupported_host_scheme",
@@ -197,6 +198,34 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
     return false;
   }
 
+  const PermissionSet& required =
+      PermissionsParser::GetRequiredPermissions(extension.get());
+  const std::set<std::string> required_api_permissions =
+      required.GetAPIsAsStrings();
+  carbonyl::ExtensionStatus status{
+      .id = extension->id(),
+      .version = extension->version().GetString(),
+      .source_path_sha256 =
+          base::HexEncode(crypto::SHA256HashString(canonical.AsUTF8Unsafe())),
+      .state = "configured",
+      .api_permissions = std::vector<std::string>(
+          required_api_permissions.begin(), required_api_permissions.end()),
+      .host_permission_count =
+          required.explicit_hosts().size() + required.scriptable_hosts().size(),
+  };
+  if (carbonyl::IsExtensionRemovedForRestart(browser_context_,
+                                             extension->id())) {
+    status.state = "removed_restart";
+    statuses_.push_back(std::move(status));
+    return true;
+  }
+  if (carbonyl::IsExtensionDisabledForRestart(browser_context_,
+                                              extension->id())) {
+    status.state = "disabled_restart";
+    statuses_.push_back(std::move(status));
+    return true;
+  }
+
   auto ruleset_result = declarative_net_request::InstallIndexHelper::
       IndexAndPersistRulesOnInstall(*extension);
   if (!ruleset_result.has_value()) {
@@ -217,6 +246,9 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
                     canonical.AsUTF8Unsafe());
   }
 
+  status.state = "loaded";
+  statuses_.push_back(status);
+
   std::vector<std::string> api_permissions_list;
   const PermissionSet& active =
       extension->permissions_data()->active_permissions();
@@ -226,9 +258,7 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
   LOG(INFO) << "CARBONYL_EXTENSION_DIAGNOSTIC state=loaded id="
             << extension->id()
             << " version=" << extension->version().GetString()
-            << " source_path_sha256="
-            << base::HexEncode(
-                   crypto::SHA256HashString(canonical.AsUTF8Unsafe()))
+            << " source_path_sha256=" << status.source_path_sha256
             << " manifest_sha256="
             << base::HexEncode(crypto::SHA256HashString(manifest_contents))
             << " worker_state=registration_requested api_permissions="

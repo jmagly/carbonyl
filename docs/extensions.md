@@ -2,7 +2,7 @@
 
 Carbonyl's first extension runtime is deliberately opt-in and local-only. It
 supports unpacked Manifest V3 content scripts, extension pages, service
-workers, one-off and port messaging, `storage.local`, declared HTTP/HTTPS/file
+workers, one-off and port messaging, `storage.local`, declared HTTP/HTTPS
 host permissions, and static `declarativeNetRequest` rules.
 
 Pass the same ordered set of absolute canonical directories to both standard
@@ -46,13 +46,43 @@ cookies, extension-storage values, page content, or profile secrets.
 
 ## Unsupported surfaces
 
-Toolbar/action UI, permission prompts, popup/options hosting, and live
-load/disable/remove management belong to issue `#290`. Until those Carbonyl UI
-surfaces exist, APIs that require them are unavailable. Native messaging,
+Permission prompts and live mutation remain unavailable. Native messaging,
 browser/device restart, background update checks, uninstall-page navigation,
 Chrome/Web Store URLs, privileged `chrome://` scripting, component resources,
 and automatic reload/update are denied or return an unavailable result. No
 Chrome toolbar or Web Store compatibility is implied.
+
+## Management, diagnostics, and actions
+
+Management is unavailable by default. A daemon may select `read-only`; a
+direct operator may explicitly select restart-only mutation:
+
+```text
+--carbonyl-extension-management=read-only
+--carbonyl-extension-list
+
+--carbonyl-extension-management=restart
+--carbonyl-extension-mutation=disable:<extension-id>
+```
+
+The operations are `load`, `disable`, `enable`, and `remove`. They accept only
+an ID already derived from the paired configured paths, persist profile-scoped
+intent, emit `result=restart_required`, and never mutate the live registry.
+The next launch either loads the extension or reports `disabled_restart` or
+`removed_restart`. Re-enabling/removing the exclusion also requires a restart.
+The daemon's `unavailable` and `read-only` modes return typed policy errors and
+cannot be bypassed through the operator window.
+
+`--carbonyl-extension-list` emits deterministic status records containing only
+state, extension ID/version, source-path hash, API permission names, and host
+permission count. It does not expose paths, host patterns, cookies, storage,
+page data, or profile secrets.
+
+Operator-window mode presents actions in extension-ID order with title, badge,
+keyboard focus, and current-page host-permission enablement. Popups and options
+pages use a Carbonyl-owned, resizable child surface in the same BrowserContext;
+main-frame navigation is restricted to that extension's own origin. This is
+not the Chrome toolbar, and action surfaces do not grant new host permissions.
 
 ## Acceptance environment
 

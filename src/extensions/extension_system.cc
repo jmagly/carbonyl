@@ -7,13 +7,14 @@
 #include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "carbonyl/src/extensions/extension_loader.h"
+#include "carbonyl/src/extensions/management.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
-#include "components/user_prefs/user_prefs.h"
 #include "components/update_client/update_client.h"
+#include "components/user_prefs/user_prefs.h"
 #include "components/value_store/value_store_factory_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/extension_prefs.h"
@@ -62,6 +63,12 @@ void CarbonylExtensionSystem::InitForRegularProfile(bool extensions_enabled) {
 
 bool CarbonylExtensionSystem::LoadConfiguredExtensions(std::string* error) {
   return loader_ && loader_->LoadConfiguredExtensions(error);
+}
+
+std::vector<carbonyl::ExtensionStatus>
+CarbonylExtensionSystem::extension_statuses() const {
+  return loader_ ? loader_->statuses()
+                 : std::vector<carbonyl::ExtensionStatus>();
 }
 
 void CarbonylExtensionSystem::Shutdown() {
@@ -174,6 +181,7 @@ std::unique_ptr<PrefService> CreateExtensionProfilePrefs(
   extensions::ExtensionPrefs::RegisterProfilePrefs(registry.get());
   extensions::PermissionsManager::RegisterProfilePrefs(registry.get());
   update_client::RegisterProfilePrefs(registry.get());
+  RegisterExtensionManagementPrefs(registry.get());
 
   PrefServiceFactory factory;
   factory.set_user_prefs(store);
@@ -187,7 +195,11 @@ bool InitializeExtensionContext(content::BrowserContext* browser_context,
   auto* system = static_cast<extensions::CarbonylExtensionSystem*>(
       extensions::ExtensionSystem::Get(browser_context));
   system->InitForRegularProfile(/*extensions_enabled=*/true);
-  return system->LoadConfiguredExtensions(error);
+  if (!system->LoadConfiguredExtensions(error)) {
+    return false;
+  }
+  LogExtensionStatuses(browser_context);
+  return ApplyCommandLineExtensionMutation(browser_context, error);
 }
 
 }  // namespace carbonyl

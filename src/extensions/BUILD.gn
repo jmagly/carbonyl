@@ -22,6 +22,8 @@ source_set("browser_client") {
     "extension_loader.h",
     "extension_system.cc",
     "extension_system.h",
+    "management.cc",
+    "management.h",
   ]
 
   deps = [

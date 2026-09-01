@@ -12,6 +12,14 @@
   "background": {
     "service_worker": "service_worker.js"
   },
+  "action": {
+    "default_title": "Carbonyl fixture action",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
   "content_scripts": [
     {
       "matches": [

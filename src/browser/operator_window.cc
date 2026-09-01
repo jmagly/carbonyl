@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/functional/callback.h"
@@ -23,10 +24,14 @@
 #include "base/memory/weak_ptr.h"
 #include "base/process/termination_status.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/timer/timer.h"
 #include "carbonyl/src/browser/operator_controls_model.h"
+#include "carbonyl/src/extensions/browser_client.h"
+#include "carbonyl/src/extensions/management.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -86,6 +91,111 @@ class OperatorViewsDelegate final : public views::ViewsDelegate {
   }
 };
 
+class OperatorExtensionSurface final : public content::WebContentsObserver {
+ public:
+  explicit OperatorExtensionSurface(views::Widget* parent) : parent_(parent) {}
+  ~OperatorExtensionSurface() override { Close(); }
+
+  OperatorExtensionSurface(const OperatorExtensionSurface&) = delete;
+  OperatorExtensionSurface& operator=(const OperatorExtensionSurface&) = delete;
+
+  bool Open(content::BrowserContext* browser_context,
+            const GURL& url,
+            std::u16string title) {
+    Close();
+    if (!url.SchemeIs("chrome-extension") || url.host().empty()) {
+      LOG(ERROR) << "CARBONYL_EXTENSION_SURFACE denied invalid URL";
+      return false;
+    }
+    allowed_extension_id_ = url.host();
+    content::WebContents::CreateParams create_params(browser_context);
+    web_contents_ = content::WebContents::Create(create_params);
+    Observe(web_contents_.get());
+    carbonyl::CreateExtensionWebContentsObserver(web_contents_.get());
+
+    auto root = std::make_unique<views::View>();
+    auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kVertical, gfx::Insets::VH(6, 6), 4));
+    auto header = std::make_unique<views::View>();
+    auto* header_layout =
+        header->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
+    auto* label = header->AddChildView(std::make_unique<views::Label>(title));
+    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    label->SetElideBehavior(gfx::ELIDE_MIDDLE);
+    header_layout->SetFlexForView(label, 1);
+    auto* close = header->AddChildView(std::make_unique<views::MdTextButton>(
+        base::BindRepeating(&OperatorExtensionSurface::Close,
+                            base::Unretained(this)),
+        u"Close"));
+    close->SetAccessibleName(u"Close extension surface");
+    root->AddChildView(std::move(header));
+
+    auto web_view = std::make_unique<views::WebView>(browser_context);
+    web_view->SetWebContents(web_contents_.get());
+    web_view->SetFastResize(false);
+    web_view_ = root->AddChildView(std::move(web_view));
+    layout->SetFlexForView(web_view_, 1);
+
+    widget_delegate_ = std::make_unique<views::WidgetDelegate>();
+    widget_delegate_->SetContentsView(std::move(root));
+    widget_delegate_->SetHasWindowSizeControls(true);
+    widget_ = std::make_unique<views::Widget>();
+    views::Widget::InitParams params(
+        views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+    params.delegate = widget_delegate_.get();
+    params.parent = parent_->GetNativeWindow();
+    params.bounds = gfx::Rect(420, 520);
+    params.name = "CarbonylExtensionSurface";
+    params.wm_class_class = "carbonyl-extension";
+    params.wm_class_name = "CarbonylExtension";
+    widget_->Init(std::move(params));
+    widget_->Show();
+    widget_->Activate();
+    web_view_->RequestFocus();
+    web_contents_->GetController().LoadURL(url, content::Referrer(),
+                                           ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+                                           std::string());
+    LOG(INFO) << "CARBONYL_EXTENSION_SURFACE opened id="
+              << allowed_extension_id_ << " kind="
+              << (title == u"Extension popup" ? "popup" : "options");
+    return true;
+  }
+
+  void Close() {
+    Observe(nullptr);
+    if (widget_) {
+      widget_->CloseNow();
+    }
+    widget_.reset();
+    widget_delegate_.reset();
+    web_view_ = nullptr;
+    web_contents_.reset();
+    allowed_extension_id_.clear();
+  }
+
+ private:
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->IsInPrimaryMainFrame()) {
+      return;
+    }
+    const GURL& target = navigation_handle->GetURL();
+    if (!target.SchemeIs("chrome-extension") ||
+        target.host() != allowed_extension_id_) {
+      LOG(ERROR) << "CARBONYL_EXTENSION_SURFACE navigation_denied";
+      web_contents()->Stop();
+    }
+  }
+
+  raw_ptr<views::Widget> parent_;
+  std::string allowed_extension_id_;
+  std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<views::WidgetDelegate> widget_delegate_;
+  std::unique_ptr<views::Widget> widget_;
+  raw_ptr<views::WebView> web_view_ = nullptr;
+};
+
 class OperatorControls final : public content::WebContentsObserver,
                                public views::TextfieldController,
                                public views::FocusChangeListener,
@@ -98,6 +208,8 @@ class OperatorControls final : public content::WebContentsObserver,
   OperatorControls& operator=(const OperatorControls&) = delete;
 
   ~OperatorControls() override {
+    action_refresh_timer_.Stop();
+    extension_surface_.reset();
     if (focus_manager_) {
       focus_manager_->RemoveFocusChangeListener(this);
       focus_manager_->UnregisterAccelerators(this);
@@ -147,6 +259,38 @@ class OperatorControls final : public content::WebContentsObserver,
 
     root->AddChildView(std::move(toolbar));
 
+    auto extension_bar = std::make_unique<views::View>();
+    auto* extension_layout =
+        extension_bar->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal, gfx::Insets::VH(2, 6),
+            4));
+    extension_status_label_ =
+        extension_bar->AddChildView(std::make_unique<views::Label>());
+    extension_status_label_->SetAccessibleName(u"Extension management state");
+    extension_status_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    extension_layout->SetFlexForView(extension_status_label_, 1);
+    for (const auto& snapshot : GetExtensionActions(web_contents())) {
+      auto* action_button =
+          extension_bar->AddChildView(std::make_unique<views::MdTextButton>(
+              base::BindRepeating(&OperatorControls::ActivateExtension,
+                                  base::Unretained(this), snapshot.id),
+              ActionButtonText(snapshot)));
+      action_button->SetAccessibleName(
+          base::UTF8ToUTF16("Extension action " + snapshot.title));
+      action_buttons_.push_back({snapshot.id, action_button});
+      if (!snapshot.options_url.is_empty()) {
+        auto* options_button =
+            extension_bar->AddChildView(std::make_unique<views::MdTextButton>(
+                base::BindRepeating(&OperatorControls::OpenExtensionOptions,
+                                    base::Unretained(this), snapshot.id),
+                u"Options"));
+        options_button->SetAccessibleName(
+            base::UTF8ToUTF16("Extension options " + snapshot.title));
+        options_buttons_.push_back({snapshot.id, options_button});
+      }
+    }
+    root->AddChildView(std::move(extension_bar));
+
     origin_label_ = root->AddChildView(std::make_unique<views::Label>());
     origin_label_->SetAccessibleName(u"Committed origin security status");
     origin_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -169,6 +313,12 @@ class OperatorControls final : public content::WebContentsObserver,
     RegisterAccelerator(ui::VKEY_F5, ui::EF_NONE);
     RegisterAccelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN);
     RegisterAccelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN);
+    extension_surface_ = std::make_unique<OperatorExtensionSurface>(widget);
+    action_refresh_timer_.Start(
+        FROM_HERE, base::Seconds(1),
+        base::BindRepeating(&OperatorControls::RefreshExtensionState,
+                            base::Unretained(this)));
+    RefreshExtensionState();
   }
 
   // content::WebContentsObserver:
@@ -254,6 +404,76 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
  private:
+  static std::u16string ActionButtonText(
+      const ExtensionActionSnapshot& snapshot) {
+    std::string text =
+        snapshot.title.empty() ? snapshot.id.substr(0, 8) : snapshot.title;
+    if (!snapshot.badge.empty()) {
+      text += " [" + snapshot.badge + "]";
+    }
+    return base::UTF8ToUTF16(text);
+  }
+
+  void RefreshExtensionState() {
+    if (!web_contents() || !extension_status_label_) {
+      return;
+    }
+    const std::vector<ExtensionStatus> statuses =
+        GetExtensionStatuses(web_contents()->GetBrowserContext());
+    extension_status_label_->SetText(
+        base::UTF8ToUTF16("Extensions: " + GetExtensionManagementMode() + " (" +
+                          base::NumberToString(statuses.size()) + ")"));
+    const std::vector<ExtensionActionSnapshot> actions =
+        GetExtensionActions(web_contents());
+    std::string action_state;
+    for (const auto& action : actions) {
+      action_state += action.id + ":" + (action.enabled ? "1" : "0") + ":" +
+                      (action.popup_url.is_empty() ? "0" : "1") + ":" +
+                      (action.options_url.is_empty() ? "0" : "1") + ";";
+    }
+    if (action_state != last_action_state_) {
+      LOG(INFO) << "CARBONYL_EXTENSION_ACTION_STATE " << action_state;
+      last_action_state_ = std::move(action_state);
+    }
+    for (const auto& [id, button] : action_buttons_) {
+      auto it = std::ranges::find(actions, id, &ExtensionActionSnapshot::id);
+      button->SetEnabled(it != actions.end() && it->enabled);
+      if (it != actions.end()) {
+        button->SetText(ActionButtonText(*it));
+      }
+    }
+    for (const auto& [id, button] : options_buttons_) {
+      auto it = std::ranges::find(actions, id, &ExtensionActionSnapshot::id);
+      button->SetEnabled(it != actions.end() && !it->options_url.is_empty());
+    }
+  }
+
+  void ActivateExtension(const std::string& extension_id) {
+    std::string error;
+    const GURL popup =
+        ActivateExtensionAction(web_contents(), extension_id, &error);
+    if (!error.empty()) {
+      LOG(ERROR) << "CARBONYL_EXTENSION_ACTION code=" << error
+                 << " id=" << extension_id;
+      return;
+    }
+    if (!popup.is_empty()) {
+      extension_surface_->Open(web_contents()->GetBrowserContext(), popup,
+                               u"Extension popup");
+    }
+  }
+
+  void OpenExtensionOptions(const std::string& extension_id) {
+    const std::vector<ExtensionActionSnapshot> actions =
+        GetExtensionActions(web_contents());
+    auto it =
+        std::ranges::find(actions, extension_id, &ExtensionActionSnapshot::id);
+    if (it != actions.end() && !it->options_url.is_empty()) {
+      extension_surface_->Open(web_contents()->GetBrowserContext(),
+                               it->options_url, u"Extension options");
+    }
+  }
+
   void RegisterAccelerator(ui::KeyboardCode key_code, int modifiers) {
     // These browser controls are the isolated case for high-priority
     // accelerators: a handled browser command must not also reach page script.
@@ -396,7 +616,15 @@ class OperatorControls final : public content::WebContentsObserver,
   raw_ptr<views::MdTextButton> reload_stop_button_ = nullptr;
   raw_ptr<views::Textfield> address_ = nullptr;
   raw_ptr<views::Label> origin_label_ = nullptr;
+  raw_ptr<views::Label> extension_status_label_ = nullptr;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
+  std::vector<std::pair<std::string, raw_ptr<views::MdTextButton>>>
+      action_buttons_;
+  std::vector<std::pair<std::string, raw_ptr<views::MdTextButton>>>
+      options_buttons_;
+  std::unique_ptr<OperatorExtensionSurface> extension_surface_;
+  base::RepeatingTimer action_refresh_timer_;
+  std::string last_action_state_;
   bool renderer_failed_ = false;
 };
 

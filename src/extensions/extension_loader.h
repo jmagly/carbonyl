@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
+#include "carbonyl/src/extensions/management.h"
 #include "extensions/browser/extension_registrar.h"
 
 namespace content {
@@ -26,6 +27,9 @@ class CarbonylExtensionLoader : public ExtensionRegistrar::Delegate {
   CarbonylExtensionLoader& operator=(const CarbonylExtensionLoader&) = delete;
 
   bool LoadConfiguredExtensions(std::string* error);
+  const std::vector<carbonyl::ExtensionStatus>& statuses() const {
+    return statuses_;
+  }
 
  private:
   bool LoadOne(const base::FilePath& path, std::string* error);
@@ -57,6 +61,7 @@ class CarbonylExtensionLoader : public ExtensionRegistrar::Delegate {
 
   raw_ptr<content::BrowserContext> browser_context_;
   raw_ptr<ExtensionRegistrar> registrar_;
+  std::vector<carbonyl::ExtensionStatus> statuses_;
 };
 
 }  // namespace extensions

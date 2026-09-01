@@ -150,6 +150,7 @@ component("operator_window") {
       "operator_controls_model.h",
     ]
     deps += [
+      "//carbonyl/src/extensions:browser_client",
       "//components/url_formatter",
       "//net",
       "//ui/aura",
