@@ -22,7 +22,7 @@ bool Matches(const std::vector<const char*>& actual,
 bool RunCases() {
   {
     const char* argv[] = {"carbonyl_operator_shell", "https://example.com"};
-    if (!Matches(carbonyl::BuildOperatorShellArguments(2, argv),
+    if (!Matches(carbonyl::BuildOperatorShellArguments(argv),
                  {"carbonyl_operator_shell", carbonyl::kOperatorShellArgument,
                   "https://example.com"})) {
       return false;
@@ -32,7 +32,7 @@ bool RunCases() {
     const char* argv[] = {"carbonyl_operator_shell",
                           carbonyl::kOperatorShellArgument,
                           "https://example.com"};
-    if (!Matches(carbonyl::BuildOperatorShellArguments(3, argv),
+    if (!Matches(carbonyl::BuildOperatorShellArguments(argv),
                  {"carbonyl_operator_shell", carbonyl::kOperatorShellArgument,
                   "https://example.com"})) {
       return false;
@@ -41,7 +41,7 @@ bool RunCases() {
   {
     const char* argv[] = {"carbonyl_operator_shell", "--user-data-dir=/tmp/p",
                           "https://example.com"};
-    if (!Matches(carbonyl::BuildOperatorShellArguments(3, argv),
+    if (!Matches(carbonyl::BuildOperatorShellArguments(argv),
                  {"carbonyl_operator_shell", carbonyl::kOperatorShellArgument,
                   "--user-data-dir=/tmp/p", "https://example.com"})) {
       return false;

@@ -1,7 +1,14 @@
+#include <limits.h>
+#if defined(__clang__)
+// This process boundary necessarily receives argv and passes a mutable argv to
+// execv(). Keep the unsafe-buffer exception confined to this tiny launcher.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
-#include <limits.h>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -15,8 +22,8 @@ std::string ResolveSiblingHeadlessShell() {
   char executable_path[PATH_MAX];
   const ssize_t length =
       readlink("/proc/self/exe", executable_path, sizeof(executable_path));
-  if (length <= 0 || static_cast<std::size_t>(length) >=
-                         sizeof(executable_path)) {
+  if (length <= 0 ||
+      static_cast<std::size_t>(length) >= sizeof(executable_path)) {
     return {};
   }
 
@@ -44,8 +51,10 @@ int main(int argc, const char** argv) {
     return 127;
   }
 
+  const std::span<const char* const> arguments(
+      argv, argc > 0 ? static_cast<std::size_t>(argc) : 0);
   const std::vector<const char*> operator_arguments =
-      carbonyl::BuildOperatorShellArguments(argc, argv);
+      carbonyl::BuildOperatorShellArguments(arguments);
   std::vector<char*> exec_arguments;
   exec_arguments.reserve(operator_arguments.size() + 1);
   for (const char* argument : operator_arguments) {
