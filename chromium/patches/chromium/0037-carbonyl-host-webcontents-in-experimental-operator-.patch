@@ -92,7 +92,7 @@ index 964208a..0000000 100644
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          "carbonyl-operator-window")) {
 +    command_line->RemoveSwitch(::switches::kOzonePlatform);
-+    command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
++    command_line->AppendSwitchASCII(::switches::kOzonePlatform, "x11");
 +  }
 +#endif
 +
