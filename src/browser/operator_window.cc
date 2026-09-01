@@ -430,12 +430,13 @@ class OperatorControls final : public content::WebContentsObserver,
                            const std::string& extension_id,
                            std::u16string label,
                            ExtensionMutation mutation) {
+    const std::u16string accessible_label =
+        label + u" extension " + base::UTF8ToUTF16(extension_id);
     auto* button = parent->AddChildView(std::make_unique<views::MdTextButton>(
         base::BindRepeating(&OperatorControls::RequestManagementMutation,
                             base::Unretained(this), extension_id, mutation),
-        std::move(label)));
-    button->SetAccessibleName(base::UTF8ToUTF16(
-        "Restart-only management for extension " + extension_id));
+        label));
+    button->SetAccessibleName(accessible_label);
   }
 
   void RequestManagementMutation(const std::string& extension_id,
