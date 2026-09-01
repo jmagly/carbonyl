@@ -79,21 +79,14 @@ run_browser() {
   local host=$2
   local output=$3
   shift 3
-  local command=(
-    "$CARBONYL_BIN"
-    --ozone-platform=x11
-    --disable-gpu
-    --user-data-dir="$profile"
-    --dump-dom
-    --virtual-time-budget=5000
-    "$@"
-    "http://$host:$PORT/runtime-page.html"
-  )
-  local quoted
-  printf -v quoted '%q ' "${command[@]}"
-  COLORTERM=truecolor TERM="${TERM:-xterm-256color}" \
-    timeout 30s script -q -e -c "$quoted" "$output" \
-    </dev/null >/dev/null
+  timeout 30s "$CARBONYL_BIN" \
+    --ozone-platform=x11 \
+    --disable-gpu \
+    --user-data-dir="$profile" \
+    --dump-text=dom \
+    --virtual-time-budget=5000 \
+    "$@" \
+    "http://$host:$PORT/runtime-page.html" >"$output" 2>&1
 }
 
 assert_contains() {

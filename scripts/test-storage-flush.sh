@@ -90,27 +90,15 @@ if not isinstance(partitions, int) or partitions < 0 or acknowledged != partitio
 PY
 }
 
-run_carbonyl_with_pty() {
-    local output=$1
-    shift
-    local command=("$CARBONYL_BIN" "$@")
-    local quoted
-    printf -v quoted '%q ' "${command[@]}"
-    COLORTERM=truecolor TERM="${TERM:-xterm-256color}" \
-        script -q -e -c "$quoted" "$output" </dev/null >/dev/null
-}
-
-run_carbonyl_with_pty "$FIRST_LOG" \
-    --user-data-dir="$PROFILE_DIR" --dump-text=dom \
+"$CARBONYL_BIN" --user-data-dir="$PROFILE_DIR" --dump-text=dom \
     --carbonyl-storage-flush-token="$FLUSH_TOKEN" \
-    --idle=500 --max-wait=15000 "$URL"
+    --idle=500 --max-wait=15000 "$URL" >"$FIRST_LOG" 2>&1
 grep -q 'CARBONYL_STORAGE_INITIALIZED' "$FIRST_LOG"
 assert_authenticated_flush "$FIRST_LOG"
 
-run_carbonyl_with_pty "$SECOND_LOG" \
-    --user-data-dir="$PROFILE_DIR" --dump-text=dom \
+"$CARBONYL_BIN" --user-data-dir="$PROFILE_DIR" --dump-text=dom \
     --carbonyl-storage-flush-token="$FLUSH_TOKEN" \
-    --idle=500 --max-wait=15000 "$URL"
+    --idle=500 --max-wait=15000 "$URL" >"$SECOND_LOG" 2>&1
 grep -q 'CARBONYL_STORAGE_RESTORED' "$SECOND_LOG"
 assert_authenticated_flush "$SECOND_LOG"
 
