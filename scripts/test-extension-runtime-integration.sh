@@ -36,7 +36,11 @@ cleanup() {
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
   fi
-  rm -rf -- "$TEST_ROOT"
+  if [ "${KEEP_WORK_DIR:-0}" = 1 ]; then
+    echo "Retained extension runtime artifacts: $TEST_ROOT" >&2
+  else
+    rm -rf -- "$TEST_ROOT"
+  fi
 }
 trap cleanup EXIT
 
