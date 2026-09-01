@@ -150,6 +150,35 @@ component("operator_window") {
   }
 }
 
+# BrowserContext storage barrier used by persistent-profile shutdown (#292).
+# The state-machine portion is independent of Chromium storage implementations
+# so timeout/failure/idempotency behavior has deterministic unit coverage.
+component("storage_flush") {
+  output_name = "carbonyl_storage_flush"
+  defines = [ "CARBONYL_STORAGE_FLUSH_IMPLEMENTATION" ]
+  sources = [
+    "shutdown_state_machine.cc",
+    "shutdown_state_machine.h",
+    "storage_flush_coordinator.cc",
+    "storage_flush_coordinator.h",
+  ]
+
+  deps = [
+    "//base",
+    "//content/public/browser",
+    "//services/network/public/mojom",
+  ]
+}
+
+executable("storage_flush_unittests") {
+  defines = [ "CARBONYL_STORAGE_FLUSH_IMPLEMENTATION" ]
+  sources = [
+    "shutdown_state_machine.cc",
+    "shutdown_state_machine.h",
+    "storage_flush_coordinator_unittest.cc",
+  ]
+}
+
 component("viz") {
   output_name = "carbonyl_viz"
   defines = [ "CARBONYL_VIZ_IMPLEMENTATION" ]

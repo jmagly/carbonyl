@@ -109,4 +109,31 @@
 
 #endif
 
+// CARBONYL_STORAGE_FLUSH_EXPORT
+#if defined(COMPONENT_BUILD)
+
+#if defined(WIN32)
+
+#if defined(CARBONYL_STORAGE_FLUSH_IMPLEMENTATION)
+#define CARBONYL_STORAGE_FLUSH_EXPORT __declspec(dllexport)
+#else
+#define CARBONYL_STORAGE_FLUSH_EXPORT __declspec(dllimport)
+#endif
+
+#else  // !defined(WIN32)
+
+#if defined(CARBONYL_STORAGE_FLUSH_IMPLEMENTATION)
+#define CARBONYL_STORAGE_FLUSH_EXPORT __attribute__((visibility("default")))
+#else
+#define CARBONYL_STORAGE_FLUSH_EXPORT
+#endif
+
+#endif
+
+#else  // !defined(COMPONENT_BUILD)
+
+#define CARBONYL_STORAGE_FLUSH_EXPORT
+
+#endif
+
 #endif  // CARBONYL_SRC_BROWSER_BRIDGE_EXPORT_H_

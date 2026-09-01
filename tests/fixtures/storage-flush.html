@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Carbonyl storage flush marker</title>
+<main id="result">INITIALIZING</main>
+<script>
+  const marker = "carbonyl-synthetic-marker-v1";
+  const restored = localStorage.getItem("carbonyl-marker") === marker &&
+    document.cookie.split("; ").includes(`carbonyl-marker=${marker}`);
+  localStorage.setItem("carbonyl-marker", marker);
+  document.cookie = `carbonyl-marker=${marker}; SameSite=Strict; path=/`;
+  document.getElementById("result").textContent = restored
+    ? "CARBONYL_STORAGE_RESTORED"
+    : "CARBONYL_STORAGE_INITIALIZED";
+</script>

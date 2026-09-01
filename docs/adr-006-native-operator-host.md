@@ -169,25 +169,40 @@ ScreenOzone selection, the Carbonyl display-client constructor call, and
 `HeadlessShell` ownership of the operator host. All substantive widget and
 dual-output implementation remains below `//carbonyl/src/browser`.
 
-Exact stripped-binary and wall-clock deltas remain a graduation gate. The
-comparison procedure is to build the same M150 commit and args twice, differing
-only in the operator target, then record stripped bytes and clean/incremental
-Ninja wall time. Estimates are not accepted as measurements. The first host
-measurement was stopped after operator-reported display outages; repeat it on
-an isolated build/virtual-display worker rather than a workstation display
-host.
+The 2026-09-01 M150 measurement found 10,105 transitive GN targets in the
+headless graph and 10,200 in the X11/operator graph: 95 additional targets, or
+0.94%. The `operator_window` target itself has 8,821 transitive dependencies in
+headless-stub mode and 8,917 in X11 mode. Its four additional direct
+dependencies are exactly Aura, Views, Views WebView, and WM.
+
+GNU `strip` produced a 983,997,584-byte headless baseline and a
+990,465,168-byte X11/operator binary. The measured increase is 6,467,584 bytes
+(0.657%). The headless executable predates the final lifecycle additions, so
+this is a conservative upper bound for the operator-only size delta rather than
+an estimate that understates it.
+
+Wall-clock rebuild time is not a graduation metric. Ninja 1.13 invalidated the
+existing v5 build log and scheduled 39,741 actions despite reusable outputs. An
+unbounded run drove the interactive build host to load 107 and only 6.1 GiB of
+available memory, reproducing the resource-risk signature tracked by #299; it
+was interrupted without deleting outputs and later work was capped. That time
+would measure log migration, cache state, and concurrency rather than this
+architecture. The exact GN target delta and stripped bytes above are the
+reproducible build-impact measures.
 
 ## Prototype validation
 
-The M150 X11 `headless_shell` linked successfully with the feature enabled. A
-normal multiprocess run produced the fixture's initial native red/blue pixels,
-the same page's terminal raster, a green transition after an XTEST pointer
-event, and a gold transition after keyboard input reached the focused field.
-The test did not use `--single-process`. Its test host lacks a usable Chromium
-setuid/user-namespace sandbox, so the runtime smoke used `--no-sandbox`; this is
-a test-host limitation, not a prototype switch or production default. Further
-display/input runs are assigned to an isolated virtual-display worker with no
-host Wayland/X11 socket mounts.
+The M150 X11 `headless_shell` linked successfully with the feature enabled. The
+final multiprocess acceptance ran in a disposable Ubuntu 26.04.1 KVM guest on
+guest-local Xorg `:99`, with no host display socket or input-device access and
+with Chromium's sandbox enabled through a path-scoped AppArmor user-namespace
+profile. It produced the fixture's initial native red/blue pixels, the same
+page's terminal raster, a green transition after a trusted pointer event, and a
+gold transition after trusted keyboard delivery. The same run then passed an
+operator -> acknowledged drain -> headless -> acknowledged drain -> operator
+profile round trip and three consecutive trusted-input cycles. The tested X11
+runtime source key is `edece3812b017689`; its 300,958,052-byte archive has
+SHA-256 `5ad3a4d30140977593bb611b839a50fd7e6bdf8e65c38cc64bf38212826a91ee`.
 
 ## Security consequences
 
