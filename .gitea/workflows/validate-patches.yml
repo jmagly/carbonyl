@@ -135,6 +135,7 @@ jobs:
             --include='scripts/' --include='scripts/**' \
             --include='src/' --include='src/browser/' \
             --include='src/browser/args.gn' \
+            --include='src/extensions/' --include='src/extensions/**' \
             --exclude='*' \
             "${GITHUB_WORKSPACE}/.repo-clone/" "${HOST_CARBONYL_DIR}/"
 
@@ -221,6 +222,10 @@ jobs:
                 echo "locally against chromium/src/ to verify before pushing." >&2
                 exit 1
               fi
+
+              echo "[validate] auditing the applied extension embedder boundary..."
+              CHROMIUM_SRC="${WORKTREE}" \
+                bash "${CARBONYL_ROOT}/scripts/audit-extension-embedder.sh"
 
               echo ""
               echo "✅ All $(ls "${PATCH_DIR}"/*.patch | wc -l) patches applied cleanly"

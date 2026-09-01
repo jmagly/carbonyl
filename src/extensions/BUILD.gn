@@ -1,0 +1,40 @@
+source_set("common_client") {
+  sources = [
+    "common_client.cc",
+    "common_client.h",
+  ]
+
+  deps = [
+    "//base",
+    "//extensions/common",
+    "//extensions/common:core_api_provider",
+    "//url",
+  ]
+}
+
+source_set("browser_client") {
+  sources = [
+    "browser_client.cc",
+    "browser_client.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/update_client",
+    "//content/public/browser",
+    "//extensions/browser",
+    "//extensions/common",
+    "//mojo/public/cpp/bindings",
+    "//services/network/public/mojom",
+    "//url",
+  ]
+}
+
+source_set("renderer_client") {
+  sources = [
+    "renderer_client.cc",
+    "renderer_client.h",
+  ]
+
+  deps = [ "//extensions/renderer" ]
+}
