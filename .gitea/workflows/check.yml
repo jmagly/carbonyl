@@ -24,6 +24,8 @@ on:
       - 'build/Dockerfile.builder'
       - 'scripts/titan-x64-preflight.sh'
       - 'scripts/test-cdp.sh'
+      - 'scripts/resolve-ninja-jobs.sh'
+      - 'scripts/test-resolve-ninja-jobs.sh'
       - 'docs/ci-runner-titan.md'
       - 'docs/integration-guide.md'
       - '.gitea/workflows/check.yml'
@@ -38,6 +40,8 @@ on:
       - 'build/Dockerfile.builder'
       - 'scripts/titan-x64-preflight.sh'
       - 'scripts/test-cdp.sh'
+      - 'scripts/resolve-ninja-jobs.sh'
+      - 'scripts/test-resolve-ninja-jobs.sh'
       - 'docs/ci-runner-titan.md'
       - 'docs/integration-guide.md'
       - '.gitea/workflows/check.yml'
@@ -118,6 +122,8 @@ jobs:
         run: |
           cd "${GITHUB_WORKSPACE}/.repo-clone"
           bash -n scripts/test-cdp.sh
+          bash -n scripts/resolve-ninja-jobs.sh scripts/test-resolve-ninja-jobs.sh
+          bash scripts/test-resolve-ninja-jobs.sh
 
       - name: Verify pinned toolchain (in container)
         run: |
