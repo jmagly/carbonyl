@@ -92,6 +92,13 @@ assert_contains() {
   }
 }
 
+assert_not_contains() {
+  if rg -q --fixed-strings -- "$2" "$1"; then
+    echo "unexpected '$2' in $1" >&2
+    exit 1
+  fi
+}
+
 run_browser "$TEST_ROOT/default-profile" 127.0.0.1 "$TEST_ROOT/default.out"
 if rg -q -- 'data-carbonyl-extension-(content|worker|storage|port)' \
     "$TEST_ROOT/default.out"; then
@@ -229,6 +236,9 @@ if run_browser "$TEST_ROOT/missing-profile" 127.0.0.1 \
   exit 1
 fi
 assert_contains "$TEST_ROOT/missing.out" 'code=path_not_canonical'
+assert_contains "$TEST_ROOT/missing.out" \
+  'CARBONYL_EXTENSION_STATUS state=error'
+assert_not_contains "$TEST_ROOT/missing.out" "$MISSING_EXTENSION"
 
 cp -a -- "$FIXTURE_SOURCE" "$TEST_ROOT/symlink-extension"
 ln -s -- /etc/hosts "$TEST_ROOT/symlink-extension/escape"
@@ -254,6 +264,9 @@ if run_browser "$TEST_ROOT/malformed-profile" 127.0.0.1 \
   exit 1
 fi
 assert_contains "$TEST_ROOT/malformed.out" 'code=invalid_manifest'
+assert_contains "$TEST_ROOT/malformed.out" \
+  'CARBONYL_EXTENSION_STATUS state=error'
+assert_not_contains "$TEST_ROOT/malformed.out" "$MALFORMED_EXTENSION"
 
 cp -a -- "$FIXTURE_SOURCE" "$TEST_ROOT/unsupported-extension"
 sed -i 's/"manifest_version": 3/"manifest_version": 2/' \

@@ -40,6 +40,14 @@ bool Fail(std::string* error,
   return false;
 }
 
+std::string PathDigest(const base::FilePath& path) {
+  return base::HexEncode(crypto::SHA256HashString(path.AsUTF8Unsafe()));
+}
+
+std::string PrivacySafeSource(const base::FilePath& path) {
+  return "source_path_sha256=" + PathDigest(path);
+}
+
 bool HasSymlink(const base::FilePath& root) {
   base::FileEnumerator entries(root, true,
                                base::FileEnumerator::FILES |
@@ -135,9 +143,15 @@ bool CarbonylExtensionLoader::LoadConfiguredExtensions(std::string* error) {
   for (const base::FilePath& path : configured) {
     if (!seen.insert(path).second) {
       return Fail(error, "duplicate_path",
-                  "duplicate extension path: " + path.AsUTF8Unsafe());
+                  "duplicate extension source " + PrivacySafeSource(path));
     }
     if (!LoadOne(path, error)) {
+      statuses_.push_back({
+          .source_path_sha256 = PathDigest(path),
+          .state = "error",
+      });
+      LOG(ERROR) << "CARBONYL_EXTENSION_STATUS state=error "
+                 << PrivacySafeSource(path) << " " << *error;
       return false;
     }
   }
@@ -150,31 +164,31 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
   if (!path.IsAbsolute() || !base::DirectoryExists(path) ||
       !base::NormalizeFilePath(path, &canonical) || canonical != path) {
     return Fail(error, "path_not_canonical",
-                "extension path must be an existing canonical directory: " +
-                    path.AsUTF8Unsafe());
+                "extension source must be an existing canonical directory " +
+                    PrivacySafeSource(path));
   }
   if (HasSymlink(canonical)) {
     return Fail(error, "symlink_rejected",
-                "extension directory contains a symbolic link: " +
-                    canonical.AsUTF8Unsafe());
+                "extension source contains a symbolic link " +
+                    PrivacySafeSource(canonical));
   }
 
   std::string manifest_contents;
   if (!base::ReadFileToString(canonical.AppendASCII("manifest.json"),
                               &manifest_contents)) {
     return Fail(error, "manifest_unreadable",
-                "manifest is not readable: " + canonical.AsUTF8Unsafe());
+                "manifest is not readable " + PrivacySafeSource(canonical));
   }
   auto manifest_value = base::JSONReader::ReadAndReturnValueWithError(
       manifest_contents, base::JSON_PARSE_CHROMIUM_EXTENSIONS);
   if (!manifest_value.has_value() || !manifest_value->is_dict()) {
     return Fail(error, "invalid_manifest",
-                "invalid extension manifest: " + canonical.AsUTF8Unsafe());
+                "invalid extension manifest " + PrivacySafeSource(canonical));
   }
   if (manifest_value->GetDict().FindInt("manifest_version") != 3) {
     return Fail(error, "unsupported_manifest",
-                "only unpacked Manifest V3 extensions are supported: " +
-                    canonical.AsUTF8Unsafe());
+                "only unpacked Manifest V3 extensions are supported " +
+                    PrivacySafeSource(canonical));
   }
   if (manifest_value->GetDict().contains("update_url")) {
     return Fail(error, "remote_update_forbidden",
@@ -187,12 +201,12 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
                                /*flags=*/0, &load_error);
   if (!extension) {
     return Fail(error, "invalid_manifest",
-                "invalid extension manifest: " + canonical.AsUTF8Unsafe());
+                "invalid extension manifest " + PrivacySafeSource(canonical));
   }
   if (extension->manifest_version() != 3 || !extension->is_extension()) {
     return Fail(error, "unsupported_manifest",
-                "only unpacked Manifest V3 extensions are supported: " +
-                    canonical.AsUTF8Unsafe());
+                "only unpacked Manifest V3 extensions are supported " +
+                    PrivacySafeSource(canonical));
   }
   if (!ValidatePermissions(extension.get(), error)) {
     return false;
@@ -205,8 +219,7 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
   carbonyl::ExtensionStatus status{
       .id = extension->id(),
       .version = extension->version().GetString(),
-      .source_path_sha256 =
-          base::HexEncode(crypto::SHA256HashString(canonical.AsUTF8Unsafe())),
+      .source_path_sha256 = PathDigest(canonical),
       .state = "configured",
       .api_permissions = std::vector<std::string>(
           required_api_permissions.begin(), required_api_permissions.end()),
@@ -242,8 +255,8 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
            ->enabled_extensions()
            .Contains(extension->id())) {
     return Fail(error, "policy_rejected",
-                "extension was rejected by runtime policy: " +
-                    canonical.AsUTF8Unsafe());
+                "extension was rejected by runtime policy " +
+                    PrivacySafeSource(canonical));
   }
 
   status.state = "loaded";
