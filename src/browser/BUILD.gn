@@ -141,13 +141,31 @@ component("operator_window") {
   ]
 
   if (is_linux && ozone_platform_x11) {
+    sources += [
+      "operator_controls_model.cc",
+      "operator_controls_model.h",
+    ]
     deps += [
+      "//components/url_formatter",
+      "//net",
       "//ui/aura",
       "//ui/views",
       "//ui/views/controls/webview",
       "//ui/wm",
+      "//url",
     ]
   }
+}
+
+# Pure policy coverage for the native operator controls. This target avoids
+# Views/content runtime dependencies so security-label and address-routing
+# regressions remain cheap to execute in patch validation.
+executable("operator_controls_model_unittests") {
+  sources = [
+    "operator_controls_model.cc",
+    "operator_controls_model.h",
+    "operator_controls_model_unittest.cc",
+  ]
 }
 
 # BrowserContext storage barrier used by persistent-profile shutdown (#292).
