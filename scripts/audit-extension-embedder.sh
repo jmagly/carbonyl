@@ -32,6 +32,16 @@ required_files=(
     headless/lib/renderer/headless_content_renderer_client.cc
 )
 
+carbonyl_files=(
+    src/extensions/BUILD.gn
+    src/extensions/common_client.h
+    src/extensions/common_client.cc
+    src/extensions/browser_client.h
+    src/extensions/browser_client.cc
+    src/extensions/renderer_client.h
+    src/extensions/renderer_client.cc
+)
+
 failures=0
 
 pass() {
@@ -59,6 +69,14 @@ fi
 
 for path in "${required_files[@]}"; do
     if [ -f "$CHROMIUM_SRC/$path" ]; then
+        pass "$path exists"
+    else
+        fail "$path is missing"
+    fi
+done
+
+for path in "${carbonyl_files[@]}"; do
+    if [ -f "$CARBONYL_ROOT/$path" ]; then
         pass "$path exists"
     else
         fail "$path is missing"
@@ -108,17 +126,58 @@ fi
 
 if rg -q -- '//extensions/(browser|common|renderer)' \
     "$CHROMIUM_SRC/headless/BUILD.gn"; then
-    fail "headless already links an extensions target; refresh the baseline"
+    fail "headless directly links an upstream extensions target"
 else
-    pass "headless BUILD.gn has no extensions module dependency"
+    pass "headless BUILD.gn reaches extensions only through Carbonyl clients"
 fi
 
-if rg -q -- 'Extensions(Browser|Renderer|Client|System)' \
+if rg -q -- 'extensions::(ExtensionsClient|ExtensionsBrowserClient|ExtensionsRendererClient|ExtensionSystem)' \
+    "$CHROMIUM_SRC/headless/lib/headless_content_main_delegate.cc" \
     "$CHROMIUM_SRC/headless/lib/browser/headless_content_browser_client.cc" \
+    "$CHROMIUM_SRC/headless/lib/browser/headless_browser_impl.cc" \
     "$CHROMIUM_SRC/headless/lib/renderer/headless_content_renderer_client.cc"; then
-    fail "headless clients already initialize extensions; refresh the baseline"
+    fail "headless contains a direct upstream extension lifecycle call"
 else
-    pass "headless content clients have no extension lifecycle hooks"
+    pass "headless delegates extension lifecycle only to Carbonyl-owned hooks"
+fi
+
+linkage_checks=(
+    'headless/BUILD.gn://carbonyl/src/extensions:common_client'
+    'headless/BUILD.gn://carbonyl/src/extensions:browser_client'
+    'headless/BUILD.gn://carbonyl/src/extensions:renderer_client'
+    'headless/lib/headless_content_main_delegate.cc:InstallExtensionsCommonClient'
+    'headless/lib/browser/headless_content_browser_client.cc:InstallExtensionsBrowserClient'
+    'headless/lib/browser/headless_browser_impl.cc:StartExtensionsBrowserClientTearDown'
+    'headless/lib/renderer/headless_content_renderer_client.cc:InstallExtensionsRendererClient'
+)
+for check in "${linkage_checks[@]}"; do
+    path=${check%%:*}
+    pattern=${check#*:}
+    if contains "$path" "$pattern"; then
+        pass "$path contains $pattern"
+    else
+        fail "$path is missing $pattern"
+    fi
+done
+
+if rg -q -- '(//chrome/|#include "chrome/)' "$CARBONYL_ROOT/src/extensions"; then
+    fail "Carbonyl extension clients import Chrome implementation code"
+else
+    pass "Carbonyl extension clients do not import Chrome implementation code"
+fi
+
+if rg -q -- '(InitForRegularProfile|RenderThreadStarted\(|RenderFrameCreated\()' \
+    "$CARBONYL_ROOT/src/extensions"; then
+    fail "fail-closed linkage slice activates extension execution machinery"
+else
+    pass "fail-closed linkage slice creates no ExtensionSystem or renderer dispatcher"
+fi
+
+if rg -U -q -- 'AreExtensionsDisabled\([^}]+return true;' \
+    "$CARBONYL_ROOT/src/extensions/browser_client.cc"; then
+    pass "browser client remains unconditionally disabled"
+else
+    fail "browser client is not provably disabled"
 fi
 
 if contains headless/lib/browser/headless_browser_context_impl.cc \
@@ -132,10 +191,12 @@ if [ -d "$CHROMIUM_SRC/.git" ] && [ -n "$expected_version" ]; then
     expected_commit=$(git -C "$CHROMIUM_SRC" rev-list -n 1 "$expected_version" \
         2>/dev/null || true)
     actual_commit=$(git -C "$CHROMIUM_SRC" rev-parse HEAD 2>/dev/null || true)
-    if [ -n "$expected_commit" ] && [ "$actual_commit" = "$expected_commit" ]; then
-        pass "checkout HEAD matches $expected_version"
+    if [ -n "$expected_commit" ] && \
+        git -C "$CHROMIUM_SRC" merge-base --is-ancestor \
+            "$expected_commit" "$actual_commit"; then
+        pass "checkout descends from $expected_version"
     elif [ -n "$expected_commit" ]; then
-        fail "checkout HEAD does not match $expected_version"
+        fail "checkout is not based on $expected_version"
     else
         fail "checkout does not contain tag $expected_version"
     fi
