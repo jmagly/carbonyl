@@ -34,3 +34,22 @@ This corrects the original causal hypothesis for job 141692. It does not invalid
 - Validate checksummed artifacts in the disposable Ubuntu 26.04 `browser-qa` VM.
 
 The host-runner service must remain stopped while any queued run created from the old unbounded workflow can still be claimed.
+
+## 2026-09-01 quarantine recurrence
+
+The host runner was started outside the remediation session at 16:34:41 EDT.
+Eight seconds later it claimed `carbonyl-agent` run 49783/job 142349, whose E2E
+suite executed the real Carbonyl browser inside the host-runner container. The
+browser refused to start because the job ran as root without a supported
+sandbox; 11 browser-backed tests failed. The runner continued claiming queued
+work until it was stopped again at 16:59:52 and became inactive at 17:00:11.
+
+The second service window consumed 9 minutes 51 seconds of CPU over 25 minutes
+29 seconds of wall time, with a 3.8 GiB memory peak and negligible swap. Its
+logs also contain repeated permission-denied cleanup failures for root-owned
+host-executor files. This recurrence is not evidence of an Ubuntu 26.04 or
+Wayland incompatibility: the failing browser jobs were knowingly running in the
+wrong host/container security context. It does prove that merely queueing old
+browser jobs is unsafe while the host runner can be restarted. Keep the service
+inactive until those workflows are migrated to the disposable Ubuntu 26.04
+guest or otherwise made incapable of executing Chromium on Titan.
