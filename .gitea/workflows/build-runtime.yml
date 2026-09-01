@@ -45,7 +45,7 @@ on:
         required: false
         default: ''
       ninja_jobs:
-        description: 'ninja -j parallelism (default: half of host cores)'
+        description: 'ninja -j parallelism (hard-capped at 4 on Titan)'
         required: false
         default: ''
   push:
@@ -61,6 +61,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Titan is an interactive workstation. Keep Chromium work inside a bounded
+  # container so a bad dispatch value cannot starve the host desktop (#299).
+  TITAN_BUILD_CPUS: 4
+  TITAN_BUILD_MEMORY: 40g
+  TITAN_BUILD_MEMORY_SWAP: 48g
   # Path on titan where the Chromium source + depot_tools live across CI runs.
   # Managed operationally (see docs/ci-runner-titan.md); not in this workflow's scope.
   HOST_CARBONYL_DIR: /srv/carbonyl
@@ -105,6 +110,17 @@ jobs:
         ozone: [headless, x11]
 
     steps:
+      - name: Validate dispatch inputs
+        run: |
+          case "${{ github.event.inputs.arch || 'amd64' }}" in
+            amd64|arm64) ;;
+            *) echo "ERROR: unsupported architecture" >&2; exit 2 ;;
+          esac
+          case "${{ github.event.inputs.ozone_platform || 'both' }}" in
+            headless|x11|both) ;;
+            *) echo "ERROR: unsupported Ozone platform" >&2; exit 2 ;;
+          esac
+
       # Filesystem mutex around the shared chromium/src checkout on titan.
       # Matrix combos in act_runner DO run concurrently within one run
       # (job-level `concurrency` only serializes across runs, and
@@ -201,19 +217,6 @@ jobs:
           echo "BUILDER_IMAGE=${IMAGE}" >> "$GITHUB_ENV"
           echo "[resolve] using builder image: ${IMAGE} (from: $src)"
 
-      - name: Resolve ninja parallelism
-        # Default: half of the host's core count, rounded down. Keeps other
-        # processes on titan responsive.
-        run: |
-          J="${{ github.event.inputs.ninja_jobs }}"
-          if [ -z "$J" ]; then
-            CORES=$(nproc)
-            J=$(( CORES / 2 ))
-            [ "$J" -lt 1 ] && J=1
-          fi
-          echo "NINJA_JOBS=${J}" >> "$GITHUB_ENV"
-          echo "[resolve] ninja parallelism: -j ${J}"
-
       - name: Log in to registry (for pulling the builder image)
         run: |
           # Use github.actor (Gitea aliases the github context). Fortemi pattern.
@@ -235,6 +238,29 @@ jobs:
           cd "${GITHUB_WORKSPACE}/.repo-clone"
           git checkout "${GITHUB_SHA:-HEAD}"
           echo "[checkout] workspace: ${GITHUB_WORKSPACE}/.repo-clone"
+
+      - name: Resolve bounded Ninja parallelism
+        run: |
+          J="$("${GITHUB_WORKSPACE}/.repo-clone/scripts/resolve-ninja-jobs.sh" \
+            "${{ github.event.inputs.ninja_jobs }}" "$(nproc)" "${TITAN_BUILD_CPUS}")"
+          echo "NINJA_JOBS=${J}" >> "$GITHUB_ENV"
+          echo "[resolve] bounded Ninja parallelism: -j ${J}"
+
+      - name: Refuse to overwrite tracked Chromium changes
+        run: |
+          test -d "${HOST_CHROMIUM_SRC_DIR}/.git" || {
+            echo "[guard] ERROR: ${HOST_CHROMIUM_SRC_DIR} is not a Git checkout" >&2
+            exit 1
+          }
+          tracked_dirty="$(git -C "${HOST_CHROMIUM_SRC_DIR}" status \
+            --porcelain=v1 --untracked-files=no)"
+          if [ -n "$tracked_dirty" ]; then
+            echo "[guard] ERROR: tracked operator changes exist in ${HOST_CHROMIUM_SRC_DIR}." >&2
+            echo "[guard] Preserve or move them before dispatching a CI build:" >&2
+            printf '%s\n' "$tracked_dirty" >&2
+            exit 1
+          fi
+          echo "[guard] persistent Chromium checkout has no tracked worktree changes"
 
       - name: Normalize host workspace ownership
         # Prior containerized maintenance steps can leave regenerated patch files
@@ -371,6 +397,7 @@ jobs:
             -e CHROMIUM_ROOT=${HOST_CARBONYL_DIR}/chromium \
             -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
             -e DEPOT_TOOLS_ROOT=${HOST_CARBONYL_DIR}/chromium/depot_tools \
+            -e NINJA_JOBS=${NINJA_JOBS} \
             -w ${HOST_CARBONYL_DIR} \
             "${BUILDER_IMAGE}" \
             bash -c '
@@ -400,7 +427,7 @@ jobs:
 
                 echo "[sync-chromium] running gclient sync"
                 source scripts/env.sh
-                bash scripts/gclient.sh sync -j"$(nproc)" --no-history
+                bash scripts/gclient.sh sync -j"${NINJA_JOBS}" --no-history
               fi
 
               git -C "${CHROMIUM_SRC}" cat-file -e "${TARGET_SHA}^{commit}"
@@ -435,6 +462,9 @@ jobs:
           # themselves; pass OUT_DIR as just the subdir name.
           OUT_DIR="Default-${{ matrix.ozone }}"
           docker run --rm \
+            --cpus="${TITAN_BUILD_CPUS}" \
+            --memory="${TITAN_BUILD_MEMORY}" \
+            --memory-swap="${TITAN_BUILD_MEMORY_SWAP}" \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
             -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
             -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
@@ -456,6 +486,9 @@ jobs:
         run: |
           CPU="${{ github.event.inputs.arch || 'amd64' }}"
           docker run --rm \
+            --cpus="${TITAN_BUILD_CPUS}" \
+            --memory="${TITAN_BUILD_MEMORY}" \
+            --memory-swap="${TITAN_BUILD_MEMORY_SWAP}" \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
             -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
             -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
@@ -466,6 +499,9 @@ jobs:
       - name: Build headless_shell and storage unit tests (Chromium, in container)
         run: |
           docker run --rm \
+            --cpus="${TITAN_BUILD_CPUS}" \
+            --memory="${TITAN_BUILD_MEMORY}" \
+            --memory-swap="${TITAN_BUILD_MEMORY_SWAP}" \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
             -e CARBONYL_ROOT=${HOST_CARBONYL_DIR} \
             -e CHROMIUM_SRC=${HOST_CHROMIUM_SRC_DIR} \
@@ -496,7 +532,7 @@ jobs:
           echo "TRIPLE=${TRIPLE}" >> "$GITHUB_ENV"
           ls -lh "${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}/" | head
 
-      - name: Smoke test binary
+      - name: Verify binary architecture without executing it
         run: |
           set -euo pipefail
           TRIPLE="${{ env.TRIPLE }}"
@@ -511,63 +547,30 @@ jobs:
             exit 1
           fi
 
-          # Normalise target + host CPU so we can tell native from cross builds.
+          # Titan is build/unit-only. Do not execute a browser binary here,
+          # including a seemingly harmless --version path: runtime validation
+          # belongs to the disposable Ubuntu 26.04 browser-QA guest.
           case "${CPU}" in
             amd64|x86_64)  target_cpu="x86_64" ;;
             arm64|aarch64) target_cpu="aarch64" ;;
             *) echo "ERROR: unknown arch '${CPU}'" >&2; exit 1 ;;
           esac
-          host_cpu="$(uname -m)"
-
-          if [ "${target_cpu}" = "${host_cpu}" ]; then
-            # Native build — full exec smoke test (unchanged behaviour for amd64
-            # on the x86_64 titan host; the working path keeps its real signal).
-            LD_LIBRARY_PATH="${BIN_DIR}" "${BINARY}" --version
-            echo "[smoke] native exec OK: carbonyl ${OZONE}/${TRIPLE}"
-          else
-            # Cross-compiled build (e.g. aarch64 target on the x86_64 titan host):
-            # the binary cannot exec natively, so verify it IS the expected
-            # architecture rather than failing on exec or skipping silently.
-            # End-to-end exec of the arm64 runtime is covered by #107.
-            echo "[smoke] cross-arch build (target=${target_cpu}, host=${host_cpu}) — exec smoke skipped, checking binary architecture"
-            arch_report="$(file -b "${BINARY}")"
-            echo "[smoke] file: ${arch_report}"
-            case "${target_cpu}" in
-              aarch64) pattern='aarch64|ARM aarch64' ;;
-              x86_64)  pattern='x86-64|x86_64' ;;
-            esac
-            if ! printf '%s\n' "${arch_report}" | grep -qiE "${pattern}"; then
-              echo "ERROR: expected ${target_cpu} binary, got: ${arch_report}" >&2
-              exit 1
-            fi
-            echo "[smoke] cross-arch arch-check OK: carbonyl ${OZONE}/${TRIPLE}"
+          arch_report="$(file -b "${BINARY}")"
+          echo "[verify] file: ${arch_report}"
+          case "${target_cpu}" in
+            aarch64) pattern='aarch64|ARM aarch64' ;;
+            x86_64)  pattern='x86-64|x86_64' ;;
+          esac
+          if ! printf '%s\n' "${arch_report}" | grep -qiE "${pattern}"; then
+            echo "ERROR: expected ${target_cpu} binary, got: ${arch_report}" >&2
+            exit 1
           fi
+          echo "[verify] architecture OK: carbonyl ${OZONE}/${TRIPLE}"
 
-      - name: Run CDP validation (headless native only)
-        if: matrix.ozone == 'headless'
+      - name: Record isolated runtime acceptance requirement
         run: |
-          CPU="${{ github.event.inputs.arch || 'amd64' }}"
-          TRIPLE="${{ env.TRIPLE }}"
-          if [ -z "${TRIPLE}" ]; then
-            TRIPLE="$(bash "${HOST_CARBONYL_DIR}/scripts/platform-triple.sh" "${CPU}")"
-          fi
-          BIN_DIR="${HOST_CARBONYL_DIR}/build/pre-built/${TRIPLE}"
-          BINARY="${BIN_DIR}/carbonyl"
-          case "${CPU}" in
-            amd64|x86_64)  target_cpu="x86_64" ;;
-            arm64|aarch64) target_cpu="aarch64" ;;
-            *) echo "ERROR: unknown arch '${CPU}'" >&2; exit 1 ;;
-          esac
-          host_cpu="$(uname -m)"
-          if [ "${target_cpu}" != "${host_cpu}" ]; then
-            echo "[cdp] cross-arch build (target=${target_cpu}, host=${host_cpu}) - CDP exec smoke skipped"
-            exit 0
-          fi
-          cd "${HOST_CARBONYL_DIR}"
-          CARBONYL_BIN="${BINARY}" \
-          LD_LIBRARY_PATH="${BIN_DIR}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-          CAPTURE_SECONDS=2 \
-            bash scripts/test-cdp.sh
+          echo "Runtime/UI/CDP execution is intentionally skipped on Titan."
+          echo "Validate this checksummed artifact in the disposable Ubuntu 26.04 browser-QA VM."
 
       - name: Restore args.gn to canonical state
         # So the next CI run sees the canonical (headless) args.gn, not our

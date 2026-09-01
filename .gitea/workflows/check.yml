@@ -24,6 +24,8 @@ on:
       - 'build/Dockerfile.builder'
       - 'scripts/titan-x64-preflight.sh'
       - 'scripts/test-cdp.sh'
+      - 'scripts/resolve-ninja-jobs.sh'
+      - 'scripts/test-resolve-ninja-jobs.sh'
       - 'docs/ci-runner-titan.md'
       - 'docs/integration-guide.md'
       - '.gitea/workflows/check.yml'
@@ -38,6 +40,8 @@ on:
       - 'build/Dockerfile.builder'
       - 'scripts/titan-x64-preflight.sh'
       - 'scripts/test-cdp.sh'
+      - 'scripts/resolve-ninja-jobs.sh'
+      - 'scripts/test-resolve-ninja-jobs.sh'
       - 'docs/ci-runner-titan.md'
       - 'docs/integration-guide.md'
       - '.gitea/workflows/check.yml'
@@ -121,6 +125,8 @@ jobs:
             scripts/test-cdp.sh \
             scripts/test-operator-controls-model.sh \
             scripts/test-operator-controls.sh
+          bash -n scripts/resolve-ninja-jobs.sh scripts/test-resolve-ninja-jobs.sh
+          bash scripts/test-resolve-ninja-jobs.sh
 
       - name: Operator controls policy test (in container)
         run: |
