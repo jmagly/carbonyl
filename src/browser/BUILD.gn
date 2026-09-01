@@ -1,13 +1,15 @@
+import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/ozone.gni")
+import("//headless/headless.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
   sources = [ "carbonyl.mojom" ]
 
   deps = [
-    "//ui/gfx/geometry/mojom",
     "//skia/public/mojom",
+    "//ui/gfx/geometry/mojom",
   ]
 }
 
@@ -34,18 +36,20 @@ component("dump_text") {
   ]
 
   deps = [
-    "//base",
-    "//content/public/browser",
     # AccessibilityHandler::GetTreeJSON() + carbonyl_free_string() for the
     # --dump-text=accessibility browser-process snapshot path (#4 / #90).
     # Sibling component; both already depend on //content/public/browser,
     # and :accessibility does not depend on :dump_text, so no dep cycle.
     ":accessibility",
+    "//base",
+    "//content/public/browser",
+
     # HeadlessBrowserImpl + ShutdownWithExitCode (per #93, ordered shutdown
     # path). Headers under headless/lib/browser/ are not part of the
     # public surface but :headless_browser exposes them for embedders
     # already (see headless/app/headless_shell.cc).
     "//headless:headless_browser",
+
     # net::Error + net::ErrorToString (per #91, navigation-failure
     # detection in DidFinishNavigation).
     "//net",
@@ -69,6 +73,7 @@ component("accessibility") {
   deps = [
     "//base",
     "//content/public/browser",
+
     # ui::AXTreeUpdate, AXNodeData, gfx::RectF, Role-to-string utility.
     "//ui/accessibility",
     "//ui/gfx/geometry",
@@ -90,12 +95,12 @@ component("javascript") {
   ]
 
   deps = [
-    "//base",
-    "//content/public/browser",
     # carbonyl_free_string() — the JSON string handed to the eval callback is
     # released through the same FFI free as the accessibility tree. Sibling
     # component; :accessibility does not depend on :javascript, so no cycle.
     ":accessibility",
+    "//base",
+    "//content/public/browser",
   ]
 }
 
@@ -115,6 +120,7 @@ component("network") {
   deps = [
     "//base",
     "//content/public/browser",
+
     # blink::mojom::ResourceLoadInfo (+ net::LoadTimingInfo typemap). Per
     # //third_party/blink/public/mojom/BUILD.gn, non-Blink targets reach the
     # mojom_platform C++ bindings through //content/public/common, which
@@ -148,6 +154,86 @@ component("operator_window") {
       "//ui/wm",
     ]
   }
+}
+
+# Dedicated, opt-in executable for the experimental Views/Aura operator host
+# (#286). It deliberately reuses Chromium's HeadlessShell implementation so
+# one BrowserContext/WebContents continues to drive both Carbonyl's terminal
+# renderer and the native window. Nothing depends on this target, so normal
+# headless builds and runtime packaging remain unchanged.
+if (is_linux && ozone_platform_x11) {
+  executable("carbonyl_operator_shell") {
+    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
+    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
+
+    ldflags = [
+      "-Wl,-rpath=\$ORIGIN/.",
+      "-Wl,-rpath-link=.",
+    ]
+
+    sources = [
+      "//headless/app/headless_shell.cc",
+      "//headless/public/headless_shell.h",
+      "operator_shell_command_line.cc",
+      "operator_shell_command_line.h",
+      "operator_shell_main.cc",
+    ]
+
+    deps = [
+      ":accessibility",
+      ":dump_text",
+      ":javascript",
+      ":network",
+      ":operator_window",
+      ":renderer",
+      "//build:branding_buildflags",
+      "//components/os_crypt/common:switches",
+      "//components/version_info",
+      "//content/public/app",
+      "//content/public/common",
+      "//headless:headless_shell_lib",
+    ]
+
+    if (proprietary_codecs) {
+      deps += [ "//headless:generate_headless_shell_license_file" ]
+    }
+
+    if (!headless_use_embedded_resources) {
+      data = [
+        "$root_out_dir/headless_lib_data.pak",
+        "$root_out_dir/headless_lib_strings.pak",
+      ]
+      deps += [
+        "//headless:resource_pack_data",
+        "//headless:resource_pack_strings",
+        "//third_party/hyphenation-patterns:bundle_hyphen_data",
+      ]
+    }
+
+    if (headless_enable_commands) {
+      deps += [
+        "//components/headless/command_handler",
+        "//components/headless/command_handler:switches",
+      ]
+    }
+
+    deps += [ "//components/crash/core/app" ]
+    configs += [
+      "//headless:headless_defines_config",
+      "//build/config/compiler:wexit_time_destructors",
+    ]
+  }
+}
+
+# Pure host-side coverage for the dedicated entry point's argv contract. This
+# stays independent of Chromium runtime libraries so it can run before the
+# optional X11 shell is linked.
+executable("operator_shell_command_line_unittests") {
+  sources = [
+    "operator_shell_command_line.cc",
+    "operator_shell_command_line.h",
+    "operator_shell_command_line_unittest.cc",
+  ]
 }
 
 # BrowserContext storage barrier used by persistent-profile shutdown (#292).
@@ -222,8 +308,8 @@ config("lib") {
     target += "unknown-linux-gnu"
   }
 
-  libs = ["carbonyl"]
-  lib_dirs = ["//carbonyl/build/$target/release"]
+  libs = [ "carbonyl" ]
+  lib_dirs = [ "//carbonyl/build/$target/release" ]
 }
 
 if (is_linux) {
@@ -253,9 +339,9 @@ component("renderer") {
     public_configs = [ ":lib_ldflags" ]
   }
   deps = [
-    ":mojom",
     ":bridge",
+    ":mojom",
     "//base",
-    "//skia"
+    "//skia",
   ]
 }

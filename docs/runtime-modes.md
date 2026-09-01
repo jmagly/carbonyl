@@ -151,6 +151,27 @@ DISPLAY=:99 carbonyl \
   https://example.com
 ```
 
+Issue #286 also provides a separately built, X11-only experimental executable.
+It injects the operator switch before Chromium startup, while the normal
+`headless_shell` target and packaged `carbonyl` binary remain unchanged:
+
+```bash
+autoninja -C out/Default-x11 \
+  carbonyl/src/browser:carbonyl_operator_shell
+
+DISPLAY=:99 out/Default-x11/carbonyl_operator_shell \
+  --user-data-dir=/var/lib/carbonyl/operator-profile \
+  https://example.com
+```
+
+Run the dual-output/input smoke directly against that target with:
+
+```bash
+DISPLAY=:99 \
+CARBONYL_OPERATOR_SHELL_BIN=out/Default-x11/carbonyl_operator_shell \
+scripts/test-operator-window.sh
+```
+
 This requires an X11 runtime; a headless-only build rejects the switch with an
 explicit diagnostic. The switch is off by default and does not disable
 sandboxing or site isolation.
