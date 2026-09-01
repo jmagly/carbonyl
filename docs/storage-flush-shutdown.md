@@ -16,7 +16,7 @@ sequence instead:
 The output contract is a single stderr line with this prefix and JSON schema:
 
 ```text
-CARBONYL_STORAGE_FLUSH_RESULT={"schema_version":1,"state":"stopped","result":"complete","partitions":1,"acknowledged":1,"token":"0123456789abcdef0123456789abcdef"}
+CARBONYL_STORAGE_FLUSH_RESULT={"schema_version":1,"state":"stopped","result":"complete","partitions":1,"acknowledged":1,"token":"<redacted-32-hex-nonce>"}
 ```
 
 `result` is one of `complete`, `timed_out`, or `failed`. Only `complete` proves
