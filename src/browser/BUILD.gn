@@ -1,7 +1,5 @@
-import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/ozone.gni")
-import("//headless/headless.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
@@ -163,65 +161,12 @@ component("operator_window") {
 # headless builds and runtime packaging remain unchanged.
 if (is_linux && ozone_platform_x11) {
   executable("carbonyl_operator_shell") {
-    configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
-    configs += [ "//build/config/compiler:thinlto_optimize_max" ]
-
-    ldflags = [
-      "-Wl,-rpath=\$ORIGIN/.",
-      "-Wl,-rpath-link=.",
-    ]
-
     sources = [
-      "//headless/app/headless_shell.cc",
-      "//headless/public/headless_shell.h",
       "operator_shell_command_line.cc",
       "operator_shell_command_line.h",
       "operator_shell_main.cc",
     ]
-
-    deps = [
-      ":accessibility",
-      ":dump_text",
-      ":javascript",
-      ":network",
-      ":operator_window",
-      ":renderer",
-      "//build:branding_buildflags",
-      "//components/os_crypt/common:switches",
-      "//components/version_info",
-      "//content/public/app",
-      "//content/public/common",
-      "//headless:headless_shell_lib",
-    ]
-
-    if (proprietary_codecs) {
-      deps += [ "//headless:generate_headless_shell_license_file" ]
-    }
-
-    if (!headless_use_embedded_resources) {
-      data = [
-        "$root_out_dir/headless_lib_data.pak",
-        "$root_out_dir/headless_lib_strings.pak",
-      ]
-      deps += [
-        "//headless:resource_pack_data",
-        "//headless:resource_pack_strings",
-        "//third_party/hyphenation-patterns:bundle_hyphen_data",
-      ]
-    }
-
-    if (headless_enable_commands) {
-      deps += [
-        "//components/headless/command_handler",
-        "//components/headless/command_handler:switches",
-      ]
-    }
-
-    deps += [ "//components/crash/core/app" ]
-    configs += [
-      "//headless:headless_defines_config",
-      "//build/config/compiler:wexit_time_destructors",
-    ]
+    data_deps = [ "//headless:headless_shell" ]
   }
 }
 

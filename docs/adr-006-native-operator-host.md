@@ -226,13 +226,16 @@ controls, or crash-safe profile handoff.
 
 The #286 implementation exposes the same selected architecture as the
 X11-only GN executable target
-`//carbonyl/src/browser:carbonyl_operator_shell`. Its Carbonyl-owned entry
-point adds `--carbonyl-operator-window` before HeadlessShell initializes
-Chromium's command line. The existing `//headless:headless_shell` target is not
-refactored or replaced, and default packaging does not depend on the new
-target. Building the experiment therefore creates a second shell-sized ELF in
-the X11 output directory but adds zero bytes to the packaged runtime unless a
-future release explicitly opts it in.
+`//carbonyl/src/browser:carbonyl_operator_shell`. The small Carbonyl-owned
+launcher adds `--carbonyl-operator-window` and then replaces itself with the
+sibling `headless_shell` through `execv`. The resulting browser process is the
+existing shell: it owns the same one BrowserContext/WebContents and follows the
+already-tested operator startup path. A GN `data_deps` edge ensures the sibling
+shell is built first. There is no second Chromium link product, the existing
+`//headless:headless_shell` target is not refactored, and default packaging does
+not depend on the new target. Building the experiment adds only the small
+launcher ELF; it adds zero bytes to the packaged runtime unless a future
+release explicitly opts it in.
 
 The selected design decomposes as follows:
 

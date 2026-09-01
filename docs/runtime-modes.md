@@ -151,9 +151,10 @@ DISPLAY=:99 carbonyl \
   https://example.com
 ```
 
-Issue #286 also provides a separately built, X11-only experimental executable.
-It injects the operator switch before Chromium startup, while the normal
-`headless_shell` target and packaged `carbonyl` binary remain unchanged:
+Issue #286 also provides a separately built, X11-only experimental launcher.
+It injects the operator switch and replaces itself with the sibling
+`headless_shell` in the same process. The normal shell target and packaged
+`carbonyl` binary remain unchanged:
 
 ```bash
 autoninja -C out/Default-x11 \
