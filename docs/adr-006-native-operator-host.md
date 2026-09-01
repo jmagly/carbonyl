@@ -224,6 +224,19 @@ The spike can prove native hosting, real event delivery, and dual output while
 remaining opt-in. It does not by itself claim production-ready resize, browser
 controls, or crash-safe profile handoff.
 
+The #286 implementation exposes the same selected architecture as the
+X11-only GN executable target
+`//carbonyl/src/browser:carbonyl_operator_shell`. The small Carbonyl-owned
+launcher adds `--carbonyl-operator-window` and then replaces itself with the
+sibling `headless_shell` through `execv`. The resulting browser process is the
+existing shell: it owns the same one BrowserContext/WebContents and follows the
+already-tested operator startup path. A GN `data_deps` edge ensures the sibling
+shell is built first. There is no second Chromium link product, the existing
+`//headless:headless_shell` target is not refactored, and default packaging does
+not depend on the new target. Building the experiment adds only the small
+launcher ELF; it adds zero bytes to the packaged runtime unless a future
+release explicitly opts it in.
+
 The selected design decomposes as follows:
 
 - #286: isolated experimental operator shell and dual-output smoke evidence;

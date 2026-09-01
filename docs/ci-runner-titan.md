@@ -6,7 +6,7 @@
 
 ## Scope
 
-Titan is Carbonyl's designated build host. Chromium builds run on titan exclusively (only machine with enough cores / RAM / disk for the 150 GB source + 40 GB build artifacts + multi-hour rebuilds). This document captures what titan needs to be in, how to set it up, and how to recover from drift.
+Titan is Carbonyl's designated x86_64 build host. It is an interactive workstation, so it is limited to bounded compilation and unit executables that do not initialize Chromium. Browser, CDP, display, input, and GPU acceptance runs only in the disposable Ubuntu 26.04 `browser-qa` VM. This document captures the required host state, resource boundary, and recovery procedure.
 
 ## One-time bootstrap
 
@@ -48,7 +48,7 @@ Chromium source lives at **`/srv/carbonyl/`** on titan. This path is referenced 
 └── ... (rest of the roctinam/carbonyl repo tree)
 ```
 
-The `chromium/src/` directory is persistent across builds. Each workflow run syncs the non-Chromium files from the workspace checkout into `/srv/carbonyl/` via rsync, preserving the heavy checkout. Before rsync, `build-runtime.yml` normalizes ownership of the Carbonyl-owned host files while excluding `chromium/src/` and `chromium/depot_tools/`; the rsync step also avoids preserving owner/group metadata. See `.gitea/workflows/build-runtime.yml` step "Sync workspace → host Chromium checkout".
+The `chromium/src/` directory is persistent across builds. Each workflow run syncs the non-Chromium files from the workspace checkout into `/srv/carbonyl/` via rsync, preserving the heavy checkout. Before any reset or sync, `build-runtime.yml` refuses to continue when tracked Chromium worktree changes exist; preserve or move operator work explicitly. It then normalizes ownership of Carbonyl-owned host files while excluding `chromium/src/` and `chromium/depot_tools/`.
 
 #### Bootstrap option A — rsync from a host that already has the source (fastest on LAN)
 
@@ -194,8 +194,9 @@ Unsafe to prune:
 | Docker pull fails with 401 | Registry login expired | Re-run step 5 of bootstrap |
 | `docker login` fails | `BUILD_REPO_TOKEN` expired | Rotate in Gitea secrets; re-run runner steps |
 | `rsync` fails with `mkstemp ... Permission denied` under `/srv/carbonyl/chromium/patches` | Stale host files are owned by a previous container/root user | Re-run with the current workflow; it normalizes host ownership before rsync. If fixing manually, chown only Carbonyl-owned files, not `chromium/src/` or `chromium/depot_tools/`. |
-| Chromium source shows local modifications (`git status` non-empty) | Patches not cleaned between builds | `cd /srv/carbonyl/chromium/src && git reset --hard && git clean -xfd`; re-apply via `scripts/patches.sh apply` |
-| Slow build (not half-cores respected) | `NINJA_JOBS` override missing or wrong | Set `ninja_jobs` workflow_dispatch input explicitly |
+| Chromium source shows tracked local modifications | An interrupted/manual operation left operator work in the persistent checkout | Preserve the changes in a commit or separate worktree. The workflow fails closed and must not erase them. |
+| Build requests more than four Ninja jobs | Dispatch input or old default exceeds Titan's safe budget | The workflow clamps it to `-j4`; verify with `scripts/test-resolve-ninja-jobs.sh`. |
+| Runner exits with `-1` while systemd reports a clean stop | The host runner service was explicitly stopped | Correlate the exact timestamp in the unit and sudo journals before attributing the exit to OOM or Chromium. |
 
 ## Parameterized build
 
@@ -206,7 +207,7 @@ Per `#57`, `.gitea/workflows/build-runtime.yml` exposes three workflow_dispatch 
 | `arch` | `amd64`, `arm64` | `amd64` | Target architecture; picks up via `platform-triple.sh` |
 | `ozone_platform` | `headless`, `x11`, `both` | `headless` | In-workflow `sed` on `args.gn`; original restored after build (even on failure, via `if: always()`) |
 | `builder_image_tag` | any tag | `latest` | Pins the `carbonyl-builder` image the build runs inside |
-| `ninja_jobs` | integer | `nproc / 2` | ninja `-j` parallelism |
+| `ninja_jobs` | positive integer | `min(nproc / 2, 4)` | ninja `-j` parallelism; values above 4 are clamped |
 
 The `ozone_platform=x11` path is what Phase 0 W0.2 (`#57`) needs. The `ozone_platform=both` path supports `#62` (W0.6 text-render parity).
 
@@ -215,15 +216,17 @@ The `ozone_platform=x11` path is what Phase 0 W0.2 (`#57`) needs. The `ozone_pla
 ```bash
 # Via Gitea UI:
 #   Actions → Build Runtime → workflow_dispatch →
-#     arch=amd64, ozone_platform=x11, ninja_jobs=16
+#     arch=amd64, ozone_platform=x11, ninja_jobs=4
 
 # Via API (scripted):
 curl -X POST \
   -H "Authorization: token ${GITEA_TOKEN}" \
   -H "Content-Type: application/json" \
   "https://git.integrolabs.net/api/v1/repos/roctinam/carbonyl/actions/workflows/build-runtime.yml/dispatches" \
-  -d '{"ref": "main", "inputs": {"arch": "amd64", "ozone_platform": "x11", "ninja_jobs": "16"}}'
+  -d '{"ref": "main", "inputs": {"arch": "amd64", "ozone_platform": "x11", "ninja_jobs": "4"}}'
 ```
+
+The build containers are additionally limited to four CPUs, 40 GiB RAM, and 48 GiB combined RAM+swap. Artifact execution is not a build-host smoke test: install the checksummed tarball into an Ubuntu 26.04 `browser-qa` guest and run the repository acceptance orchestrator there.
 
 ## Disaster recovery
 
