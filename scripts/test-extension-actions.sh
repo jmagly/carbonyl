@@ -94,7 +94,7 @@ command=(
   --ozone-platform=x11
   --disable-gpu
   --carbonyl-operator-window
-  --carbonyl-extension-management=read-only
+  --carbonyl-extension-management=restart
   --carbonyl-extension-list
   "--load-extension=$EXTENSION_PATH"
   "--disable-extensions-except=$EXTENSION_PATH"
@@ -165,6 +165,20 @@ wait_for_color "$TEST_ROOT/popup-clicked.png" 32 160 80 "popup action"
 grep -q 'CARBONYL_EXTENSION_STATUS state=loaded' "$TEST_ROOT/terminal.log"
 grep -q 'data-carbonyl-extension-content="loaded"' "$TEST_ROOT/terminal.log"
 xdotool windowclose "$POPUP_WINDOW"
+xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
+  xdotool windowfocus --sync "$WINDOW_ID"
+# From the address field, forward traversal reaches the first restart-only
+# management control. The accepted request must not unload the live action.
+xdotool key ctrl+l Tab Return
+for _ in $(seq 1 100); do
+  grep -q 'CARBONYL_EXTENSION_MANAGEMENT id=.* result=restart_required' \
+    "$TEST_ROOT/terminal.log" && break
+  sleep 0.1
+done
+grep -q 'CARBONYL_EXTENSION_MANAGEMENT id=.* result=restart_required' \
+  "$TEST_ROOT/terminal.log"
+grep -q 'CARBONYL_EXTENSION_ACTION_STATE [a-p]\{32\}:1:1:1;' \
+  "$TEST_ROOT/terminal.log"
 xdotool windowclose "$WINDOW_ID"
 for _ in $(seq 1 100); do
   kill -0 "$CARBONYL_PID" 2>/dev/null || break

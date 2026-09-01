@@ -14,6 +14,8 @@ checks=(
   'src/extensions/management.cc:GetDisplayBadgeText'
   'src/extensions/extension_loader.cc:CARBONYL_EXTENSION_STATUS state=error'
   'src/browser/operator_window.cc:CARBONYL_EXTENSION_ACTION_STATE'
+  'src/browser/operator_window.cc:Disable on restart'
+  'src/browser/operator_window.cc:CARBONYL_EXTENSION_MANAGEMENT'
   'src/browser/operator_window.cc:CARBONYL_EXTENSION_SURFACE navigation_denied'
   'src/browser/operator_window.cc:Extension popup'
   'src/browser/operator_window.cc:Extension options'

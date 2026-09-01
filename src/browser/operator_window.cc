@@ -269,6 +269,28 @@ class OperatorControls final : public content::WebContentsObserver,
     extension_status_label_->SetAccessibleName(u"Extension management state");
     extension_status_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     extension_layout->SetFlexForView(extension_status_label_, 1);
+    const std::string management_mode = GetExtensionManagementMode();
+    for (const auto& status :
+         GetExtensionStatuses(web_contents()->GetBrowserContext())) {
+      auto* state_label =
+          extension_bar->AddChildView(std::make_unique<views::Label>(
+              base::UTF8ToUTF16(status.id.substr(0, 8) + " " + status.state)));
+      state_label->SetAccessibleName(base::UTF8ToUTF16(
+          "Extension " + status.id + " state " + status.state));
+      if (management_mode != kExtensionManagementRestart) {
+        continue;
+      }
+      if (status.state == "loaded") {
+        AddManagementButton(extension_bar.get(), status.id,
+                            u"Disable on restart", ExtensionMutation::kDisable);
+        AddManagementButton(extension_bar.get(), status.id,
+                            u"Remove on restart", ExtensionMutation::kRemove);
+      } else if (status.state == "disabled_restart" ||
+                 status.state == "removed_restart") {
+        AddManagementButton(extension_bar.get(), status.id,
+                            u"Enable on restart", ExtensionMutation::kEnable);
+      }
+    }
     for (const auto& snapshot : GetExtensionActions(web_contents())) {
       auto* action_button =
           extension_bar->AddChildView(std::make_unique<views::MdTextButton>(
@@ -404,6 +426,34 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
  private:
+  void AddManagementButton(views::View* parent,
+                           const std::string& extension_id,
+                           std::u16string label,
+                           ExtensionMutation mutation) {
+    auto* button = parent->AddChildView(std::make_unique<views::MdTextButton>(
+        base::BindRepeating(&OperatorControls::RequestManagementMutation,
+                            base::Unretained(this), extension_id, mutation),
+        std::move(label)));
+    button->SetAccessibleName(base::UTF8ToUTF16(
+        "Restart-only management for extension " + extension_id));
+  }
+
+  void RequestManagementMutation(const std::string& extension_id,
+                                 ExtensionMutation mutation) {
+    std::string result;
+    const bool accepted = carbonyl::RequestExtensionMutation(
+        web_contents()->GetBrowserContext(), extension_id, mutation, &result);
+    management_notice_ = result;
+    if (accepted) {
+      LOG(INFO) << "CARBONYL_EXTENSION_MANAGEMENT id=" << extension_id
+                << " result=" << result;
+    } else {
+      LOG(ERROR) << "CARBONYL_EXTENSION_MANAGEMENT id=" << extension_id
+                 << " code=" << result;
+    }
+    RefreshExtensionState();
+  }
+
   static std::u16string ActionButtonText(
       const ExtensionActionSnapshot& snapshot) {
     std::string text =
@@ -420,9 +470,13 @@ class OperatorControls final : public content::WebContentsObserver,
     }
     const std::vector<ExtensionStatus> statuses =
         GetExtensionStatuses(web_contents()->GetBrowserContext());
-    extension_status_label_->SetText(
-        base::UTF8ToUTF16("Extensions: " + GetExtensionManagementMode() + " (" +
-                          base::NumberToString(statuses.size()) + ")"));
+    std::string status_text = "Extensions: " + GetExtensionManagementMode() +
+                              " (" + base::NumberToString(statuses.size()) +
+                              ")";
+    if (!management_notice_.empty()) {
+      status_text += " " + management_notice_;
+    }
+    extension_status_label_->SetText(base::UTF8ToUTF16(status_text));
     const std::vector<ExtensionActionSnapshot> actions =
         GetExtensionActions(web_contents());
     std::string action_state;
@@ -625,6 +679,7 @@ class OperatorControls final : public content::WebContentsObserver,
   std::unique_ptr<OperatorExtensionSurface> extension_surface_;
   base::RepeatingTimer action_refresh_timer_;
   std::string last_action_state_;
+  std::string management_notice_;
   bool renderer_failed_ = false;
 };
 
