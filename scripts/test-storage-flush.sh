@@ -97,7 +97,7 @@ run_carbonyl_with_pty() {
     local quoted
     printf -v quoted '%q ' "${command[@]}"
     COLORTERM=truecolor TERM="${TERM:-xterm-256color}" \
-        script -q -e -c "$quoted" "$output" >/dev/null
+        script -q -e -c "$quoted" "$output" </dev/null >/dev/null
 }
 
 run_carbonyl_with_pty "$FIRST_LOG" \

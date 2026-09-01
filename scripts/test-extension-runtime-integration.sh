@@ -92,7 +92,8 @@ run_browser() {
   local quoted
   printf -v quoted '%q ' "${command[@]}"
   COLORTERM=truecolor TERM="${TERM:-xterm-256color}" \
-    timeout 30s script -q -e -c "$quoted" "$output" >/dev/null
+    timeout 30s script -q -e -c "$quoted" "$output" \
+    </dev/null >/dev/null
 }
 
 assert_contains() {

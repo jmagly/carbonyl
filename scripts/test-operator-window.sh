@@ -143,7 +143,8 @@ fi
 CARBONYL_CMD+=("file://$FIXTURE")
 printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
 
-COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" &
+COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
+    </dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=""

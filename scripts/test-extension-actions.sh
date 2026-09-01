@@ -104,7 +104,8 @@ command=(
   "http://127.0.0.1:$PORT/runtime-page.html"
 )
 printf -v quoted '%q ' "${command[@]}"
-COLORTERM=truecolor script -q -c "$quoted" "$TEST_ROOT/terminal.log" &
+COLORTERM=truecolor script -q -c "$quoted" "$TEST_ROOT/terminal.log" \
+  </dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=

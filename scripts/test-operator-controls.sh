@@ -87,7 +87,8 @@ if [ "${CARBONYL_TEST_NO_SANDBOX:-0}" = 1 ]; then
 fi
 CARBONYL_CMD+=("$BASE_URL/one")
 printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
-COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" &
+COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
+    </dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=""
