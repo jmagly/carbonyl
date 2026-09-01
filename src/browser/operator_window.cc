@@ -586,7 +586,7 @@ class OperatorControls final : public content::WebContentsObserver,
     const bool allowed = fixed.SchemeIsHTTPOrHTTPS() || fixed.SchemeIsFile() ||
                          fixed.SchemeIs(url::kAboutScheme) ||
                          fixed.SchemeIs("chrome");
-    const std::string scheme_prefix = fixed.scheme() + ":";
+    const std::string scheme_prefix = std::string(fixed.scheme()) + ":";
     const bool explicit_scheme =
         !fixed.scheme().empty() &&
         base::StartsWith(typed, scheme_prefix,
@@ -654,7 +654,7 @@ class OperatorControls final : public content::WebContentsObserver,
     } else if (!origin.opaque()) {
       committed_origin = origin.Serialize();
     } else if (committed_url.has_scheme()) {
-      committed_origin = committed_url.scheme() + ":";
+      committed_origin = std::string(committed_url.scheme()) + ":";
     }
     const OperatorSecurityPresentation presentation =
         BuildOperatorSecurityPresentation(signals, committed_origin);
