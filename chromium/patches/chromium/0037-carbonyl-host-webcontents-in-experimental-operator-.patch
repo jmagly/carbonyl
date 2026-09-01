@@ -13,10 +13,10 @@ Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
  content/browser/compositor/viz_process_transport_factory.cc | 2 +-
  headless/BUILD.gn                                       |  1 +
  headless/app/headless_shell.cc                          | 13 +++++++++++++
- headless/lib/browser/headless_content_browser_client.cc |  9 +++++++++
+ headless/lib/browser/headless_content_browser_client.cc | 29 +++++++++++++++++++++++++----
  headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
 headless/lib/headless_content_main_delegate.cc          | 10 +++++++++-
- 6 files changed, 45 insertions(+), 2 deletions(-)
+ 6 files changed, 60 insertions(+), 6 deletions(-)
 
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
 index 95182065b322a..1bd765a773afa 100644
@@ -84,21 +84,45 @@ index 964208a..0000000 100644
  
  #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
  #include "components/crash/core/app/crash_switches.h"  // nogncheck
-@@ -268,6 +269,14 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+@@ -266,7 +267,29 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+-  if (!command_line->HasSwitch(::switches::kHeadless)) {
++  std::string process_type =
++      command_line->GetSwitchValueASCII(::switches::kProcessType);
++#if BUILDFLAG(IS_LINUX)
++  const bool use_operator_window =
++      base::CommandLine::ForCurrentProcess()->HasSwitch(
++          "carbonyl-operator-window");
++#else
++  constexpr bool use_operator_window = false;
++#endif
++
++  // Headless GPU startup always chooses a default message pump, but Ozone X11
++  // requires a UI pump. Keep the explicit operator path X11 end-to-end and
++  // remove --headless only from its GPU process so gpu_main selects that pump.
++  if (use_operator_window && process_type == ::switches::kGpuProcess) {
++    command_line->RemoveSwitch(::switches::kHeadless);
++  } else if (!command_line->HasSwitch(::switches::kHeadless)) {
      command_line->AppendSwitchASCII(::switches::kHeadless, "old");
    }
- 
+-
++
 +#if BUILDFLAG(IS_LINUX)
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          "carbonyl-operator-window")) {
++  if (use_operator_window) {
 +    command_line->RemoveSwitch(::switches::kOzonePlatform);
-+    command_line->AppendSwitchASCII(::switches::kOzonePlatform, "headless");
++    command_line->AppendSwitchASCII(::switches::kOzonePlatform, "x11");
 +  }
 +#endif
 +
  #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
    int fd;
    pid_t pid;
+@@ -291,6 +314,4 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
+   // If we're spawning a renderer, then override the language switch.
+-  std::string process_type =
+-      command_line->GetSwitchValueASCII(::switches::kProcessType);
+   const base::CommandLine& old_command_line =
+       CHECK_DEREF(base::CommandLine::ForCurrentProcess());
+   if (process_type == ::switches::kRendererProcess) {
 diff --git a/headless/lib/browser/headless_platform_delegate_aura.cc b/headless/lib/browser/headless_platform_delegate_aura.cc
 index 3255574..86720fe 100644
 --- a/headless/lib/browser/headless_platform_delegate_aura.cc

@@ -1,0 +1,329 @@
+From 2410f4d9d0145c94f6008a8af97042bd2044dc4a Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Mon, 31 Aug 2026 01:59:18 -0400
+Subject: [PATCH 38/38] carbonyl: acknowledge persistent storage flush on shutdown
+
+Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/292
+---
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index 485e8ac..45af71f 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -379,6 +379,7 @@ source_set("headless_browser") {
+     "//carbonyl/src/browser:bridge",
+     "//carbonyl/src/browser:javascript",
+     "//carbonyl/src/browser:renderer",
++    "//carbonyl/src/browser:storage_flush",
+     "//components/cookie_config",
+     "//components/download/public/common:public",
+     "//components/embedder_support",
+diff --git a/headless/lib/browser/headless_browser_context_impl.cc b/headless/lib/browser/headless_browser_context_impl.cc
+index 736026c..cb9b100 100644
+--- a/headless/lib/browser/headless_browser_context_impl.cc
++++ b/headless/lib/browser/headless_browser_context_impl.cc
+@@ -270,6 +270,12 @@ HeadlessWebContents* HeadlessBrowserContextImpl::CreateWebContents(
+     HeadlessWebContents::Builder* builder) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+ 
++  if (!browser_->CanAcceptPageWork()) {
++    LOG(ERROR) << "CARBONYL_LIFECYCLE_ERROR code=draining "
++                  "operation=create_page";
++    return nullptr;
++  }
++
+   std::unique_ptr<HeadlessWebContentsImpl> headless_web_contents =
+       HeadlessWebContentsImpl::Create(builder);
+ 
+diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
+index 067f31f..d2debb3 100644
+--- a/headless/lib/browser/headless_browser_impl.cc
++++ b/headless/lib/browser/headless_browser_impl.cc
+@@ -10,6 +10,7 @@
+ #include <iostream>
+ #include <signal.h>
+ 
++#include "base/command_line.h"
+ #include "base/compiler_specific.h"
+ #include "base/functional/callback.h"
+ #include "base/logging.h"
+@@ -30,10 +31,30 @@
+ #include "headless/lib/browser/headless_screen.h"
+ #include "headless/lib/browser/headless_platform_delegate.h"
+ #include "headless/lib/browser/headless_web_contents_impl.h"
++#include "carbonyl/src/browser/storage_flush_coordinator.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ 
++namespace {
++
++constexpr char kStorageFlushTokenSwitch[] =
++    "carbonyl-storage-flush-token";
++
++bool IsValidStorageFlushToken(std::string_view token) {
++  if (token.size() != 32) {
++    return false;
++  }
++  for (char character : token) {
++    if (!((character >= '0' && character <= '9') ||
++          (character >= 'a' && character <= 'f'))) {
++      return false;
++    }
++  }
++  return true;
++}
++
++}  // namespace
++
+ #if BUILDFLAG(IS_WIN)
+-#include "base/command_line.h"
+ #include "components/os_crypt/async/browser/dpapi_key_provider.h"
+ #include "components/os_crypt/async/browser/os_crypt_win.h"
+ #include "headless/public/switches.h"
+@@ -44,7 +65,6 @@
+ #endif
+ 
+ #if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_DBUS)
+-#include "base/command_line.h"
+ #include "components/os_crypt/async/browser/freedesktop_secret_key_provider.h"
+ #include "components/password_manager/core/browser/password_manager_switches.h"  // nogncheck
+ #endif
+@@ -180,12 +200,70 @@ HeadlessBrowserImpl::BrowserMainThread() const {
+ void HeadlessBrowserImpl::Shutdown() {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+ 
++  if (did_shutdown_) {
++    return;
++  }
+   did_shutdown_ = true;
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("user-data-dir")) {
++    FinishShutdown(std::nullopt);
++    return;
++  }
++
++  std::vector<content::BrowserContext*> contexts;
++  for (HeadlessBrowserContext* context : GetAllBrowserContexts()) {
++    // Close every page on the UI sequence before asking its loaded storage
++    // partitions to flush. Copy the list because Close() unregisters entries.
++    for (HeadlessWebContents* web_contents : context->GetAllWebContents()) {
++      web_contents->Close();
++    }
++    contexts.push_back(HeadlessBrowserContextImpl::From(context));
++  }
++
++  storage_flush_coordinator_ =
++      std::make_unique<carbonyl::StorageFlushCoordinator>(base::Seconds(10));
++  storage_flush_coordinator_->Start(
++      contexts,
++      base::BindOnce(&HeadlessBrowserImpl::OnStorageFlushComplete,
++                     weak_ptr_factory_.GetWeakPtr()));
++}
++
++void HeadlessBrowserImpl::OnStorageFlushComplete(
++    carbonyl::StorageFlushSummary flush_summary) {
++  FinishShutdown(flush_summary);
++}
++
++void HeadlessBrowserImpl::FinishShutdown(
++    std::optional<carbonyl::StorageFlushSummary> flush_summary) {
++  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++
++  if (flush_summary) {
++    CHECK(storage_flush_coordinator_);
++    CHECK(storage_flush_coordinator_->state_machine().BeginDestroy());
++  }
+   weak_ptr_factory_.InvalidateWeakPtrs();
+   // Make sure GetAllBrowserContexts is sane if called after this point.
+   auto tmp = std::move(browser_contexts_);
+   tmp.clear();
+   system_request_context_manager_.reset();
++  if (flush_summary) {
++    CHECK(storage_flush_coordinator_->state_machine().MarkStopped());
++    flush_summary = storage_flush_coordinator_->state_machine().summary();
++    const std::string storage_flush_token =
++        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++            kStorageFlushTokenSwitch);
++    std::cerr << "CARBONYL_STORAGE_FLUSH_RESULT={\"schema_version\":1,"
++              << "\"state\":\"" << carbonyl::ToString(flush_summary->state)
++              << "\",\"result\":\""
++              << carbonyl::ToString(flush_summary->result)
++              << "\",\"partitions\":" << flush_summary->partitions
++              << ",\"acknowledged\":" << flush_summary->acknowledged
++              << ",\"token\":\""
++              << (IsValidStorageFlushToken(storage_flush_token)
++                      ? storage_flush_token
++                      : std::string())
++              << "\"}"
++              << std::endl;
++  }
+   // We might have posted task during shutdown, let these run
+   // before quitting the message loop. See ~HeadlessWebContentsImpl
+   // for additional context.
+@@ -195,6 +273,15 @@ void HeadlessBrowserImpl::Shutdown() {
+   }
+ }
+ 
++bool HeadlessBrowserImpl::RejectIfDraining(std::string_view operation) const {
++  if (CanAcceptPageWork()) {
++    return false;
++  }
++  LOG(ERROR) << "CARBONYL_LIFECYCLE_ERROR code=draining operation="
++             << operation;
++  return true;
++}
++
+ void HeadlessBrowserImpl::ShutdownWithExitCode(int exit_code) {
+   exit_code_ = exit_code;
+   Shutdown();
+@@ -289,6 +376,9 @@ bool HeadlessBrowserImpl::ShouldStartDevToolsServer() {
+ }
+ 
+ void HeadlessBrowserImpl::Resize() {
++  if (RejectIfDraining("resize")) {
++    return;
++  }
+   auto size = carbonyl::Renderer::GetCurrent()->Resize();
+   auto rect = gfx::Rect(0, 0, size.width(), size.height());
+ 
+@@ -309,6 +399,9 @@ void HeadlessBrowserImpl::OnShutdownInput() {
+   Shutdown();
+ }
+ void HeadlessBrowserImpl::OnRefreshInput() {
++  if (RejectIfDraining("refresh")) {
++    return;
++  }
+   for (auto* ctx: GetAllBrowserContexts()) {
+     for (auto* contents: ctx->GetAllWebContents()) {
+       auto* impl = HeadlessWebContentsImpl::From(contents);
+@@ -325,6 +418,9 @@ void HeadlessBrowserImpl::OnRefreshInput() {
+ }
+ 
+ void HeadlessBrowserImpl::OnGoToInput(const char* url_str) {
++  if (RejectIfDraining("navigation")) {
++    return;
++  }
+   if (!carbonyl::browser) {
+     return;
+   }
+@@ -355,6 +451,9 @@ void HeadlessBrowserImpl::OnGoToInput(const char* url_str) {
+ }
+ 
+ void HeadlessBrowserImpl::OnGoBackInput() {
++  if (RejectIfDraining("navigation")) {
++    return;
++  }
+   for (auto* ctx: GetAllBrowserContexts()) {
+     for (auto* contents: ctx->GetAllWebContents()) {
+       auto* impl = HeadlessWebContentsImpl::From(contents);
+@@ -373,6 +472,9 @@ void HeadlessBrowserImpl::OnGoBackInput() {
+ }
+ 
+ void HeadlessBrowserImpl::OnGoForwardInput() {
++  if (RejectIfDraining("navigation")) {
++    return;
++  }
+   for (auto* ctx: GetAllBrowserContexts()) {
+     for (auto* contents: ctx->GetAllWebContents()) {
+       auto* impl = HeadlessWebContentsImpl::From(contents);
+@@ -391,6 +493,9 @@ void HeadlessBrowserImpl::OnGoForwardInput() {
+ }
+ 
+ void HeadlessBrowserImpl::OnScrollInput(int delta) {
++  if (RejectIfDraining("input")) {
++    return;
++  }
+   blink::WebMouseWheelEvent event;
+ 
+   event.SetType(blink::WebInputEvent::Type::kMouseWheel);
+@@ -446,6 +551,9 @@ void HeadlessBrowserImpl::OnScrollInput(int delta) {
+ }
+ 
+ void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key, unsigned int modifiers) {
++  if (RejectIfDraining("input")) {
++    return;
++  }
+   bool raw = true;
+   // Translate the carbonyl modifier mask (bridge.rs KeyModifiers::mask:
+   // bit0 shift, bit1 control, bit2 alt, bit3 meta) into blink flags so
+@@ -532,6 +640,9 @@ void HeadlessBrowserImpl::OnKeyPressInput(unsigned int key, unsigned int modifie
+ }
+ 
+ void HeadlessBrowserImpl::OnMouseUpInput(unsigned int x, unsigned int y, unsigned int button) {
++  if (RejectIfDraining("input")) {
++    return;
++  }
+   for (auto* ctx: GetAllBrowserContexts()) {
+     for (auto* contents: ctx->GetAllWebContents()) {
+       auto* impl = HeadlessWebContentsImpl::From(contents);
+@@ -561,6 +672,9 @@ void HeadlessBrowserImpl::OnMouseUpInput(unsigned int x, unsigned int y, unsigne
+ }
+ 
+ void HeadlessBrowserImpl::OnMouseDownInput(unsigned int x, unsigned int y, unsigned int button) {
++  if (RejectIfDraining("input")) {
++    return;
++  }
+   for (auto* ctx: GetAllBrowserContexts()) {
+     for (auto* contents: ctx->GetAllWebContents()) {
+       auto* impl = HeadlessWebContentsImpl::From(contents);
+@@ -590,6 +704,9 @@ void HeadlessBrowserImpl::OnMouseDownInput(unsigned int x, unsigned int y, unsig
+ }
+ 
+ void HeadlessBrowserImpl::OnMouseMoveInput(unsigned int x, unsigned int y) {
++  if (RejectIfDraining("input")) {
++    return;
++  }
+   for (auto* ctx: GetAllBrowserContexts()) {
+     for (auto* contents: ctx->GetAllWebContents()) {
+       auto* impl = HeadlessWebContentsImpl::From(contents);
+diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
+index aba0afb..7ea5dbf 100644
+--- a/headless/lib/browser/headless_browser_impl.h
++++ b/headless/lib/browser/headless_browser_impl.h
+@@ -6,15 +6,18 @@
+ #define HEADLESS_LIB_BROWSER_HEADLESS_BROWSER_IMPL_H_
+ 
+ #include <memory>
++#include <optional>
+ #include <string>
+-#include <vector>
++#include <string_view>
+ #include <thread>
++#include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/run_loop.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "build/build_config.h"
++#include "carbonyl/src/browser/storage_flush_coordinator.h"
+ #include "content/public/browser/devtools_agent_host.h"
+ #include "headless/public/headless_browser.h"
+ #include "headless/public/headless_export.h"
+@@ -130,6 +133,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+   void OnMouseMoveInput(unsigned int x, unsigned int y);
+ 
+   bool did_shutdown() const { return did_shutdown_; }
++  bool CanAcceptPageWork() const { return !did_shutdown_; }
+ 
+  protected:
+  // TODO: use base::TaskRunner
+@@ -137,6 +141,10 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+ 
+  private:
+   void CreateOSCryptAsync();
++  void OnStorageFlushComplete(carbonyl::StorageFlushSummary flush_summary);
++  void FinishShutdown(
++      std::optional<carbonyl::StorageFlushSummary> flush_summary);
++  bool RejectIfDraining(std::string_view operation) const;
+ 
+   base::OnceCallback<void(HeadlessBrowser*)> on_start_callback_;
+   std::optional<HeadlessBrowser::Options> options_;
+@@ -144,6 +152,8 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+ 
+   int exit_code_ = 0;
+   bool did_shutdown_ = false;
++  std::unique_ptr<carbonyl::StorageFlushCoordinator>
++      storage_flush_coordinator_;
+ 
+   std::unique_ptr<os_crypt_async::OSCryptAsync> os_crypt_async_;
+ 
+-- 
+2.43.0

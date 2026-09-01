@@ -28,7 +28,10 @@ done
 python3 -c 'from PIL import Image' >/dev/null 2>&1 || {
     echo "FAIL: Python Pillow is not installed"; exit 1; }
 if command -v scrot >/dev/null 2>&1; then
-    capture_frame() { scrot "$1"; }
+    # Polling reuses the same path.  scrot otherwise preserves the first frame
+    # and writes numbered siblings, causing every readiness check to inspect a
+    # stale pre-render screenshot.
+    capture_frame() { scrot --overwrite "$1"; }
 elif command -v import >/dev/null 2>&1; then
     capture_frame() { import -window root "$1"; }
 else
@@ -72,13 +75,38 @@ CARBONYL_PID=$!
 
 WINDOW_ID=""
 for _ in $(seq 1 "${WINDOW_ATTEMPTS:-100}"); do
-    WINDOW_ID="$(xdotool search --onlyvisible --class '^carbonyl$' 2>/dev/null |
-        head -n 1 || true)"
+    mapfile -t window_candidates < <(
+        {
+            xdotool search --name '^Carbonyl(OperatorWindow)?$'
+            xdotool search --class '^carbonyl$'
+            xdotool search --classname '^Carbonyl$'
+        } 2>/dev/null | awk '!seen[$0]++' || true
+    )
+    for candidate in "${window_candidates[@]}"; do
+        if xdotool getwindowgeometry "$candidate" >/dev/null 2>&1; then
+            WINDOW_ID="$candidate"
+            break
+        fi
+    done
     [ -n "$WINDOW_ID" ] && break
     sleep "${WINDOW_INTERVAL:-0.1}"
 done
-[ -n "$WINDOW_ID" ] || { echo "FAIL: Carbonyl operator window not found"; exit 1; }
+if [ -z "$WINDOW_ID" ]; then
+    echo "Visible X11 windows at operator-window discovery failure:"
+    while IFS= read -r candidate; do
+        name="$(xdotool getwindowname "$candidate" 2>/dev/null || true)"
+        class="$(xdotool getwindowclassname "$candidate" 2>/dev/null || true)"
+        geometry="$(xdotool getwindowgeometry --shell "$candidate" 2>/dev/null |
+            tr '\n' ' ' || true)"
+        printf '  id=%s name=%q class=%q %s\n' \
+            "$candidate" "$name" "$class" "$geometry"
+    done < <(xdotool search --name '.*' 2>/dev/null || true)
+    echo "FAIL: Carbonyl operator window not found"
+    exit 1
+fi
 
+xdotool windowmap --sync "$WINDOW_ID"
+xdotool windowraise "$WINDOW_ID"
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
     xdotool windowfocus --sync "$WINDOW_ID"
 

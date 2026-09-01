@@ -463,7 +463,7 @@ jobs:
             "${BUILDER_IMAGE}" \
             bash -c "bash scripts/build.sh ${OUT_DIR} ${CPU} -j ${NINJA_JOBS}"
 
-      - name: Build headless_shell (Chromium, in container)
+      - name: Build headless_shell and storage unit tests (Chromium, in container)
         run: |
           docker run --rm \
             -v "${HOST_CARBONYL_DIR}:${HOST_CARBONYL_DIR}" \
@@ -475,7 +475,10 @@ jobs:
             bash -c "
               source scripts/env.sh
               export LD_LIBRARY_PATH=${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}:\${LD_LIBRARY_PATH:-}
-              ninja -C ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR} -j ${NINJA_JOBS} headless:headless_shell
+              ninja -C ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR} -j ${NINJA_JOBS} \
+                headless:headless_shell \
+                carbonyl/src/browser:storage_flush_unittests
+              ${HOST_CHROMIUM_SRC_DIR}/out/${OUT_DIR}/storage_flush_unittests
             "
 
       - name: Copy runtime binaries
