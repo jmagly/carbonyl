@@ -28,6 +28,17 @@ use crate::output::{
 use crate::ui::navigation::NavigationAction;
 use crate::{input, utils::log};
 
+const STORAGE_FLUSH_RESULT_PREFIX: &[u8] = b"CARBONYL_STORAGE_FLUSH_RESULT=";
+
+fn write_storage_flush_results(mut writer: impl Write, stderr: &[u8]) -> io::Result<()> {
+    for line in stderr.split_inclusive(|byte| *byte == b'\n') {
+        if line.starts_with(STORAGE_FLUSH_RESULT_PREFIX) {
+            writer.write_all(line)?;
+        }
+    }
+    Ok(())
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct CSize {
@@ -228,6 +239,13 @@ fn main() -> io::Result<Option<i32>> {
 
     if code != 0 || cmd.debug {
         io::stderr().write_all(&output.stderr)?;
+    } else {
+        // The outer terminal process intentionally suppresses routine
+        // Chromium stderr on a clean exit. The storage-flush result is a
+        // versioned control-plane acknowledgement, however, and callers must
+        // be able to distinguish an orderly persistent-profile shutdown from
+        // a bare process exit. Forward only that exact line on success.
+        write_storage_flush_results(io::stderr(), &output.stderr)?;
     }
 
     Ok(Some(code))
@@ -1241,5 +1259,34 @@ pub fn network_log() -> String {
 pub fn network_clear() {
     if let Ok(mut log) = NETWORK_LOG.lock() {
         log.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_storage_flush_results;
+
+    #[test]
+    fn successful_child_forwards_only_storage_flush_results() {
+        let stderr =
+            b"routine warning\nCARBONYL_STORAGE_FLUSH_RESULT={\"schema_version\":1}\nmore noise\n";
+        let mut output = Vec::new();
+
+        write_storage_flush_results(&mut output, stderr).unwrap();
+
+        assert_eq!(
+            output,
+            b"CARBONYL_STORAGE_FLUSH_RESULT={\"schema_version\":1}\n"
+        );
+    }
+
+    #[test]
+    fn similarly_named_or_unterminated_results_are_not_lost() {
+        let stderr = b"prefix CARBONYL_STORAGE_FLUSH_RESULT={}\nCARBONYL_STORAGE_FLUSH_RESULT={}";
+        let mut output = Vec::new();
+
+        write_storage_flush_results(&mut output, stderr).unwrap();
+
+        assert_eq!(output, b"CARBONYL_STORAGE_FLUSH_RESULT={}");
     }
 }
