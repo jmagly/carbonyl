@@ -99,11 +99,11 @@ the existing Carbonyl/HeadlessScreen value. `WebView` owns Aura reparenting and
 content bounds inside the widget. The terminal renderer samples the same
 physical compositor raster.
 
-Production resize, controls insets, monitor-scale changes, terminal cell
-mapping, and trusted-input coordinate transforms are intentionally assigned to
-#287. That issue must establish a single versioned transform rather than allow
-the native widget, terminal renderer, and uinput path to maintain independent
-geometry.
+Production resize, monitor-scale changes, terminal cell mapping, and
+trusted-input coordinate transforms are assigned to #287. Browser-owned
+control insets and their unspoofable committed-origin display are assigned to
+#288. Both issues preserve one transform rather than let the native widget,
+terminal renderer, and uinput path maintain independent geometry.
 
 ## Profile and lifecycle contract
 
@@ -217,12 +217,31 @@ SHA-256 `5ad3a4d30140977593bb611b839a50fd7e6bdf8e65c38cc64bf38212826a91ee`.
   prototype is not authorization to open one directory concurrently.
 - Native-window diagnostics expose only widget IDs and dimensions, never URLs,
   cookies, storage values, or profile contents.
+- The browser-owned committed-origin line lives outside the WebView and derives
+  only from Chromium navigation/SSL state; page content cannot overlap it or
+  supply its text.
+- Operator address input allows only browser-navigation schemes. Disallowed
+  schemes become escaped HTTPS search text and are never executed as page
+  script.
 
 ## Consequences and implementation sequence
 
 The spike can prove native hosting, real event delivery, and dual output while
 remaining opt-in. It does not by itself claim production-ready resize, browser
 controls, or crash-safe profile handoff.
+
+The #286 implementation exposes the same selected architecture as the
+X11-only GN executable target
+`//carbonyl/src/browser:carbonyl_operator_shell`. The small Carbonyl-owned
+launcher adds `--carbonyl-operator-window` and then replaces itself with the
+sibling `headless_shell` through `execv`. The resulting browser process is the
+existing shell: it owns the same one BrowserContext/WebContents and follows the
+already-tested operator startup path. A GN `data_deps` edge ensures the sibling
+shell is built first. There is no second Chromium link product, the existing
+`//headless:headless_shell` target is not refactored, and default packaging does
+not depend on the new target. Building the experiment adds only the small
+launcher ELF; it adds zero bytes to the packaged runtime unless a future
+release explicitly opts it in.
 
 The selected design decomposes as follows:
 

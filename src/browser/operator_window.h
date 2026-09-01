@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "base/functional/callback_forward.h"
 #include "carbonyl/src/browser/export.h"
 
 namespace content {
@@ -25,7 +26,8 @@ class CARBONYL_OPERATOR_EXPORT OperatorWindow {
   static bool IsRequested();
   static std::unique_ptr<OperatorWindow> Create(
       content::WebContents* web_contents,
-      const gfx::Size& initial_size);
+      const gfx::Size& initial_size,
+      base::OnceClosure close_callback);
 
   OperatorWindow(const OperatorWindow&) = delete;
   OperatorWindow& operator=(const OperatorWindow&) = delete;
@@ -37,7 +39,8 @@ class CARBONYL_OPERATOR_EXPORT OperatorWindow {
 
   OperatorWindow();
   bool Initialize(content::WebContents* web_contents,
-                  const gfx::Size& initial_size);
+                  const gfx::Size& initial_size,
+                  base::OnceClosure close_callback);
 
   std::unique_ptr<Impl> impl_;
 };
