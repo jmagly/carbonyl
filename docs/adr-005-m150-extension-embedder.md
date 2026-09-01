@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-30
 
-**Status:** Accepted for the build direction; runtime enablement remains gated
+**Status:** Accepted; fail-closed client linkage implemented, runtime enablement remains gated
 
 **Related:** Carbonyl `#156`, `#285`, `#289`, `#290`
 
@@ -81,15 +81,26 @@ policy across `//headless` and `//extensions`.
 
 The implementation should land in independently testable slices:
 
-1. Link core `//extensions` common/browser/renderer targets into headless shell
-   and install no-op, fail-closed Carbonyl clients. Default behavior must remain
-   byte-for-byte equivalent at the command-line contract.
+1. **Implemented:** link core `//extensions` common/browser/renderer targets
+   into headless shell and install no-op, fail-closed Carbonyl clients. The
+   browser client unconditionally reports extensions disabled, rejects
+   installation, owns no `ExtensionSystem`, and enters teardown before the
+   `BrowserContext` collection is destroyed. The renderer client reserves the
+   isolated-world boundary but creates no dispatcher and receives no execution
+   hooks. Default behavior remains disabled regardless of extension flags.
 2. Add a test-only in-memory `ExtensionSystem` and prove browser/renderer
    startup plus orderly teardown without loading an extension.
 3. Implement the constrained unpacked-MV3 loader from `#289`, including
    content scripts, service workers, messaging, storage, permissions, and DNR.
 4. Add management/action surfaces from `#290` only after runtime semantics and
    browser-owned controls are stable.
+
+The linkage is implemented under `src/extensions/` and connected by Chromium
+patch 0039. `scripts/audit-extension-embedder.sh` now runs against the applied
+patch stack and proves the no-Chrome, no-`ExtensionSystem`, no-renderer-hook,
+unconditionally-disabled boundary. This completes the fail-closed linkage
+slice of `#156`; the epic remains open while runtime functionality proceeds in
+`#289` and `#290`.
 
 `scripts/audit-extension-embedder.sh` records the current M150 baseline and
 fails when an upgrade invalidates one of the source or build assumptions used

@@ -1,0 +1,128 @@
+From 0000000000000000000000000000000000000039 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Tue, 1 Sep 2026 14:00:00 -0400
+Subject: [PATCH 39/39] carbonyl: link fail-closed extension clients
+
+Install Carbonyl-owned common, browser, and renderer extension clients while
+keeping every extension execution and installation path disabled. This is the
+first linkage slice from ADR-005; it creates no ExtensionSystem and forwards no
+renderer execution hooks.
+
+Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/156
+---
+ headless/BUILD.gn                                      | 3 +++
+ headless/lib/browser/headless_browser_impl.cc          | 2 ++
+ headless/lib/browser/headless_content_browser_client.cc | 5 ++++-
+ headless/lib/headless_content_main_delegate.cc         | 2 ++
+ headless/lib/renderer/headless_content_renderer_client.cc | 2 ++
+ 5 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index 45af71f..7c36ef1 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -243,5 +243,6 @@ source_set("headless_renderer") {
+ 
+   deps = [
++    "//carbonyl/src/extensions:renderer_client",
+     "//content/public/common",
+     "//gin",
+     "//printing/buildflags",
+@@ -371,6 +372,7 @@ source_set("headless_browser") {
+ 
+   deps = [
+     ":backend_cdp_bindings",
++    "//carbonyl/src/extensions:browser_client",
+     ":headless_common",
+     "//base:base_static",
+     "//build:branding_buildflags",
+@@ -789,5 +791,6 @@ component("headless_shell_lib") {
+ 
+   deps = [
++    "//carbonyl/src/extensions:common_client",
+     "//base/version_info",
+     "//build:branding_buildflags",
+     "//components/crash/core/common",
+diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
+index d2debb3..11a9500 100644
+--- a/headless/lib/browser/headless_browser_impl.cc
++++ b/headless/lib/browser/headless_browser_impl.cc
+@@ -31,6 +31,7 @@
+ #include "headless/lib/browser/headless_screen.h"
+ #include "headless/lib/browser/headless_platform_delegate.h"
+ #include "headless/lib/browser/headless_web_contents_impl.h"
++#include "carbonyl/src/extensions/browser_client.h"
+ #include "carbonyl/src/browser/storage_flush_coordinator.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ 
+@@ -224,6 +225,7 @@ void HeadlessBrowserImpl::OnStorageFlushComplete(
+ void HeadlessBrowserImpl::FinishShutdown(
+     std::optional<carbonyl::StorageFlushSummary> flush_summary) {
+   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
++  carbonyl::StartExtensionsBrowserClientTearDown();
+ 
+   if (flush_summary) {
+     CHECK(storage_flush_coordinator_);
+diff --git a/headless/lib/browser/headless_content_browser_client.cc b/headless/lib/browser/headless_content_browser_client.cc
+index 0000000..7eb2ca1 100644
+--- a/headless/lib/browser/headless_content_browser_client.cc
++++ b/headless/lib/browser/headless_content_browser_client.cc
+@@ -20,6 +20,7 @@
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/string_split.h"
+ #include "build/build_config.h"
++#include "carbonyl/src/extensions/browser_client.h"
+ #include "components/embedder_support/switches.h"
+ #include "components/headless/command_handler/headless_command_switches.h"
+ #include "content/public/browser/browser_context.h"
+@@ -179,7 +180,9 @@ class HeadlessContentBrowserClient::StubPersistentRendererPrefsService
+ 
+ HeadlessContentBrowserClient::HeadlessContentBrowserClient(
+     HeadlessBrowserImpl* browser)
+-    : browser_(browser) {}
++    : browser_(browser) {
++  carbonyl::InstallExtensionsBrowserClient();
++}
+ 
+ HeadlessContentBrowserClient::~HeadlessContentBrowserClient() = default;
+ 
+diff --git a/headless/lib/headless_content_main_delegate.cc b/headless/lib/headless_content_main_delegate.cc
+index c96513e..41d4413 100644
+--- a/headless/lib/headless_content_main_delegate.cc
++++ b/headless/lib/headless_content_main_delegate.cc
+@@ -22,6 +22,7 @@
+ #include "base/strings/string_number_conversions.h"
+ #include "base/trace_event/trace_event.h"
+ #include "build/build_config.h"
++#include "carbonyl/src/extensions/common_client.h"
+ #include "cc/base/switches.h"
+ #include "components/crash/core/common/crash_key.h"
+ #include "components/crash/core/common/crash_keys.h"
+@@ -246,5 +247,6 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
+   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+ 
++  carbonyl::InstallExtensionsCommonClient();
+   content::Profiling::ProcessStarted();
+ 
+   // Note that on platforms where zygotes are used, this method is invoked
+diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headless/lib/renderer/headless_content_renderer_client.cc
+index 80a3214..c7a7fb4 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.cc
++++ b/headless/lib/renderer/headless_content_renderer_client.cc
+@@ -10,6 +10,7 @@
+ #include "base/check_deref.h"
+ #include "base/command_line.h"
+ #include "base/strings/string_util.h"
++#include "carbonyl/src/extensions/renderer_client.h"
+ #include "content/public/common/web_identity.h"
+ #include "content/public/renderer/render_thread.h"
+ #include "headless/lib/common/headless_features.h"
+@@ -81,5 +82,6 @@ HeadlessContentRendererClient::HeadlessContentRendererClient() {
+         /*default_allow=*/false);
+   }
++  carbonyl::InstallExtensionsRendererClient();
+ }
+ 
+ HeadlessContentRendererClient::~HeadlessContentRendererClient() = default;
+-- 
+2.47.3
