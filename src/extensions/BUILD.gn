@@ -39,6 +39,7 @@ source_set("browser_client") {
     "//extensions/browser",
     "//extensions/browser/updater:updater",
     "//extensions/common",
+    "//extensions/common:mojom",
     "//mojo/public/cpp/bindings",
     "//services/network/public/mojom",
     "//services/network/public/cpp",
