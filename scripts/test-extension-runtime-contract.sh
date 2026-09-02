@@ -33,11 +33,13 @@ required_source_checks=(
   'src/extensions/renderer_client.cc:CarbonylRenderFrameObserver'
   'src/extensions/renderer_client.cc:ExtensionsWillEvaluateServiceWorker'
   'src/extensions/renderer_client.cc:ExtensionsWillDestroyServiceWorker'
+  'src/extensions/renderer_client.cc:kEnableExtensionsRendererSwitch'
   'src/extensions/renderer_client.cc:ExtensionsWebViewCreated'
   'src/extensions/content_browser_client_hooks.cc:CreateExtensionWorkerMainResourceURLLoaderFactory'
   'src/extensions/content_browser_client_hooks.cc:RegisterExtensionAssociatedServiceWorkerBinders'
   'src/extensions/content_browser_client_hooks.cc:MaybeProxyExtensionURLLoaderFactory'
   'src/extensions/content_browser_client_hooks.cc:AddExtensionNavigationThrottle'
+  'src/extensions/content_browser_client_hooks.cc:kEnableExtensionsRendererSwitch'
   'src/extensions/content_browser_client_hooks.cc:CanCommitExtensionURL'
 )
 

@@ -1,4 +1,5 @@
 #include "carbonyl/src/extensions/renderer_client.h"
+#include "carbonyl/src/extensions/switches.h"
 
 #include <memory>
 #include <string>
@@ -38,8 +39,7 @@ extensions::CarbonylExtensionsRendererClient* g_client = nullptr;
 
 bool RuntimeEnabled() {
   const auto& command_line = *base::CommandLine::ForCurrentProcess();
-  return !command_line.HasSwitch(extensions::switches::kDisableExtensions) &&
-         command_line.HasSwitch(extensions::switches::kLoadExtension);
+  return command_line.HasSwitch(kEnableExtensionsRendererSwitch);
 }
 
 class CarbonylRenderFrameObserver : public content::RenderFrameObserver {
