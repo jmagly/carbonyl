@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include "third_party/blink/public/common/tokens/tokens.h"
 #include "v8/include/v8-forward.h"
 
 class GURL;
@@ -12,7 +13,6 @@ class RenderFrame;
 }
 
 namespace blink {
-class ServiceWorkerToken;
 class WebView;
 class WebServiceWorkerContextProxy;
 }
