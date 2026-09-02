@@ -20,6 +20,7 @@
 #include "extensions/browser/api/core_extensions_browser_api_provider.h"
 #include "extensions/browser/api/declarative_net_request/web_contents_helper.h"
 #include "extensions/browser/api/extensions_api_client.h"
+#include "extensions/browser/api/messaging/messaging_delegate.h"
 #include "extensions/browser/api/runtime/runtime_api_delegate.h"
 #include "extensions/browser/browser_context_keyed_service_factories.h"
 #include "extensions/browser/extension_host_delegate.h"
@@ -42,6 +43,57 @@
 
 namespace extensions {
 namespace {
+
+class CarbonylMessagingDelegate final : public MessagingDelegate {
+ public:
+  CarbonylMessagingDelegate() = default;
+  ~CarbonylMessagingDelegate() override = default;
+
+  PolicyPermission IsNativeMessagingHostAllowed(
+      content::BrowserContext*, const std::string&) override {
+    return PolicyPermission::DISALLOW;
+  }
+  std::optional<base::DictValue> MaybeGetTabInfo(
+      content::WebContents*) override {
+    return std::nullopt;
+  }
+  content::WebContents* GetWebContentsByTabId(content::BrowserContext*,
+                                              int) override {
+    return nullptr;
+  }
+  std::unique_ptr<MessagePort> CreateReceiverForNativeApp(
+      content::BrowserContext*,
+      base::WeakPtr<MessagePort::ChannelDelegate>,
+      content::RenderFrameHost*,
+      const ExtensionId&,
+      const PortId&,
+      const std::string&,
+      bool,
+      std::string*) override {
+    return nullptr;
+  }
+  void QueryIncognitoConnectability(
+      content::BrowserContext*,
+      const Extension*,
+      content::WebContents*,
+      const GURL&,
+      base::OnceCallback<void(bool)> callback) override {
+    std::move(callback).Run(false);
+  }
+};
+
+class CarbonylExtensionsAPIClient final : public ExtensionsAPIClient {
+ public:
+  CarbonylExtensionsAPIClient() = default;
+  ~CarbonylExtensionsAPIClient() override = default;
+
+  MessagingDelegate* GetMessagingDelegate() override {
+    return &messaging_delegate_;
+  }
+
+ private:
+  CarbonylMessagingDelegate messaging_delegate_;
+};
 
 // Carbonyl deliberately does not provide browser-owned update, navigation, or
 // device-restart surfaces to extensions. A concrete delegate is still
@@ -188,7 +240,7 @@ class CarbonylKioskDelegate final : public KioskDelegate {
 class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
  public:
   CarbonylExtensionsBrowserClient()
-      : api_client_(std::make_unique<ExtensionsAPIClient>()),
+      : api_client_(std::make_unique<CarbonylExtensionsAPIClient>()),
         extension_cache_(std::make_unique<NullExtensionCache>()),
         safe_browsing_delegate_(std::make_unique<SafeBrowsingDelegate>()),
         management_client_(

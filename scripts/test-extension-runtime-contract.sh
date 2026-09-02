@@ -27,6 +27,7 @@ required_source_checks=(
   'src/extensions/extension_loader.cc:remote_update_forbidden'
   'src/extensions/extension_loader.cc:unsupported_host_scheme'
   'src/extensions/browser_client.cc:CarbonylRuntimeAPIDelegate'
+  'src/extensions/browser_client.cc:CarbonylMessagingDelegate'
   'src/extensions/browser_client.cc:CarbonylExtensionManagementClient'
   'src/extensions/browser_client.cc:CarbonylExtensionWebContentsObserver'
   'src/extensions/renderer_client.cc:RunScriptsAtDocumentStart'
