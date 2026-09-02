@@ -161,6 +161,7 @@ grep -q "security=Local - $BASE_URL" "$TERM_LOG" || {
     echo "FAIL: trustworthy local-origin state missing"; exit 1; }
 
 # Address submission and redirect synchronization.
+redirect_stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
 xdotool key ctrl+l
 xdotool type --delay 10 "$BASE_URL/redirect"
 xdotool key Return
@@ -169,6 +170,16 @@ grep -q '^GET /redirect$' "$SERVER_LOG" || {
     echo "FAIL: address submission did not reach redirect fixture"; exit 1; }
 grep -q '^GET /two$' "$SERVER_LOG" || {
     echo "FAIL: redirect destination was not committed"; exit 1; }
+redirect_stopped_after="$redirect_stopped_before"
+for _ in $(seq 1 100); do
+    redirect_stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+    [ "$redirect_stopped_after" -gt "$redirect_stopped_before" ] && break
+    sleep 0.1
+done
+[ "$redirect_stopped_after" -gt "$redirect_stopped_before" ] || {
+    echo "FAIL: redirect destination did not reach browser load-stop state"
+    exit 1
+}
 
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
