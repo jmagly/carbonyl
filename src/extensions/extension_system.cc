@@ -18,7 +18,9 @@
 #include "components/value_store/value_store_factory_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
+#include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/api/web_request/web_request_event_router_factory.h"
+#include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extension_registry_factory.h"
@@ -200,6 +202,12 @@ bool InitializeExtensionContext(content::BrowserContext* browser_context,
   // it receives OnExtensionLoaded and installs the extension's ruleset.
   CHECK(extensions::declarative_net_request::RulesMonitorService::Get(
       browser_context));
+  // WebRequestAPI owns the count which tells ContentBrowserClient to install
+  // the URLLoaderFactory proxy. Headless does not construct eager extension
+  // keyed APIs, so it too must observe the load rather than being created by
+  // the first request after registration.
+  CHECK(extensions::BrowserContextKeyedAPIFactory<
+        extensions::WebRequestAPI>::Get(browser_context));
   // Carbonyl's network hook can lazily create WebRequestAPI. Chromium 150's
   // WebRequestAPI::Shutdown() unconditionally looks up the per-context
   // WebRequestEventRouter, so materialize that nominally eager dependency
