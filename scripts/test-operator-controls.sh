@@ -317,7 +317,10 @@ done
 [ "$error_ready" = 1 ] || {
     echo "FAIL: committed error-page security state missing"; exit 1; }
 
-xdotool key --window "$WINDOW_ID" alt+F4
+# The key-down closes the window synchronously. Xdotool may receive BadWindow
+# while sending the matching key-up, which is expected once the browser-owned
+# close lifecycle has already begun.
+xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
 for _ in $(seq 1 100); do
     kill -0 "$CARBONYL_PID" 2>/dev/null || break
     sleep 0.1
@@ -328,4 +331,8 @@ if kill -0 "$CARBONYL_PID" 2>/dev/null; then
 fi
 wait "$CARBONYL_PID"
 CARBONYL_PID=""
+grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' "$TERM_LOG" || {
+    echo "FAIL: native close did not complete the storage flush"
+    exit 1
+}
 echo "PASS: operator controls, history, redirect, origin, focus, and stop"
