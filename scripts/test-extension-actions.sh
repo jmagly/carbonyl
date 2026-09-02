@@ -141,16 +141,20 @@ rg -q 'CARBONYL_EXTENSION_ACTION_STATE [a-p]{32}:1:1:1;' \
     exit 1
   }
 
-# Reverse traversal from the page enters Options, then the action button. Both
-# are native focus-chain controls and must open same-profile constrained views.
-xdotool key shift+Tab Return
+# The restart-mode toolbar order after the address field is Disable, Remove,
+# Action, Options. Traverse that explicit native focus chain so page-level
+# focus changes cannot alter which control the test activates.
+xdotool key ctrl+l Tab Tab Tab Tab Return
 for _ in $(seq 1 100); do
   grep -q 'CARBONYL_EXTENSION_SURFACE opened .* kind=options' \
     "$TEST_ROOT/terminal.log" && break
   sleep 0.1
 done
 grep -q 'CARBONYL_EXTENSION_SURFACE opened .* kind=options' \
-  "$TEST_ROOT/terminal.log"
+  "$TEST_ROOT/terminal.log" || {
+    echo "options control did not open its constrained surface" >&2
+    exit 1
+  }
 OPTIONS_WINDOW="$(xdotool search --class '^carbonyl-extension$' 2>/dev/null | head -1 || true)"
 [ -n "$OPTIONS_WINDOW" ] || { echo "options window not found" >&2; exit 1; }
 xdotool windowsize --sync "$OPTIONS_WINDOW" 520 420
@@ -167,14 +171,17 @@ xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
 }
 
 focus_window "$WINDOW_ID" "operator"
-xdotool key shift+Tab Return
+xdotool key ctrl+l Tab Tab Tab Return
 for _ in $(seq 1 100); do
   grep -q 'CARBONYL_EXTENSION_SURFACE opened .* kind=popup' \
     "$TEST_ROOT/terminal.log" && break
   sleep 0.1
 done
 grep -q 'CARBONYL_EXTENSION_SURFACE opened .* kind=popup' \
-  "$TEST_ROOT/terminal.log"
+  "$TEST_ROOT/terminal.log" || {
+    echo "action control did not open its popup surface" >&2
+    exit 1
+  }
 POPUP_WINDOW="$(xdotool search --class '^carbonyl-extension$' 2>/dev/null | head -1 || true)"
 [ -n "$POPUP_WINDOW" ] || { echo "popup window not found" >&2; exit 1; }
 focus_window "$POPUP_WINDOW" "popup"
