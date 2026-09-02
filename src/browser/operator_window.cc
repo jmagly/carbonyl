@@ -659,10 +659,10 @@ class OperatorControls final : public content::WebContentsObserver,
     const OperatorSecurityPresentation presentation =
         BuildOperatorSecurityPresentation(signals, committed_origin);
     origin_label_->SetText(base::UTF8ToUTF16(presentation.label));
-    VLOG(1) << "CARBONYL_OPERATOR_CONTROLS back=" << controller.CanGoBack()
-            << " forward=" << controller.CanGoForward()
-            << " loading=" << web_contents()->IsLoading()
-            << " security=" << presentation.label;
+    LOG(INFO) << "CARBONYL_OPERATOR_CONTROLS back=" << controller.CanGoBack()
+              << " forward=" << controller.CanGoForward()
+              << " loading=" << web_contents()->IsLoading()
+              << " security=" << presentation.label;
   }
 
   raw_ptr<views::WebView> web_view_;
