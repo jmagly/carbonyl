@@ -45,6 +45,12 @@ for check in "${required_source_checks[@]}"; do
   rg -q --fixed-strings -- "$pattern" "$CARBONYL_ROOT/$path"
 done
 
+for runtime_resource in headless_lib_data.pak headless_lib_strings.pak; do
+  rg -q --fixed-strings -- \
+    "cp \"\$src/$runtime_resource\" ." \
+    "$CARBONYL_ROOT/scripts/copy-binaries.sh"
+done
+
 for fixture_contract in \
   'content_script.js:chrome.runtime.sendMessage' \
   'content_script.js:chrome.runtime.connect' \

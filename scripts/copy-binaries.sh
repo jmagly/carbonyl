@@ -23,6 +23,12 @@ cd "$dest"
 
 cp "$src/headless_shell" carbonyl
 cp "$src/icudtl.dat" .
+# The extension loader formats validation and permission diagnostics through
+# Chromium's ResourceBundle. These packs are runtime inputs, not optional UI
+# assets: omitting them makes unpacked MV3 loading abort on the first localized
+# error or warning string.
+cp "$src/headless_lib_data.pak" .
+cp "$src/headless_lib_strings.pak" .
 cp "$src/libEGL.$lib_ext" .
 cp "$src/libGLESv2.$lib_ext" .
 cp "$src"/v8_context_snapshot*.bin .
