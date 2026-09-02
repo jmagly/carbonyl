@@ -151,9 +151,9 @@ std::vector<ExtensionActionSnapshot> GetExtensionActions(
       options_url = GURL();
     }
     const bool visible = action->GetIsVisible(tab_id);
-    VLOG(1) << "CARBONYL_EXTENSION_ACTION_EVALUATION id=" << extension->id()
-            << " visible=" << visible
-            << " host_access=" << has_action_access;
+    LOG(INFO) << "CARBONYL_EXTENSION_ACTION_EVALUATION id=" << extension->id()
+              << " visible=" << visible
+              << " host_access=" << has_action_access;
     snapshots.push_back({
         .id = extension->id(),
         .title = action->GetTitle(tab_id),
