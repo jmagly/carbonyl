@@ -227,6 +227,9 @@ jobs:
               CHROMIUM_SRC="${WORKTREE}" \
                 bash "${CARBONYL_ROOT}/scripts/audit-extension-embedder.sh"
 
+              echo "[validate] checking the opt-in MV3 runtime contract and fixtures..."
+              bash "${CARBONYL_ROOT}/scripts/test-extension-runtime-contract.sh"
+
               echo ""
               echo "✅ All $(ls "${PATCH_DIR}"/*.patch | wc -l) patches applied cleanly"
             '

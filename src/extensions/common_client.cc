@@ -24,10 +24,10 @@ class CarbonylPermissionMessageProvider : public PermissionMessageProvider {
   bool IsPrivilegeIncrease(const PermissionSet& granted_permissions,
                            const PermissionSet& requested_permissions,
                            Manifest::Type extension_type) const override {
-    // This client is installed by the no-load linkage slice. Treat every
-    // permission transition as an increase until #289 supplies an explicit
-    // grant policy.
-    return true;
+    // Loading a canonical directory through both opt-in switches is the
+    // operator's explicit grant. Chromium's PermissionSet remains the
+    // enforcement boundary for APIs and hosts after that grant.
+    return false;
   }
 
   PermissionIDSet GetAllPermissionIDs(
@@ -56,12 +56,17 @@ class CarbonylExtensionsClient : public ExtensionsClient {
   void FilterHostPermissions(const URLPatternSet& hosts,
                              URLPatternSet* new_hosts,
                              PermissionIDSet* permissions) const override {
-    *new_hosts = URLPatternSet();
+    for (const URLPattern& host : hosts) {
+      if (host.scheme() == "*" || host.scheme() == "http" ||
+          host.scheme() == "https" || host.scheme() == "file") {
+        new_hosts->AddPattern(host);
+      }
+    }
     *permissions = PermissionIDSet();
   }
 
   void SetScriptingAllowlist(const ScriptingAllowlist& allowlist) override {
-    // The no-load client never grants the global scripting exception.
+    // Carbonyl never grants the global scripting exception.
     scripting_allowlist_.clear();
   }
 
@@ -76,8 +81,13 @@ class CarbonylExtensionsClient : public ExtensionsClient {
   }
 
   bool IsScriptableURL(const GURL& url, std::string* error) const override {
+    if (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile()) {
+      return true;
+    }
     if (error) {
-      *error = "Carbonyl extension execution is disabled";
+      *error =
+          "Carbonyl extensions may script only http, https, and "
+          "explicitly permitted file URLs";
     }
     return false;
   }

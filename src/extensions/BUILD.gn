@@ -16,16 +16,30 @@ source_set("browser_client") {
   sources = [
     "browser_client.cc",
     "browser_client.h",
+    "content_browser_client_hooks.cc",
+    "content_browser_client_hooks.h",
+    "extension_loader.cc",
+    "extension_loader.h",
+    "extension_system.cc",
+    "extension_system.h",
   ]
 
   deps = [
     "//base",
     "//components/update_client",
+    "//components/keyed_service/content",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/user_prefs",
+    "//components/value_store",
     "//content/public/browser",
+    "//crypto",
     "//extensions/browser",
+    "//extensions/browser/updater:updater",
     "//extensions/common",
     "//mojo/public/cpp/bindings",
     "//services/network/public/mojom",
+    "//services/network/public/cpp",
     "//url",
   ]
 }
@@ -36,5 +50,10 @@ source_set("renderer_client") {
     "renderer_client.h",
   ]
 
-  deps = [ "//extensions/renderer" ]
+  deps = [
+    "//base",
+    "//content/public/renderer",
+    "//extensions/common",
+    "//extensions/renderer",
+  ]
 }
