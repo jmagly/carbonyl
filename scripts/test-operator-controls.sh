@@ -185,6 +185,7 @@ done
 # committed URL, not the pre-redirect input.
 xdotool mousemove --sync --window "$WINDOW_ID" 500 20 click 1
 xdotool key ctrl+a
+capture_frame "$WORK_DIR/clipboard-focus.png"
 copied_address=""
 for _ in $(seq 1 50); do
     # Reissue copy while native pointer focus settles instead of polling an
