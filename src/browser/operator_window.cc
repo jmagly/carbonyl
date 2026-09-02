@@ -898,7 +898,24 @@ std::unique_ptr<OperatorWindow> OperatorWindow::Create(
 
 OperatorWindow::OperatorWindow() = default;
 
-OperatorWindow::~OperatorWindow() = default;
+OperatorWindow::~OperatorWindow() {
+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
+  if (!impl_) {
+    return;
+  }
+  // CLIENT_OWNS_WIDGET makes ~Widget close its NativeWidget asynchronously.
+  // During browser shutdown that can leave compositor task namespaces alive
+  // until after VizProcessTransportFactory begins tearing down. Close the
+  // native widget synchronously while the UI message loop and WebContents are
+  // still available. The observer must be detached first so an owner-driven
+  // shutdown cannot enqueue a second HeadlessShell::ShutdownSoon callback.
+  impl_->observer.reset();
+  if (impl_->widget) {
+    impl_->widget->CloseNow();
+  }
+  impl_->widget.reset();
+#endif
+}
 
 bool OperatorWindow::Initialize(content::WebContents* web_contents,
                                 const gfx::Size& initial_size,
