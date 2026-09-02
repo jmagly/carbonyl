@@ -46,6 +46,7 @@ fi
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-controls-test.XXXXXX")"
 SERVER_LOG="$WORK_DIR/server.log"
 TERM_LOG="$WORK_DIR/terminal.log"
+CHROMIUM_LOG="$WORK_DIR/chromium.log"
 FRAME_PNG="$WORK_DIR/frame.png"
 
 cleanup() {
@@ -78,6 +79,8 @@ CARBONYL_CMD=(
     "$CARBONYL_BIN"
     --ozone-platform=x11
     --carbonyl-operator-window
+    --enable-logging
+    "--log-file=$CHROMIUM_LOG"
     --v=1
     "--user-data-dir=$WORK_DIR/profile"
     --viewport=1000x700
@@ -110,6 +113,9 @@ for _ in $(seq 1 150); do
     sleep 0.1
 done
 [ -n "$WINDOW_ID" ] || { echo "FAIL: operator window not found"; exit 1; }
+echo "Operator window id: $WINDOW_ID"
+xdotool getwindowgeometry --shell "$WINDOW_ID" \
+    | sed 's/^/Operator window /'
 xdotool windowmap --sync "$WINDOW_ID"
 xdotool windowraise "$WINDOW_ID"
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
