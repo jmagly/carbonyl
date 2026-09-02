@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000046 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Wed, 2 Sep 2026 01:00:00 -0400
+Subject: [PATCH 46/46] carbonyl: route shutdown input through shell
+
+The Carbonyl input bridge called HeadlessBrowserImpl::Shutdown directly,
+bypassing the HeadlessShell-owned operator window. Route that signal through
+the shell so its Views/WebView and compositor observers are destroyed before
+browser accessibility and Viz teardown.
+
+Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
+---
+ headless/app/headless_shell.cc              |  3 +++
+ headless/lib/browser/headless_browser_impl.cc | 10 ++++++++++
+ headless/lib/browser/headless_browser_impl.h  |  2 ++
+ 3 files changed, 15 insertions(+)
+
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -102,5 +102,8 @@ class HeadlessShell {
+ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+   browser_ = browser;
++  static_cast<HeadlessBrowserImpl*>(browser_)->SetShutdownInputCallback(
++      base::BindRepeating(&HeadlessShell::ShutdownSoon,
++                          base::Unretained(this)));
+ 
+   HeadlessBrowserContext::Builder context_builder =
+       browser_->CreateBrowserContextBuilder();
+diff --git a/headless/lib/browser/headless_browser_impl.cc b/headless/lib/browser/headless_browser_impl.cc
+--- a/headless/lib/browser/headless_browser_impl.cc
++++ b/headless/lib/browser/headless_browser_impl.cc
+@@ -397,9 +397,19 @@ void HeadlessBrowserImpl::Resize() {
+   }
+ }
+ 
++void HeadlessBrowserImpl::SetShutdownInputCallback(
++    base::RepeatingClosure callback) {
++  shutdown_input_callback_ = std::move(callback);
++}
++
+ void HeadlessBrowserImpl::OnShutdownInput() {
++  if (shutdown_input_callback_) {
++    shutdown_input_callback_.Run();
++    return;
++  }
+   Shutdown();
+ }
++
+ void HeadlessBrowserImpl::OnRefreshInput() {
+   if (RejectIfDraining("refresh")) {
+     return;
+diff --git a/headless/lib/browser/headless_browser_impl.h b/headless/lib/browser/headless_browser_impl.h
+--- a/headless/lib/browser/headless_browser_impl.h
++++ b/headless/lib/browser/headless_browser_impl.h
+@@ -121,6 +121,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+ #endif
+ 
+   void Resize();
++  void SetShutdownInputCallback(base::RepeatingClosure callback);
+   void OnShutdownInput();
+   void OnRefreshInput();
+   void OnGoToInput(const char* url);
+@@ -147,6 +148,7 @@ class HEADLESS_EXPORT HeadlessBrowserImpl : public HeadlessBrowser {
+   bool RejectIfDraining(std::string_view operation) const;
+ 
+   base::OnceCallback<void(HeadlessBrowser*)> on_start_callback_;
++  base::RepeatingClosure shutdown_input_callback_;
+   std::optional<HeadlessBrowser::Options> options_;
+   std::unique_ptr<HeadlessPlatformDelegate> platform_delegate_;
+ 
+-- 
+2.47.3

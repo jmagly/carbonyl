@@ -56,7 +56,10 @@ FIXTURE="$CARBONYL_ROOT/tests/fixtures/operator-window.html"
 OPERATOR_PATCH="$CARBONYL_ROOT/chromium/patches/chromium/0037-carbonyl-host-webcontents-in-experimental-operator-.patch"
 [ -f "$OPERATOR_PATCH" ] || {
     echo "FAIL: operator patch missing: $OPERATOR_PATCH"; exit 1; }
-python3 - "$OPERATOR_PATCH" <<'PY'
+SHUTDOWN_PATCH="$CARBONYL_ROOT/chromium/patches/chromium/0046-carbonyl-route-shutdown-input-through-shell.patch"
+[ -f "$SHUTDOWN_PATCH" ] || {
+    echo "FAIL: shutdown routing patch missing: $SHUTDOWN_PATCH"; exit 1; }
+python3 - "$OPERATOR_PATCH" "$SHUTDOWN_PATCH" <<'PY'
 import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
@@ -80,6 +83,14 @@ ozone_x11 = text.find('use_operator_window ? "x11" : "headless"', real_ime)
 if operator_mode < 0 or real_ime < 0 or ozone_x11 < 0:
     raise SystemExit(
         "Operator browser must omit --headless and select Ozone X11 for IME"
+    )
+shutdown_text = open(sys.argv[2], encoding="utf-8").read()
+registration = shutdown_text.find("SetShutdownInputCallback(")
+dispatch = shutdown_text.find("shutdown_input_callback_.Run();")
+fallback = shutdown_text.find("Shutdown();", dispatch)
+if registration < 0 or dispatch < 0 or fallback < 0 or dispatch > fallback:
+    raise SystemExit(
+        "Carbonyl shutdown input must route through HeadlessShell before fallback"
     )
 PY
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-operator-test.XXXXXX")"
