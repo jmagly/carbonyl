@@ -49,6 +49,10 @@ TERM_LOG="$WORK_DIR/terminal.log"
 FRAME_PNG="$WORK_DIR/frame.png"
 
 cleanup() {
+    if [ -n "${XCLIP_PID:-}" ]; then
+        kill -TERM "$XCLIP_PID" 2>/dev/null || true
+        wait "$XCLIP_PID" 2>/dev/null || true
+    fi
     if [ -n "${CARBONYL_PID:-}" ]; then
         kill -TERM "$CARBONYL_PID" 2>/dev/null || true
         wait "$CARBONYL_PID" 2>/dev/null || true
@@ -253,7 +257,10 @@ wait_for_load_stop_after "$reload_stopped_before" "Reload"
 # type command. URL fixup must encode the path and retain browser ownership of
 # submission.
 UNICODE_URL="$BASE_URL/✓"
-printf '%s' "$UNICODE_URL" | xclip -selection clipboard
+# Keep clipboard ownership in this shell instead of allowing xclip's default
+# daemon to outlive the test and retain an orchestrator/tee file descriptor.
+printf '%s' "$UNICODE_URL" | xclip -selection clipboard -silent &
+XCLIP_PID=$!
 unicode_stopped_before="$(load_stop_count)"
 xdotool key ctrl+l
 xdotool key ctrl+v
@@ -266,6 +273,9 @@ done
 grep -q '^GET /%E2%9C%93$' "$SERVER_LOG" || {
     echo "FAIL: Unicode address was not encoded and submitted"; exit 1; }
 wait_for_load_stop_after "$unicode_stopped_before" "Unicode address"
+kill -TERM "$XCLIP_PID" 2>/dev/null || true
+wait "$XCLIP_PID" 2>/dev/null || true
+XCLIP_PID=""
 unicode_back_stopped_before="$(load_stop_count)"
 xdotool key alt+Left
 wait_for_color 34 170 238 "return from Unicode address"
