@@ -4,7 +4,11 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
+#include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/ozone_buildflags.h"
@@ -18,6 +22,8 @@
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
+#include "ui/views/widget/widget_observer.h"
 #include "ui/wm/core/wm_state.h"
 #endif
 
@@ -40,13 +46,82 @@ class OperatorViewsDelegate final : public views::ViewsDelegate {
   }
 };
 
+// The Views WebView owns continuous content resizing and native event
+// translation. This observer owns only window-lifecycle and focus policy; it
+// deliberately does not synthesize or forward input events.
+class OperatorWidgetObserver final : public views::WidgetObserver {
+ public:
+  OperatorWidgetObserver(views::Widget* widget,
+                         content::WebContents* web_contents,
+                         base::OnceClosure close_callback)
+      : web_contents_(web_contents->GetWeakPtr()),
+        close_callback_(std::move(close_callback)) {
+    observation_.Observe(widget);
+  }
+
+  OperatorWidgetObserver(const OperatorWidgetObserver&) = delete;
+  OperatorWidgetObserver& operator=(const OperatorWidgetObserver&) = delete;
+  ~OperatorWidgetObserver() override = default;
+
+  void OnWidgetActivationChanged(views::Widget*, bool active) override {
+    if (!web_contents_) {
+      return;
+    }
+    if (active) {
+      web_contents_->RestoreFocus();
+    } else {
+      web_contents_->StoreFocus();
+    }
+  }
+
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override {
+    // WebView::SetFastResize(false) keeps the hosted native view synchronized
+    // continuously. Logging the client extent gives operators one coordinate
+    // source of truth without opening a second resize path.
+    VLOG(1) << "CARBONYL_OPERATOR_WINDOW geometry window="
+            << new_bounds.size().ToString()
+            << " content="
+            << widget->GetClientAreaBoundsInScreen().size().ToString();
+  }
+
+  void OnWidgetShowStateChanged(views::Widget* widget) override {
+    if (web_contents_ && !widget->IsMinimized() && widget->IsActive()) {
+      web_contents_->RestoreFocus();
+    }
+  }
+
+  void OnWidgetDestroyed(views::Widget*) override {
+    observation_.Reset();
+    web_contents_.reset();
+    if (close_callback_) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, std::move(close_callback_));
+    }
+  }
+
+ private:
+  // HeadlessBrowserImpl destroys BrowserContexts (and therefore WebContents)
+  // before its posted quit task runs. Keep a weak handle so late native
+  // activation/show-state notifications during that drain cannot dereference
+  // a destroyed page.
+  base::WeakPtr<content::WebContents> web_contents_;
+  base::OnceClosure close_callback_;
+  base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
+      this};
+};
+
 }  // namespace
 
 struct OperatorWindow::Impl {
   // WMState and ViewsDelegate must outlive the Widget.
   std::unique_ptr<wm::WMState> wm_state;
   std::unique_ptr<views::ViewsDelegate> views_delegate;
+  std::unique_ptr<views::WidgetDelegate> widget_delegate;
   std::unique_ptr<views::Widget> widget;
+  // Declared after Widget so observation ends before an owner-driven Widget
+  // destruction and cannot turn normal browser shutdown into a second close.
+  std::unique_ptr<OperatorWidgetObserver> observer;
 };
 #else
 struct OperatorWindow::Impl {};
@@ -59,13 +134,15 @@ bool OperatorWindow::IsRequested() {
 
 std::unique_ptr<OperatorWindow> OperatorWindow::Create(
     content::WebContents* web_contents,
-    const gfx::Size& initial_size) {
+    const gfx::Size& initial_size,
+    base::OnceClosure close_callback) {
   if (!IsRequested()) {
     return nullptr;
   }
 
   auto window = std::unique_ptr<OperatorWindow>(new OperatorWindow());
-  if (!window->Initialize(web_contents, initial_size)) {
+  if (!window->Initialize(web_contents, initial_size,
+                          std::move(close_callback))) {
     return nullptr;
   }
   return window;
@@ -76,7 +153,8 @@ OperatorWindow::OperatorWindow() = default;
 OperatorWindow::~OperatorWindow() = default;
 
 bool OperatorWindow::Initialize(content::WebContents* web_contents,
-                                const gfx::Size& initial_size) {
+                                const gfx::Size& initial_size,
+                                base::OnceClosure close_callback) {
 #if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
   if (!web_contents || initial_size.IsEmpty()) {
     LOG(ERROR) << "CARBONYL_OPERATOR_WINDOW invalid WebContents or size";
@@ -92,22 +170,32 @@ bool OperatorWindow::Initialize(content::WebContents* web_contents,
   impl_->views_delegate = std::make_unique<OperatorViewsDelegate>();
   impl_->widget = std::make_unique<views::Widget>();
 
+  auto web_view =
+      std::make_unique<views::WebView>(web_contents->GetBrowserContext());
+  web_view->SetWebContents(web_contents);
+  web_view->SetFastResize(false);
+  views::WebView* web_view_ptr = web_view.get();
+
+  impl_->widget_delegate = std::make_unique<views::WidgetDelegate>();
+  impl_->widget_delegate->SetContentsView(std::move(web_view));
+  impl_->widget_delegate->SetHasWindowSizeControls(true);
+
   views::Widget::InitParams params(
-      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
-      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
   params.bounds = gfx::Rect(initial_size);
+  params.delegate = impl_->widget_delegate.get();
   params.name = "CarbonylOperatorWindow";
   params.wm_class_class = "carbonyl";
   params.wm_class_name = "Carbonyl";
   impl_->widget->Init(std::move(params));
-
-  auto web_view =
-      std::make_unique<views::WebView>(web_contents->GetBrowserContext());
-  web_view->SetWebContents(web_contents);
-  impl_->widget->SetContentsView(std::move(web_view));
+  impl_->observer = std::make_unique<OperatorWidgetObserver>(
+      impl_->widget.get(), web_contents, std::move(close_callback));
   impl_->widget->Show();
   impl_->widget->Activate();
-  web_contents->Focus();
+  // Enter the Views focus chain so WebView and the RenderWidgetHost agree on
+  // the focused text-input client. Calling WebContents::Focus() directly
+  // bypasses the FocusManager side of that contract.
+  web_view_ptr->RequestFocus();
 
   aura::Window* native_window = impl_->widget->GetNativeWindow();
   if (!native_window || !native_window->GetHost() ||

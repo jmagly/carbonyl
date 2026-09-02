@@ -177,10 +177,50 @@ This requires an X11 runtime; a headless-only build rejects the switch with an
 explicit diagnostic. The switch is off by default and does not disable
 sandboxing or site isolation.
 
+### Geometry, focus, and input contract
+
+Operator mode has one geometry path. The native `views::Widget` client bounds
+size its fill-layout `views::WebView`; WebView continuously resizes the already
+hosted `WebContents`. Aura/Ozone applies device scale and translates native
+coordinates into content coordinates. The terminal rows/columns remain a
+separate presentation of the same compositor damage and never resize the
+native page. There is no raw-Xlib input-forwarding path.
+
+The window uses normal window-manager decorations and size controls. Native
+activation restores the page's last focused view; deactivation stores it.
+Minimize/restore therefore preserves focus without injecting a synthetic DOM
+event. Closing the operator window requests orderly browser shutdown instead
+of leaving an invisible process running. Native input enters through Aura's
+normal event dispatcher; there is no Carbonyl event-forging path. The smoke
+activates the operator window and uses untargeted `xdotool` key and pointer
+commands, which take xdotool's XTEST path. It deliberately avoids `--window`
+for input because targeted xdotool input uses synthetic XSendEvent delivery.
+Kernel uinput remains a separate isolated-worker graduation check.
+
+The operator browser process intentionally omits Chromium's internal
+`--headless` marker. Chromium otherwise installs its mock input method, which
+forwards key events but cannot commit XKB/IME text. Renderer and utility child
+processes retain their normal headless marker, and the GPU child uses the X11
+UI message pump required by this explicit mode.
+
+Shutdown destroys the shell-owned `OperatorWindow` before
+`HeadlessBrowserImpl::Shutdown()` clears BrowserContexts and WebContents. The
+widget observer also holds a `WebContents::GetWeakPtr()` handle so queued native
+activation notifications cannot outlive the page during the shutdown drain.
+
+The regression harness independently asserts native resize, post-resize
+terminal progress, primary and context-menu clicks, wheel and keyboard input,
+stored-focus recovery across a real WM minimize/restore, native pixels, and
+close-triggered process exit. Composed Unicode/IME, monitor-scale changes, and
+kernel uinput remain isolated-worker graduation checks: support depends on the
+host XKB/IME and window-manager configuration and is not claimed from an
+Xvfb-only run.
+
 This is an architecture prototype, not yet the production operator mode. In
 particular, do not open a user-data directory concurrently in operator and
 headless processes. Orderly storage-flush acknowledgement (#292), the external
-profile lease (agent #136), complete geometry/input semantics (#287), and the
+profile lease (agent #136), the remaining isolated geometry/input matrix
+(#287), and the
 round-trip/crash QA matrix (QA #37) remain graduation gates. See
 [ADR-006](adr-006-native-operator-host.md).
 
