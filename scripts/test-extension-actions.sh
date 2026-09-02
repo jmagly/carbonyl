@@ -38,13 +38,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
+release_synthetic_modifiers() {
+  local key_name
+  for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
+    xdotool keyup "$key_name" 2>/dev/null || true
+  done
+}
+
 # XTEST key releases can outlive the window that handled the corresponding
 # press. Clear the modifiers used by the preceding UI test before creating a
 # new browser window, otherwise a delayed Alt+F4 can close this process during
 # its first navigation.
-for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
-  xdotool keyup "$key_name" 2>/dev/null || true
-done
+release_synthetic_modifiers
 sleep 0.25
 
 cp -a -- "$CARBONYL_ROOT/tests/fixtures/extensions/mv3-runtime" \
@@ -169,7 +174,7 @@ OPTIONS_WINDOW="$(xdotool search --class '^carbonyl-extension$' 2>/dev/null | he
 xdotool windowsize --sync "$OPTIONS_WINDOW" 520 420
 wait_for_color "$TEST_ROOT/options.png" 32 96 160 "options surface"
 focus_window "$OPTIONS_WINDOW" "options"
-xdotool key shift+Tab Return
+xdotool key --window "$OPTIONS_WINDOW" alt+F4 2>/dev/null || true
 for _ in $(seq 1 100); do
   xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 || break
   sleep 0.1
@@ -178,6 +183,7 @@ xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
   echo "options close control did not close its surface" >&2
   exit 1
 }
+release_synthetic_modifiers
 
 focus_window "$WINDOW_ID" "operator"
 xdotool key ctrl+l Tab Tab Tab Return
@@ -201,7 +207,7 @@ wait_for_color "$TEST_ROOT/popup-clicked.png" 32 160 80 "popup action"
 grep -q 'CARBONYL_EXTENSION_STATUS state=loaded' "$TEST_ROOT/terminal.log"
 grep -q 'data-carbonyl-extension-content="loaded"' "$TEST_ROOT/terminal.log"
 focus_window "$POPUP_WINDOW" "popup"
-xdotool key shift+Tab Return
+xdotool key --window "$POPUP_WINDOW" alt+F4 2>/dev/null || true
 for _ in $(seq 1 100); do
   xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 || break
   sleep 0.1
@@ -210,6 +216,7 @@ xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
   echo "popup close control did not close its surface" >&2
   exit 1
 }
+release_synthetic_modifiers
 focus_window "$WINDOW_ID" "operator"
 # From the address field, forward traversal reaches the first restart-only
 # management control. The accepted request must not unload the live action.

@@ -17,11 +17,13 @@ checks=(
   'src/browser/operator_window.cc:Disable on restart'
   'src/browser/operator_window.cc:CARBONYL_EXTENSION_MANAGEMENT'
   'src/browser/operator_window.cc:CARBONYL_EXTENSION_SURFACE navigation_denied'
+  'src/browser/operator_window.cc:CARBONYL_EXTENSION_SURFACE close accelerator'
   'src/browser/operator_window.cc:Extension popup'
   'src/browser/operator_window.cc:Extension options'
   'scripts/test-extension-runtime-integration.sh:state=disabled_restart'
   'scripts/test-extension-runtime-integration.sh:state=removed_restart'
   'scripts/test-extension-actions.sh:guest-local Xorg :99'
+  'scripts/test-extension-actions.sh:alt+F4 2>/dev/null'
   'docs/extensions.md:never mutate the live registry'
 )
 

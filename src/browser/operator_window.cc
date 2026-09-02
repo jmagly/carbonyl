@@ -92,7 +92,8 @@ class OperatorViewsDelegate final : public views::ViewsDelegate {
   }
 };
 
-class OperatorExtensionSurface final : public content::WebContentsObserver {
+class OperatorExtensionSurface final : public content::WebContentsObserver,
+                                       public ui::AcceleratorTarget {
  public:
   explicit OperatorExtensionSurface(views::Widget* parent) : parent_(parent) {}
   ~OperatorExtensionSurface() override { Close(); }
@@ -151,6 +152,11 @@ class OperatorExtensionSurface final : public content::WebContentsObserver {
     params.wm_class_class = "carbonyl-extension";
     params.wm_class_name = "CarbonylExtension";
     widget_->Init(std::move(params));
+    focus_manager_ = widget_->GetFocusManager();
+    CHECK(focus_manager_);
+    focus_manager_->RegisterAccelerator(
+        ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN),
+        ui::AcceleratorManager::kHighPriority, this);
     widget_->Show();
     widget_->Activate();
     web_view_->RequestFocus();
@@ -165,6 +171,10 @@ class OperatorExtensionSurface final : public content::WebContentsObserver {
 
   void Close() {
     Observe(nullptr);
+    if (focus_manager_) {
+      focus_manager_->UnregisterAccelerators(this);
+      focus_manager_ = nullptr;
+    }
     if (widget_) {
       widget_->CloseNow();
     }
@@ -179,6 +189,18 @@ class OperatorExtensionSurface final : public content::WebContentsObserver {
     Close();
     parent_ = nullptr;
   }
+
+  // ui::AcceleratorTarget:
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+    if (accelerator != ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN)) {
+      return false;
+    }
+    LOG(INFO) << "CARBONYL_EXTENSION_SURFACE close accelerator";
+    Close();
+    return true;
+  }
+
+  bool CanHandleAccelerators() const override { return widget_ != nullptr; }
 
  private:
   void DidStartNavigation(
@@ -199,6 +221,7 @@ class OperatorExtensionSurface final : public content::WebContentsObserver {
   std::unique_ptr<content::WebContents> web_contents_;
   std::unique_ptr<views::WidgetDelegate> widget_delegate_;
   std::unique_ptr<views::Widget> widget_;
+  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
   raw_ptr<views::WebView> web_view_ = nullptr;
 };
 
