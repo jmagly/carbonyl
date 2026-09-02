@@ -51,6 +51,10 @@ for runtime_resource in headless_lib_data.pak headless_lib_strings.pak; do
     "$CARBONYL_ROOT/scripts/copy-binaries.sh"
 done
 
+rg -q --fixed-strings -- \
+  'extensions/strings/extensions_strings_en-US.pak' \
+  "$CARBONYL_ROOT/chromium/patches/chromium/0041-carbonyl-include-extension-strings-in-headless-pack.patch"
+
 for fixture_contract in \
   'content_script.js:chrome.runtime.sendMessage' \
   'content_script.js:chrome.runtime.connect' \
