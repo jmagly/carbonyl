@@ -117,10 +117,18 @@ with open(sys.argv[1], "rb") as stream:
 PY
 }
 
+release_synthetic_modifiers() {
+    local key_name
+    for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
+        xdotool keyup "$key_name" 2>/dev/null || true
+    done
+}
+
 cleanup() {
     if [ -n "${CARBONYL_PID:-}" ] && kill -0 "$CARBONYL_PID" 2>/dev/null; then
         if [ -n "${WINDOW_ID:-}" ]; then
             xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+            release_synthetic_modifiers
             for _ in $(seq 1 50); do
                 kill -0 "$CARBONYL_PID" 2>/dev/null || break
                 sleep 0.1
@@ -450,6 +458,7 @@ fi
 # expected BadWindow race; the process-exit and status checks below are the
 # authoritative result.
 xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+release_synthetic_modifiers
 closed=0
 for _ in $(seq 1 "${CLOSE_ATTEMPTS:-100}"); do
     if ! kill -0 "$CARBONYL_PID" 2>/dev/null; then
