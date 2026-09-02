@@ -184,12 +184,15 @@ done
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
 xdotool key ctrl+l
-xdotool key ctrl+c
 copied_address=""
 for _ in $(seq 1 50); do
+    # FocusManager applies the Ctrl+L focus change asynchronously. Reissue
+    # copy while it converges instead of polling an empty clipboard produced
+    # by a Ctrl+C delivered in the same event turn.
+    sleep 0.05
+    xdotool key ctrl+c
     copied_address="$(xclip -selection clipboard -o 2>/dev/null || true)"
     [ "$copied_address" = "$BASE_URL/two" ] && break
-    sleep 0.05
 done
 [ "$copied_address" = "$BASE_URL/two" ] || {
     echo "FAIL: copied address is not the committed redirect destination"
