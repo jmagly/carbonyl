@@ -331,21 +331,23 @@ done
 [ "$keyboard_ready" = 1 ] || {
     echo "FAIL: trusted keyboard visual marker missing"; exit 1; }
 
-# Minimize the window only after the input has focus, assert that the WM really
-# unmapped it, then restore and type without another page click. The final
-# marker therefore proves the stored page focus was recovered.
-xdotool windowminimize "$WINDOW_ID"
-minimized=0
+# Hide the window only after the input has focus, assert that X11 really
+# unmapped it, then restore and type without another page click. The browser-QA
+# guest intentionally runs bare Xorg, so there is no window manager to honor a
+# _NET_WM_STATE_HIDDEN request. The final marker therefore proves the stored
+# page focus was recovered across the actual unmap/map lifecycle.
+xdotool windowunmap --sync "$WINDOW_ID"
+unmapped=0
 for _ in $(seq 1 "${MINIMIZE_ATTEMPTS:-50}"); do
     if xwininfo -id "$WINDOW_ID" 2>/dev/null |
         grep -q 'Map State: IsUnMapped'; then
-        minimized=1
+        unmapped=1
         break
     fi
     sleep "${MINIMIZE_INTERVAL:-0.1}"
 done
-[ "$minimized" = 1 ] || {
-    echo "FAIL: window manager did not minimize/unmap operator window"; exit 1; }
+[ "$unmapped" = 1 ] || {
+    echo "FAIL: X11 did not unmap operator window"; exit 1; }
 
 xdotool windowmap --sync "$WINDOW_ID"
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
@@ -441,9 +443,10 @@ if [ "$quadrants" -lt "${MIN_QUADRANT_RUNS:-50}" ]; then
     exit 1
 fi
 
-# A native WM close request must tear down the shell rather than leave an
-# invisible Carbonyl process behind.
-xdotool windowclose "$WINDOW_ID"
+# The bare-Xorg guest has no window manager to translate _NET_CLOSE_WINDOW.
+# Deliver the native Alt+F4 accelerator instead; it must tear down the shell
+# rather than leave an invisible Carbonyl process behind.
+xdotool key --window "$WINDOW_ID" alt+F4
 closed=0
 for _ in $(seq 1 "${CLOSE_ATTEMPTS:-100}"); do
     if ! kill -0 "$CARBONYL_PID" 2>/dev/null; then
@@ -453,15 +456,15 @@ for _ in $(seq 1 "${CLOSE_ATTEMPTS:-100}"); do
     sleep "${CLOSE_INTERVAL:-0.1}"
 done
 [ "$closed" = 1 ] || {
-    echo "FAIL: native close did not terminate Carbonyl"; exit 1; }
+    echo "FAIL: native Alt+F4 did not terminate Carbonyl"; exit 1; }
 if wait "$CARBONYL_PID"; then
     :
 else
     close_status=$?
     CARBONYL_PID=""
-    echo "FAIL: Carbonyl exited with status $close_status after native close"
+    echo "FAIL: Carbonyl exited with status $close_status after native Alt+F4"
     exit 1
 fi
 CARBONYL_PID=""
 
-echo "PASS: resize, post-resize terminal progress, XTEST input, focus recovery, and native close"
+echo "PASS: resize, post-resize terminal progress, XTEST input, focus recovery, and native Alt+F4 close"
