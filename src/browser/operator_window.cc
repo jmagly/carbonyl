@@ -349,12 +349,15 @@ class OperatorControls final : public content::WebContentsObserver,
     if (navigation_handle->HasCommitted() &&
         navigation_handle->IsInPrimaryMainFrame()) {
       renderer_failed_ = false;
-      UpdateState();
+      // A committed main-frame navigation is authoritative even if the Views
+      // focus transfer from SubmitAddress() has not completed yet. In
+      // particular, redirects must replace the typed pre-redirect URL.
+      UpdateState(/*force_address=*/true);
     }
   }
 
   void NavigationEntryCommitted(const content::LoadCommittedDetails&) override {
-    UpdateState();
+    UpdateState(/*force_address=*/true);
   }
 
   void NavigationEntryChanged(const content::EntryChangedDetails&) override {
