@@ -47,7 +47,6 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
-#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -429,17 +428,10 @@ class OperatorControls final : public content::WebContentsObserver,
     if (address_->HasFocus() && accelerator.IsCtrlDown()) {
       switch (accelerator.key_code()) {
         case ui::VKEY_A:
-          address_->ExecuteTextEditCommand(ui::TextEditCommand::SELECT_ALL);
-          return true;
         case ui::VKEY_C:
-          address_->ExecuteTextEditCommand(ui::TextEditCommand::COPY);
-          return true;
         case ui::VKEY_V:
-          address_->ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
-          return true;
         case ui::VKEY_X:
-          address_->ExecuteTextEditCommand(ui::TextEditCommand::CUT);
-          return true;
+          return address_->AcceleratorPressed(accelerator);
         default:
           break;
       }
