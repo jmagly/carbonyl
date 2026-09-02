@@ -234,12 +234,27 @@ done
 # submission.
 UNICODE_URL="$BASE_URL/✓"
 printf '%s' "$UNICODE_URL" | xclip -selection clipboard
+unicode_stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
 xdotool key ctrl+l
 xdotool key ctrl+v
 xdotool key Return
 wait_for_color 17 204 68 "Unicode pasted address"
+for _ in $(seq 1 100); do
+    grep -q '^GET /%E2%9C%93$' "$SERVER_LOG" && break
+    sleep 0.1
+done
 grep -q '^GET /%E2%9C%93$' "$SERVER_LOG" || {
     echo "FAIL: Unicode address was not encoded and submitted"; exit 1; }
+unicode_stopped_after="$unicode_stopped_before"
+for _ in $(seq 1 100); do
+    unicode_stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+    [ "$unicode_stopped_after" -gt "$unicode_stopped_before" ] && break
+    sleep 0.1
+done
+[ "$unicode_stopped_after" -gt "$unicode_stopped_before" ] || {
+    echo "FAIL: Unicode address did not reach browser load-stop state"
+    exit 1
+}
 xdotool key alt+Left
 wait_for_color 34 170 238 "return from Unicode address"
 
