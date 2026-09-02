@@ -17,6 +17,7 @@
 #include "components/user_prefs/user_prefs.h"
 #include "components/value_store/value_store_factory_impl.h"
 #include "content/public/browser/browser_context.h"
+#include "extensions/browser/api/web_request/web_request_event_router_factory.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extension_registry_factory.h"
@@ -192,6 +193,12 @@ std::unique_ptr<PrefService> CreateExtensionProfilePrefs(
 
 bool InitializeExtensionContext(content::BrowserContext* browser_context,
                                 std::string* error) {
+  // Carbonyl's network hook can lazily create WebRequestAPI. Chromium 150's
+  // WebRequestAPI::Shutdown() unconditionally looks up the per-context
+  // WebRequestEventRouter, so materialize that nominally eager dependency
+  // before navigation and keep its shutdown ordering deterministic.
+  CHECK(extensions::WebRequestEventRouterFactory::GetForBrowserContext(
+      browser_context));
   auto* system = static_cast<extensions::CarbonylExtensionSystem*>(
       extensions::ExtensionSystem::Get(browser_context));
   system->InitForRegularProfile(/*extensions_enabled=*/true);
