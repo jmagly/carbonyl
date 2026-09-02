@@ -60,11 +60,12 @@ python3 - "$OPERATOR_PATCH" <<'PY'
 import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
-reset = text.find("+  operator_window_.reset();")
+reset = text.find("operator_window_.reset();")
+deferred = text.find("browser_->BrowserMainThread()->PostTask(", reset)
 shutdown = text.find("browser_.ExtractAsDangling()->Shutdown();", reset)
-if reset < 0 or shutdown < 0 or reset > shutdown:
+if reset < 0 or deferred < 0 or shutdown < 0 or not reset < deferred < shutdown:
     raise SystemExit(
-        "OperatorWindow must be destroyed before HeadlessBrowser contexts"
+        "OperatorWindow teardown must precede deferred HeadlessBrowser shutdown"
     )
 operator_mode = text.find("+  const bool use_operator_window =")
 real_ime = text.find("+      !use_operator_window) {", operator_mode)
