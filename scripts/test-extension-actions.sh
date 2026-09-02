@@ -28,9 +28,19 @@ CARBONYL_ROOT="$(cd "$(dirname -- "$0")/.." && pwd)"
 TEST_ROOT="$(mktemp -d /tmp/carbonyl-extension-actions.XXXXXX)"
 SERVER_PID=
 CARBONYL_PID=
+WINDOW_ID=
 
 cleanup() {
-  [ -z "$CARBONYL_PID" ] || kill -TERM "$CARBONYL_PID" 2>/dev/null || true
+  if [ -n "$CARBONYL_PID" ] && kill -0 "$CARBONYL_PID" 2>/dev/null; then
+    if [ -n "$WINDOW_ID" ]; then
+      xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+      for _ in $(seq 1 50); do
+        kill -0 "$CARBONYL_PID" 2>/dev/null || break
+        sleep 0.1
+      done
+    fi
+    kill -TERM "$CARBONYL_PID" 2>/dev/null || true
+  fi
   [ -z "$CARBONYL_PID" ] || wait "$CARBONYL_PID" 2>/dev/null || true
   [ -z "$SERVER_PID" ] || kill -TERM "$SERVER_PID" 2>/dev/null || true
   [ -z "$SERVER_PID" ] || wait "$SERVER_PID" 2>/dev/null || true
@@ -135,7 +145,6 @@ COLORTERM=truecolor script -q -f -c "$quoted" "$TEST_ROOT/terminal.log" \
   </dev/null >/dev/null &
 CARBONYL_PID=$!
 
-WINDOW_ID=
 for _ in $(seq 1 150); do
   WINDOW_ID="$(xdotool search --class '^carbonyl$' 2>/dev/null | head -1 || true)"
   [ -z "$WINDOW_ID" ] || break
@@ -154,6 +163,8 @@ rg -q 'CARBONYL_EXTENSION_ACTION_STATE [a-p]{32}:1:1:1;' \
     echo "action title/badge state did not become operator-visible" >&2
     exit 1
   }
+wait_for_color "$TEST_ROOT/content-script.png" 80 32 160 \
+  "content-script state"
 
 # The restart-mode toolbar order after the address field is Disable, Remove,
 # Action, Options. Traverse that explicit native focus chain so page-level
@@ -205,7 +216,6 @@ xdotool key Tab Return
 wait_for_color "$TEST_ROOT/popup-clicked.png" 32 160 80 "popup action"
 
 grep -q 'CARBONYL_EXTENSION_STATUS state=loaded' "$TEST_ROOT/terminal.log"
-grep -q 'data-carbonyl-extension-content="loaded"' "$TEST_ROOT/terminal.log"
 focus_window "$POPUP_WINDOW" "popup"
 xdotool key --window "$POPUP_WINDOW" alt+F4 2>/dev/null || true
 for _ in $(seq 1 100); do
