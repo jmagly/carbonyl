@@ -15,8 +15,9 @@ class Origin;
 
 namespace carbonyl {
 
-// Installs the renderer-process extension client. Dispatcher creation and
-// script execution remain gated by the browser's paired opt-in switches.
+// Installs the renderer-process extension client. Its process interface is
+// always registered because browser keyed services bind it even when loading
+// is disabled; frame initialization and script execution remain opt-in.
 void InstallExtensionsRendererClient();
 void ExtensionsRenderThreadStarted();
 void ExtensionsRenderFrameCreated(content::RenderFrame* render_frame);

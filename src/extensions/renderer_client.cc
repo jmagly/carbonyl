@@ -70,9 +70,12 @@ void InstallExtensionsRendererClient() {
 }
 
 void ExtensionsRenderThreadStarted() {
-  if (RuntimeEnabled()) {
-    g_client->RenderThreadStarted();
-  }
+  // Chromium constructs RendererStartupHelper factories even while extension
+  // loading is disabled, and those factories bind extensions.mojom.Renderer.
+  // The dispatcher must therefore register its process interface
+  // unconditionally; command-line and per-frame gates below still prevent
+  // extension execution without explicit opt-in.
+  g_client->RenderThreadStarted();
 }
 
 void ExtensionsRenderFrameCreated(content::RenderFrame* render_frame) {

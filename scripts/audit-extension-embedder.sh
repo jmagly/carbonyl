@@ -253,6 +253,16 @@ for check in "${runtime_contract_checks[@]}"; do
     fi
 done
 
+render_thread_hook=$(sed -n \
+    '/^void ExtensionsRenderThreadStarted()/,/^}/p' \
+    "$CARBONYL_ROOT/src/extensions/renderer_client.cc")
+if grep -q 'g_client->RenderThreadStarted();' <<<"$render_thread_hook" && \
+   ! grep -q 'RuntimeEnabled' <<<"$render_thread_hook"; then
+    pass "renderer process interface is registered before opt-in frame gates"
+else
+    fail "extensions.mojom.Renderer registration must not be opt-in gated"
+fi
+
 if contains headless/lib/browser/headless_browser_context_impl.cc \
     'DestroyBrowserContextServices'; then
     pass "BrowserContext keyed-service teardown seam is present"
