@@ -175,12 +175,15 @@ class OperatorExtensionSurface final : public content::WebContentsObserver,
       focus_manager_->UnregisterAccelerators(this);
       focus_manager_ = nullptr;
     }
+    // CloseNow destroys the owned View tree synchronously. Release the
+    // non-owning WebView handle first so allocator dangling-pointer checks see
+    // the same teardown ordering as the parent operator widget.
+    web_view_ = nullptr;
     if (widget_) {
       widget_->CloseNow();
     }
     widget_.reset();
     widget_delegate_.reset();
-    web_view_ = nullptr;
     web_contents_.reset();
     allowed_extension_id_.clear();
   }
