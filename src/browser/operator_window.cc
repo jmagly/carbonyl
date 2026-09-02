@@ -431,6 +431,9 @@ class OperatorControls final : public content::WebContentsObserver,
         case ui::VKEY_C:
         case ui::VKEY_V:
         case ui::VKEY_X:
+          LOG(INFO) << "CARBONYL_OPERATOR_EDIT key="
+                    << static_cast<int>(accelerator.key_code())
+                    << " selected=" << address_->GetSelectedText().size();
           return address_->AcceleratorPressed(accelerator);
         default:
           break;
