@@ -20,6 +20,7 @@ required_source_checks=(
   'src/extensions/extension_system.cc:DISALLOWED_BY_POLICY'
   'src/extensions/extension_system.cc:Extension Preferences'
   'src/extensions/extension_system.cc:StateStore::BackendType::RULES'
+  'src/extensions/extension_system.cc:RulesMonitorService::Get'
   'src/extensions/extension_loader.cc:IndexAndPersistRulesOnInstall'
   'src/extensions/extension_loader.cc:PermissionsUpdater'
   'src/extensions/extension_loader.cc:CARBONYL_EXTENSION_DIAGNOSTIC'
