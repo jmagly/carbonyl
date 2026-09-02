@@ -452,6 +452,12 @@ Plus standard Chromium flags. The ones that matter most for Carbonyl:
                              accessibility extraction (see scripts/test-b64-text.sh)
 ```
 
+`--carbonyl-operator-window` implicitly enables bitmap text rendering. The
+native surface therefore keeps the page's CSS font families and sizes, while
+the simultaneous terminal view renders the same compositor raster with
+quadrant cells. Terminal-only sessions keep their existing text-extraction
+behavior unless `--bitmap` is requested explicitly.
+
 ## Environment variables
 
 | Variable | Effect | Mode |
