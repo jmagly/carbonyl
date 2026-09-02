@@ -46,7 +46,6 @@ fi
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-controls-test.XXXXXX")"
 SERVER_LOG="$WORK_DIR/server.log"
 TERM_LOG="$WORK_DIR/terminal.log"
-CHROMIUM_LOG="$WORK_DIR/chromium.log"
 FRAME_PNG="$WORK_DIR/frame.png"
 
 cleanup() {
@@ -79,8 +78,7 @@ CARBONYL_CMD=(
     "$CARBONYL_BIN"
     --ozone-platform=x11
     --carbonyl-operator-window
-    --enable-logging
-    "--log-file=$CHROMIUM_LOG"
+    --debug
     --v=1
     "--user-data-dir=$WORK_DIR/profile"
     --viewport=1000x700
@@ -147,6 +145,14 @@ wait_for_color() {
         sleep 0.1
     done
     echo "FAIL: $label pixels did not appear"
+    # Close through the native lifecycle before returning failure. Besides
+    # exercising the browser-owned shutdown path, this lets Carbonyl's outer
+    # terminal wrapper forward the inner process diagnostics into TERM_LOG.
+    xdotool windowclose "$WINDOW_ID" 2>/dev/null || true
+    for _ in $(seq 1 50); do
+        ! kill -0 "$CARBONYL_PID" 2>/dev/null && break
+        sleep 0.1
+    done
     return 1
 }
 
