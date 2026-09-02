@@ -239,10 +239,23 @@ bool CarbonylExtensionLoader::LoadOne(const base::FilePath& path,
     return true;
   }
 
+  const size_t warning_count_before_ruleset_indexing =
+      extension->install_warnings().size();
   auto ruleset_result = declarative_net_request::InstallIndexHelper::
       IndexAndPersistRulesOnInstall(*extension);
   if (!ruleset_result.has_value()) {
     return Fail(error, "invalid_dnr_ruleset", ruleset_result.error());
+  }
+  // Chromium preserves compatibility by downgrading individual malformed DNR
+  // rules to install warnings and indexing the remaining rules. Carbonyl's
+  // explicitly selected local extensions are fail-closed instead: a partially
+  // accepted security policy is more dangerous than rejecting the extension.
+  if (extension->install_warnings().size() >
+      warning_count_before_ruleset_indexing) {
+    return Fail(error, "invalid_dnr_ruleset",
+                extension->install_warnings()
+                    .at(warning_count_before_ruleset_indexing)
+                    .message);
   }
 
   PermissionsUpdater permissions(browser_context_);

@@ -23,6 +23,7 @@ required_source_checks=(
   'src/extensions/extension_system.cc:RulesMonitorService::Get'
   'src/extensions/extension_system.cc:WebRequestAPI>::Get'
   'src/extensions/extension_loader.cc:IndexAndPersistRulesOnInstall'
+  'src/extensions/extension_loader.cc:warning_count_before_ruleset_indexing'
   'src/extensions/extension_loader.cc:PermissionsUpdater'
   'src/extensions/extension_loader.cc:CARBONYL_EXTENSION_DIAGNOSTIC'
   'src/extensions/extension_loader.cc:unsupported_permission'
