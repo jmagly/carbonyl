@@ -4,6 +4,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "chrome/common/extensions/chrome_extensions_api_provider.h"
 #include "extensions/common/core_extensions_api_provider.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/permissions/permission_message_provider.h"
@@ -40,6 +41,10 @@ class CarbonylPermissionMessageProvider : public PermissionMessageProvider {
 class CarbonylExtensionsClient : public ExtensionsClient {
  public:
   CarbonylExtensionsClient() {
+    // Chrome owns the generated schema for MV3 action.*. Carbonyl registers
+    // only the two matching browser functions it supports; every other
+    // Chrome-specific request remains unregistered and therefore fail-closed.
+    AddAPIProvider(std::make_unique<ChromeExtensionsAPIProvider>());
     AddAPIProvider(std::make_unique<CoreExtensionsAPIProvider>());
   }
 

@@ -28,6 +28,8 @@ required_source_checks=(
   'src/extensions/extension_loader.cc:unsupported_host_scheme'
   'src/extensions/browser_client.cc:CarbonylRuntimeAPIDelegate'
   'src/extensions/browser_client.cc:CarbonylMessagingDelegate'
+  'src/extensions/browser_client.cc:CarbonylActionSetTitleFunction'
+  'src/extensions/browser_client.cc:CarbonylActionSetBadgeTextFunction'
   'src/extensions/browser_client.cc:CarbonylExtensionManagementClient'
   'src/extensions/browser_client.cc:CarbonylExtensionWebContentsObserver'
   'src/extensions/renderer_client.cc:RunScriptsAtDocumentStart'

@@ -6,6 +6,7 @@ source_set("common_client") {
 
   deps = [
     "//base",
+    "//chrome/common/extensions",
     "//extensions/common",
     "//extensions/common:core_api_provider",
     "//url",

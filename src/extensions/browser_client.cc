@@ -23,11 +23,15 @@
 #include "extensions/browser/api/messaging/messaging_delegate.h"
 #include "extensions/browser/api/runtime/runtime_api_delegate.h"
 #include "extensions/browser/browser_context_keyed_service_factories.h"
+#include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_host_delegate.h"
 #include "extensions/browser/extension_management_client.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_interface_binders.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/extensions_browser_api_provider.h"
 #include "extensions/browser/kiosk/kiosk_delegate.h"
 #include "extensions/browser/safe_browsing_delegate.h"
 #include "extensions/browser/updater/null_extension_cache.h"
@@ -93,6 +97,70 @@ class CarbonylExtensionsAPIClient final : public ExtensionsAPIClient {
 
  private:
   CarbonylMessagingDelegate messaging_delegate_;
+};
+
+class CarbonylActionSetTitleFunction final : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.setTitle", ACTION_SETTITLE)
+
+ protected:
+  ~CarbonylActionSetTitleFunction() override = default;
+
+  ResponseAction Run() override {
+    const base::DictValue* details =
+        args().size() == 1 ? args().front().GetIfDict() : nullptr;
+    const std::string* title = details ? details->FindString("title") : nullptr;
+    if (!title || (details && details->Find("tabId"))) {
+      return RespondNow(Error("Carbonyl supports only default action titles"));
+    }
+    auto* action = ExtensionActionManager::Get(browser_context())
+                       ->GetExtensionAction(*extension());
+    if (!action) {
+      return RespondNow(Error("Extension has no action"));
+    }
+    action->SetTitle(ExtensionAction::kDefaultTabId, *title);
+    return RespondNow(NoArguments());
+  }
+};
+
+class CarbonylActionSetBadgeTextFunction final : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.setBadgeText", ACTION_SETBADGETEXT)
+
+ protected:
+  ~CarbonylActionSetBadgeTextFunction() override = default;
+
+  ResponseAction Run() override {
+    const base::DictValue* details =
+        args().size() == 1 ? args().front().GetIfDict() : nullptr;
+    if (!details || details->Find("tabId")) {
+      return RespondNow(Error("Carbonyl supports only default action badges"));
+    }
+    auto* action = ExtensionActionManager::Get(browser_context())
+                       ->GetExtensionAction(*extension());
+    if (!action) {
+      return RespondNow(Error("Extension has no action"));
+    }
+    if (const std::string* text = details->FindString("text")) {
+      action->SetBadgeText(ExtensionAction::kDefaultTabId, *text);
+    } else {
+      action->ClearBadgeText(ExtensionAction::kDefaultTabId);
+    }
+    return RespondNow(NoArguments());
+  }
+};
+
+class CarbonylExtensionsBrowserAPIProvider final
+    : public ExtensionsBrowserAPIProvider {
+ public:
+  CarbonylExtensionsBrowserAPIProvider() = default;
+  ~CarbonylExtensionsBrowserAPIProvider() override = default;
+
+  void RegisterExtensionFunctions(
+      ExtensionFunctionRegistry* registry) override {
+    registry->Register<CarbonylActionSetTitleFunction>();
+    registry->Register<CarbonylActionSetBadgeTextFunction>();
+  }
 };
 
 // Carbonyl deliberately does not provide browser-owned update, navigation, or
@@ -246,6 +314,7 @@ class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
         management_client_(
             std::make_unique<CarbonylExtensionManagementClient>()) {
     AddAPIProvider(std::make_unique<CoreExtensionsBrowserAPIProvider>());
+    AddAPIProvider(std::make_unique<CarbonylExtensionsBrowserAPIProvider>());
   }
   ~CarbonylExtensionsBrowserClient() override = default;
 
