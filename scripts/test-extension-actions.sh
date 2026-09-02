@@ -252,6 +252,6 @@ kill -0 "$CARBONYL_PID" 2>/dev/null && {
 }
 wait "$CARBONYL_PID"
 CARBONYL_PID=
-grep -q 'CARBONYL_STORAGE_FLUSH_RESULT result=complete' \
+grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' \
   "$TEST_ROOT/terminal.log"
 echo "PASS: extension action, popup, options, focus, resize, and diagnostics"
