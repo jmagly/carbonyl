@@ -80,7 +80,7 @@ Key mental model: **the final `carbonyl` binary is a patched Chromium `headless_
 | Rust lib (debug) | `build/x86_64-unknown-linux-gnu/debug/libcarbonyl.so` | ~8 MB | `cargo build` |
 | Rust lib (release) | `build/x86_64-unknown-linux-gnu/release/libcarbonyl.so` | ~800 KB | `cargo build --release` |
 | Raw Chromium binary | `chromium/src/out/Default/headless_shell` | ~3.5 GB debug / ~200 MB release | `ninja -C chromium/src/out/Default headless:headless_shell` |
-| Install layout | `build/pre-built/x86_64-unknown-linux-gnu/{carbonyl,libcarbonyl.so,icudtl.dat,libEGL.so,libGLESv2.so,v8_context_snapshot.bin}` | ~1 GB | `scripts/copy-binaries.sh` |
+| Install layout | `build/pre-built/x86_64-unknown-linux-gnu/{carbonyl,libcarbonyl.so,icudtl.dat,headless_lib_data.pak,headless_lib_strings.pak,libEGL.so,libGLESv2.so,v8_context_snapshot.bin}` | ~1 GB | `scripts/copy-binaries.sh` |
 | Packaged runtime | `build/x86_64-unknown-linux-gnu.tgz` and the `carbonyl-VERSION-...tgz` alongside | ~75 MB (release, stripped) | `scripts/build.sh` or release pipeline |
 
 The `build/pre-built/...` directory is what `carbonyl-agent install` populates on a consumer machine. When you want to test a change locally, update the file in `build/pre-built/.../` and any `carbonyl` invocation pointed at that directory picks it up.

@@ -22,3 +22,6 @@ chrome.runtime.onConnect.addListener(port => {
     }
   });
 });
+
+chrome.action.setTitle({title: "Carbonyl fixture action ready"});
+chrome.action.setBadgeText({text: "QA"});

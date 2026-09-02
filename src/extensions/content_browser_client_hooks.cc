@@ -1,4 +1,5 @@
 #include "carbonyl/src/extensions/content_browser_client_hooks.h"
+#include "carbonyl/src/extensions/switches.h"
 
 #include <memory>
 #include <utility>
@@ -112,6 +113,12 @@ bool IsSuitableExtensionProcessHost(content::RenderProcessHost* process_host,
 void AppendExtensionRendererCommandLineSwitches(
     base::CommandLine* command_line,
     content::RenderProcessHost* process_host) {
+  const auto& browser_command_line = *base::CommandLine::ForCurrentProcess();
+  if (!browser_command_line.HasSwitch(
+          extensions::switches::kDisableExtensions) &&
+      browser_command_line.HasSwitch(extensions::switches::kLoadExtension)) {
+    command_line->AppendSwitch(kEnableExtensionsRendererSwitch);
+  }
   if (extensions::ProcessMap::Get(process_host->GetBrowserContext())
           ->GetEnabledExtensionByProcessID(process_host->GetID())) {
     command_line->AppendSwitch(extensions::switches::kExtensionProcess);

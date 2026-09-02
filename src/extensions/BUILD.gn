@@ -6,6 +6,7 @@ source_set("common_client") {
 
   deps = [
     "//base",
+    "//chrome/common/extensions",
     "//extensions/common",
     "//extensions/common:core_api_provider",
     "//url",
@@ -22,6 +23,9 @@ source_set("browser_client") {
     "extension_loader.h",
     "extension_system.cc",
     "extension_system.h",
+    "management.cc",
+    "management.h",
+    "switches.h",
   ]
 
   deps = [
@@ -37,6 +41,7 @@ source_set("browser_client") {
     "//extensions/browser",
     "//extensions/browser/updater:updater",
     "//extensions/common",
+    "//extensions/common:mojom",
     "//mojo/public/cpp/bindings",
     "//services/network/public/mojom",
     "//services/network/public/cpp",
@@ -48,6 +53,7 @@ source_set("renderer_client") {
   sources = [
     "renderer_client.cc",
     "renderer_client.h",
+    "switches.h",
   ]
 
   deps = [

@@ -5,25 +5,27 @@
 namespace carbonyl {
 
 std::vector<const char*> BuildOperatorShellArguments(
-    int argc,
-    const char* const* argv) {
+    std::span<const char* const> arguments) {
   bool has_operator_argument = false;
-  for (int index = 1; index < argc; ++index) {
-    has_operator_argument |=
-        std::string_view(argv[index]) == kOperatorShellArgument;
+  if (!arguments.empty()) {
+    for (const char* argument : arguments.subspan(1)) {
+      has_operator_argument |=
+          std::string_view(argument) == kOperatorShellArgument;
+    }
   }
 
   std::vector<const char*> operator_argv;
-  operator_argv.reserve(static_cast<std::size_t>(argc) +
-                        (has_operator_argument ? 0 : 1));
-  if (argc > 0) {
-    operator_argv.push_back(argv[0]);
+  operator_argv.reserve(arguments.size() + (has_operator_argument ? 0 : 1));
+  if (!arguments.empty()) {
+    operator_argv.push_back(arguments.front());
   }
   if (!has_operator_argument) {
     operator_argv.push_back(kOperatorShellArgument);
   }
-  for (int index = 1; index < argc; ++index) {
-    operator_argv.push_back(argv[index]);
+  if (!arguments.empty()) {
+    for (const char* argument : arguments.subspan(1)) {
+      operator_argv.push_back(argument);
+    }
   }
   return operator_argv;
 }

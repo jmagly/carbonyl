@@ -49,6 +49,10 @@ TERM_LOG="$WORK_DIR/terminal.log"
 FRAME_PNG="$WORK_DIR/frame.png"
 
 cleanup() {
+    if [ -n "${XCLIP_PID:-}" ]; then
+        kill -TERM "$XCLIP_PID" 2>/dev/null || true
+        wait "$XCLIP_PID" 2>/dev/null || true
+    fi
     if [ -n "${CARBONYL_PID:-}" ]; then
         kill -TERM "$CARBONYL_PID" 2>/dev/null || true
         wait "$CARBONYL_PID" 2>/dev/null || true
@@ -78,6 +82,7 @@ CARBONYL_CMD=(
     "$CARBONYL_BIN"
     --ozone-platform=x11
     --carbonyl-operator-window
+    --debug
     --v=1
     "--user-data-dir=$WORK_DIR/profile"
     --viewport=1000x700
@@ -87,7 +92,8 @@ if [ "${CARBONYL_TEST_NO_SANDBOX:-0}" = 1 ]; then
 fi
 CARBONYL_CMD+=("$BASE_URL/one")
 printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
-COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" &
+COLORTERM=truecolor script -q -f -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
+    </dev/null >/dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=""
@@ -109,6 +115,9 @@ for _ in $(seq 1 150); do
     sleep 0.1
 done
 [ -n "$WINDOW_ID" ] || { echo "FAIL: operator window not found"; exit 1; }
+echo "Operator window id: $WINDOW_ID"
+xdotool getwindowgeometry --shell "$WINDOW_ID" \
+    | sed 's/^/Operator window /'
 xdotool windowmap --sync "$WINDOW_ID"
 xdotool windowraise "$WINDOW_ID"
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
@@ -140,6 +149,33 @@ wait_for_color() {
         sleep 0.1
     done
     echo "FAIL: $label pixels did not appear"
+    # Close through the native lifecycle before returning failure. Besides
+    # exercising the browser-owned shutdown path, this lets Carbonyl's outer
+    # terminal wrapper forward the inner process diagnostics into TERM_LOG.
+    xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+    for _ in $(seq 1 50); do
+        ! kill -0 "$CARBONYL_PID" 2>/dev/null && break
+        sleep 0.1
+    done
+    return 1
+}
+
+load_stop_count() {
+    # `script` records terminal painting and diagnostics in the same stream, so
+    # multiple state records may share one physical line. Count matched records,
+    # not lines, or a fast navigation can be invisible to the synchronization.
+    grep -aoE 'CARBONYL_OPERATOR_CONTROLS back=[01] forward=[01] loading=0' \
+        "$TERM_LOG" | wc -l || true
+}
+
+wait_for_load_stop_after() {
+    local before=$1 label=$2 after=$1
+    for _ in $(seq 1 100); do
+        after="$(load_stop_count)"
+        if [ "$after" -gt "$before" ]; then return 0; fi
+        sleep 0.1
+    done
+    echo "FAIL: $label did not reach browser load-stop state"
     return 1
 }
 
@@ -148,6 +184,7 @@ grep -q "security=Local - $BASE_URL" "$TERM_LOG" || {
     echo "FAIL: trustworthy local-origin state missing"; exit 1; }
 
 # Address submission and redirect synchronization.
+redirect_stopped_before="$(load_stop_count)"
 xdotool key ctrl+l
 xdotool type --delay 10 "$BASE_URL/redirect"
 xdotool key Return
@@ -156,37 +193,56 @@ grep -q '^GET /redirect$' "$SERVER_LOG" || {
     echo "FAIL: address submission did not reach redirect fixture"; exit 1; }
 grep -q '^GET /two$' "$SERVER_LOG" || {
     echo "FAIL: redirect destination was not committed"; exit 1; }
+wait_for_load_stop_after "$redirect_stopped_before" "redirect destination"
 
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
-xdotool key ctrl+l
-xdotool key ctrl+c
+xdotool mousemove --sync --window "$WINDOW_ID" 500 20 click 1
+xdotool mousemove --sync --window "$WINDOW_ID" 990 20
+xdotool mousedown 1
+xdotool mousemove --sync --window "$WINDOW_ID" 240 20
+xdotool mouseup 1
+sleep 0.1
+capture_frame "$WORK_DIR/clipboard-focus.png"
 copied_address=""
 for _ in $(seq 1 50); do
+    # Reissue copy while native pointer focus settles instead of polling an
+    # empty clipboard produced by a Ctrl+C in the same event turn.
+    sleep 0.05
+    xdotool key ctrl+c
     copied_address="$(xclip -selection clipboard -o 2>/dev/null || true)"
     [ "$copied_address" = "$BASE_URL/two" ] && break
-    sleep 0.05
 done
 [ "$copied_address" = "$BASE_URL/two" ] || {
-    echo "FAIL: copied address is not the committed redirect destination"
+    printf 'FAIL: copied address is not the committed redirect destination (got %q)\n' \
+        "$copied_address"
     exit 1
 }
 xdotool key Escape
 
 # Stable DIP geometry makes the browser-owned pointer targets deterministic:
 # Back center=(38,20), Forward center=(114,20) in the widget client.
+pointer_back_stopped_before="$(load_stop_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" 38 20 click 1
 wait_for_color 17 204 68 "pointer Back"
+wait_for_load_stop_after "$pointer_back_stopped_before" "pointer Back"
+pointer_forward_stopped_before="$(load_stop_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" 114 20 click 1
 wait_for_color 34 170 238 "pointer Forward"
+wait_for_load_stop_after "$pointer_forward_stopped_before" "pointer Forward"
 
 # Keyboard history controls must work and must not leak to page JavaScript.
+keyboard_back_stopped_before="$(load_stop_count)"
 xdotool key alt+Left
 wait_for_color 17 204 68 "keyboard Back"
+wait_for_load_stop_after "$keyboard_back_stopped_before" "keyboard Back"
+keyboard_forward_stopped_before="$(load_stop_count)"
 xdotool key alt+Right
 wait_for_color 34 170 238 "keyboard Forward"
+wait_for_load_stop_after "$keyboard_forward_stopped_before" "keyboard Forward"
 
 two_requests_before="$(grep -c '^GET /two$' "$SERVER_LOG" || true)"
+reload_stopped_before="$(load_stop_count)"
 xdotool key ctrl+r
 for _ in $(seq 1 100); do
     two_requests_after="$(grep -c '^GET /two$' "$SERVER_LOG" || true)"
@@ -195,20 +251,36 @@ for _ in $(seq 1 100); do
 done
 [ "$two_requests_after" -gt "$two_requests_before" ] || {
     echo "FAIL: Reload did not issue a new request"; exit 1; }
+wait_for_load_stop_after "$reload_stopped_before" "Reload"
 
 # Clipboard input exercises native Unicode editing without xdotool's ASCII-only
 # type command. URL fixup must encode the path and retain browser ownership of
 # submission.
 UNICODE_URL="$BASE_URL/✓"
-printf '%s' "$UNICODE_URL" | xclip -selection clipboard
+# Quiet mode remains in the foreground, unlike xclip's default/silent mode,
+# which forks a clipboard owner that can outlive the test and retain an
+# orchestrator/tee file descriptor after the test has passed.
+printf '%s' "$UNICODE_URL" | xclip -selection clipboard -quiet &
+XCLIP_PID=$!
+unicode_stopped_before="$(load_stop_count)"
 xdotool key ctrl+l
 xdotool key ctrl+v
 xdotool key Return
 wait_for_color 17 204 68 "Unicode pasted address"
+for _ in $(seq 1 100); do
+    grep -q '^GET /%E2%9C%93$' "$SERVER_LOG" && break
+    sleep 0.1
+done
 grep -q '^GET /%E2%9C%93$' "$SERVER_LOG" || {
     echo "FAIL: Unicode address was not encoded and submitted"; exit 1; }
+wait_for_load_stop_after "$unicode_stopped_before" "Unicode address"
+kill -TERM "$XCLIP_PID" 2>/dev/null || true
+wait "$XCLIP_PID" 2>/dev/null || true
+XCLIP_PID=""
+unicode_back_stopped_before="$(load_stop_count)"
 xdotool key alt+Left
 wait_for_color 34 170 238 "return from Unicode address"
+wait_for_load_stop_after "$unicode_back_stopped_before" "return from Unicode address"
 
 # Escape cancels address editing and returns focus to the page's prior input.
 xdotool key ctrl+l
@@ -234,15 +306,9 @@ for _ in $(seq 1 100); do
 done
 grep -q '^GET /slow$' "$SERVER_LOG" || {
     echo "FAIL: slow fixture did not start"; exit 1; }
-stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+stopped_before="$(load_stop_count)"
 xdotool key ctrl+r
-for _ in $(seq 1 100); do
-    stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
-    [ "$stopped_after" -gt "$stopped_before" ] && break
-    sleep 0.1
-done
-[ "$stopped_after" -gt "$stopped_before" ] || {
-    echo "FAIL: Stop did not end the incomplete navigation"; exit 1; }
+wait_for_load_stop_after "$stopped_before" "Stop"
 
 # Renderer/network failure state remains browser-owned and explicit.
 kill -TERM "$SERVER_PID"
@@ -262,7 +328,10 @@ done
 [ "$error_ready" = 1 ] || {
     echo "FAIL: committed error-page security state missing"; exit 1; }
 
-xdotool windowclose "$WINDOW_ID"
+# The key-down closes the window synchronously. Xdotool may receive BadWindow
+# while sending the matching key-up, which is expected once the browser-owned
+# close lifecycle has already begun.
+xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
 for _ in $(seq 1 100); do
     kill -0 "$CARBONYL_PID" 2>/dev/null || break
     sleep 0.1
@@ -273,4 +342,14 @@ if kill -0 "$CARBONYL_PID" 2>/dev/null; then
 fi
 wait "$CARBONYL_PID"
 CARBONYL_PID=""
+# Ensure XTEST has delivered the releases associated with the close
+# accelerator before another browser process takes focus on this display.
+for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
+    xdotool keyup "$key_name" 2>/dev/null || true
+done
+sleep 0.25
+grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' "$TERM_LOG" || {
+    echo "FAIL: native close did not complete the storage flush"
+    exit 1
+}
 echo "PASS: operator controls, history, redirect, origin, focus, and stop"

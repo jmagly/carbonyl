@@ -20,22 +20,32 @@ required_source_checks=(
   'src/extensions/extension_system.cc:DISALLOWED_BY_POLICY'
   'src/extensions/extension_system.cc:Extension Preferences'
   'src/extensions/extension_system.cc:StateStore::BackendType::RULES'
+  'src/extensions/extension_system.cc:RulesMonitorService::Get'
+  'src/extensions/extension_system.cc:WebRequestAPI>::Get'
   'src/extensions/extension_loader.cc:IndexAndPersistRulesOnInstall'
+  'src/extensions/extension_loader.cc:warning_count_before_ruleset_indexing'
   'src/extensions/extension_loader.cc:PermissionsUpdater'
   'src/extensions/extension_loader.cc:CARBONYL_EXTENSION_DIAGNOSTIC'
   'src/extensions/extension_loader.cc:unsupported_permission'
   'src/extensions/extension_loader.cc:remote_update_forbidden'
   'src/extensions/extension_loader.cc:unsupported_host_scheme'
   'src/extensions/browser_client.cc:CarbonylRuntimeAPIDelegate'
+  'src/extensions/browser_client.cc:CarbonylMessagingDelegate'
+  'src/extensions/browser_client.cc:CarbonylActionSetTitleFunction'
+  'src/extensions/browser_client.cc:CarbonylActionSetBadgeTextFunction'
   'src/extensions/browser_client.cc:CarbonylExtensionManagementClient'
   'src/extensions/browser_client.cc:CarbonylExtensionWebContentsObserver'
   'src/extensions/renderer_client.cc:RunScriptsAtDocumentStart'
   'src/extensions/renderer_client.cc:CarbonylRenderFrameObserver'
+  'src/extensions/renderer_client.cc:ExtensionsWillEvaluateServiceWorker'
+  'src/extensions/renderer_client.cc:ExtensionsWillDestroyServiceWorker'
+  'src/extensions/renderer_client.cc:kEnableExtensionsRendererSwitch'
   'src/extensions/renderer_client.cc:ExtensionsWebViewCreated'
   'src/extensions/content_browser_client_hooks.cc:CreateExtensionWorkerMainResourceURLLoaderFactory'
   'src/extensions/content_browser_client_hooks.cc:RegisterExtensionAssociatedServiceWorkerBinders'
   'src/extensions/content_browser_client_hooks.cc:MaybeProxyExtensionURLLoaderFactory'
   'src/extensions/content_browser_client_hooks.cc:AddExtensionNavigationThrottle'
+  'src/extensions/content_browser_client_hooks.cc:kEnableExtensionsRendererSwitch'
   'src/extensions/content_browser_client_hooks.cc:CanCommitExtensionURL'
 )
 
@@ -44,6 +54,20 @@ for check in "${required_source_checks[@]}"; do
   pattern=${check#*:}
   rg -q --fixed-strings -- "$pattern" "$CARBONYL_ROOT/$path"
 done
+
+for runtime_resource in headless_lib_data.pak headless_lib_strings.pak; do
+  rg -q --fixed-strings -- \
+    "cp \"\$src/$runtime_resource\" ." \
+    "$CARBONYL_ROOT/scripts/copy-binaries.sh"
+done
+
+rg -q --fixed-strings -- \
+  'extensions/strings/extensions_strings_en-US.pak' \
+  "$CARBONYL_ROOT/chromium/patches/chromium/0041-carbonyl-include-extension-strings-in-headless-pack.patch"
+
+rg -q --fixed-strings -- \
+  'DestroyBrowserContextServices' \
+  "$CARBONYL_ROOT/chromium/patches/chromium/0042-carbonyl-complete-extension-worker-lifecycle.patch"
 
 for fixture_contract in \
   'content_script.js:chrome.runtime.sendMessage' \

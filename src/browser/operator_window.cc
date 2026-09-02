@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/functional/callback.h"
@@ -21,12 +22,16 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/process/termination_status.h"
+#include "base/process/kill.h"
 #include "base/scoped_observation.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/timer/timer.h"
 #include "carbonyl/src/browser/operator_controls_model.h"
+#include "carbonyl/src/extensions/browser_client.h"
+#include "carbonyl/src/extensions/management.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -42,6 +47,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -86,9 +92,146 @@ class OperatorViewsDelegate final : public views::ViewsDelegate {
   }
 };
 
+class OperatorExtensionSurface final : public content::WebContentsObserver,
+                                       public ui::AcceleratorTarget {
+ public:
+  explicit OperatorExtensionSurface(views::Widget* parent) : parent_(parent) {}
+  ~OperatorExtensionSurface() override { Close(); }
+
+  OperatorExtensionSurface(const OperatorExtensionSurface&) = delete;
+  OperatorExtensionSurface& operator=(const OperatorExtensionSurface&) = delete;
+
+  bool Open(content::BrowserContext* browser_context,
+            const GURL& url,
+            std::u16string title) {
+    Close();
+    if (!url.SchemeIs("chrome-extension") || url.host().empty()) {
+      LOG(ERROR) << "CARBONYL_EXTENSION_SURFACE denied invalid URL";
+      return false;
+    }
+    allowed_extension_id_ = url.host();
+    content::WebContents::CreateParams create_params(browser_context);
+    web_contents_ = content::WebContents::Create(create_params);
+    Observe(web_contents_.get());
+    carbonyl::CreateExtensionWebContentsObserver(web_contents_.get());
+
+    auto root = std::make_unique<views::View>();
+    auto* layout = root->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kVertical, gfx::Insets::VH(6, 6), 4));
+    auto header = std::make_unique<views::View>();
+    auto* header_layout =
+        header->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal, gfx::Insets(), 4));
+    auto* label = header->AddChildView(std::make_unique<views::Label>(title));
+    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    label->SetElideBehavior(gfx::ELIDE_MIDDLE);
+    header_layout->SetFlexForView(label, 1);
+    auto* close = header->AddChildView(std::make_unique<views::MdTextButton>(
+        base::BindRepeating(&OperatorExtensionSurface::Close,
+                            base::Unretained(this)),
+        u"Close"));
+    close->SetAccessibleName(u"Close extension surface");
+    root->AddChildView(std::move(header));
+
+    auto web_view = std::make_unique<views::WebView>(browser_context);
+    web_view->SetWebContents(web_contents_.get());
+    web_view->SetFastResize(false);
+    web_view_ = root->AddChildView(std::move(web_view));
+    layout->SetFlexForView(web_view_, 1);
+
+    widget_delegate_ = std::make_unique<views::WidgetDelegate>();
+    widget_delegate_->SetContentsView(std::move(root));
+    widget_delegate_->SetHasWindowSizeControls(true);
+    widget_ = std::make_unique<views::Widget>();
+    views::Widget::InitParams params(
+        views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+    params.delegate = widget_delegate_.get();
+    params.parent = parent_->GetNativeWindow();
+    params.bounds = gfx::Rect(420, 520);
+    params.name = "CarbonylExtensionSurface";
+    params.wm_class_class = "carbonyl-extension";
+    params.wm_class_name = "CarbonylExtension";
+    widget_->Init(std::move(params));
+    focus_manager_ = widget_->GetFocusManager();
+    CHECK(focus_manager_);
+    focus_manager_->RegisterAccelerator(
+        ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN),
+        ui::AcceleratorManager::kHighPriority, this);
+    widget_->Show();
+    widget_->Activate();
+    web_view_->RequestFocus();
+    web_contents_->GetController().LoadURL(url, content::Referrer(),
+                                           ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+                                           std::string());
+    LOG(INFO) << "CARBONYL_EXTENSION_SURFACE opened id="
+              << allowed_extension_id_ << " kind="
+              << (title == u"Extension popup" ? "popup" : "options");
+    return true;
+  }
+
+  void Close() {
+    Observe(nullptr);
+    if (focus_manager_) {
+      focus_manager_->UnregisterAccelerators(this);
+      focus_manager_ = nullptr;
+    }
+    // CloseNow destroys the owned View tree synchronously. Release the
+    // non-owning WebView handle first so allocator dangling-pointer checks see
+    // the same teardown ordering as the parent operator widget.
+    web_view_ = nullptr;
+    if (widget_) {
+      widget_->CloseNow();
+    }
+    widget_.reset();
+    widget_delegate_.reset();
+    web_contents_.reset();
+    allowed_extension_id_.clear();
+  }
+
+  void DetachParent() {
+    Close();
+    parent_ = nullptr;
+  }
+
+  // ui::AcceleratorTarget:
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+    if (accelerator != ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN)) {
+      return false;
+    }
+    LOG(INFO) << "CARBONYL_EXTENSION_SURFACE close accelerator";
+    Close();
+    return true;
+  }
+
+  bool CanHandleAccelerators() const override { return widget_ != nullptr; }
+
+ private:
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->IsInPrimaryMainFrame()) {
+      return;
+    }
+    const GURL& target = navigation_handle->GetURL();
+    if (!target.SchemeIs("chrome-extension") ||
+        target.host() != allowed_extension_id_) {
+      LOG(ERROR) << "CARBONYL_EXTENSION_SURFACE navigation_denied";
+      web_contents()->Stop();
+    }
+  }
+
+  raw_ptr<views::Widget> parent_;
+  std::string allowed_extension_id_;
+  std::unique_ptr<content::WebContents> web_contents_;
+  std::unique_ptr<views::WidgetDelegate> widget_delegate_;
+  std::unique_ptr<views::Widget> widget_;
+  raw_ptr<views::FocusManager> focus_manager_ = nullptr;
+  raw_ptr<views::WebView> web_view_ = nullptr;
+};
+
 class OperatorControls final : public content::WebContentsObserver,
                                public views::TextfieldController,
                                public views::FocusChangeListener,
+                               public views::WidgetObserver,
                                public ui::AcceleratorTarget {
  public:
   OperatorControls(content::WebContents* web_contents, views::WebView* web_view)
@@ -98,6 +241,8 @@ class OperatorControls final : public content::WebContentsObserver,
   OperatorControls& operator=(const OperatorControls&) = delete;
 
   ~OperatorControls() override {
+    action_refresh_timer_.Stop();
+    extension_surface_.reset();
     if (focus_manager_) {
       focus_manager_->RemoveFocusChangeListener(this);
       focus_manager_->UnregisterAccelerators(this);
@@ -147,6 +292,60 @@ class OperatorControls final : public content::WebContentsObserver,
 
     root->AddChildView(std::move(toolbar));
 
+    auto extension_bar = std::make_unique<views::View>();
+    auto* extension_layout =
+        extension_bar->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal, gfx::Insets::VH(2, 6),
+            4));
+    extension_status_label_ =
+        extension_bar->AddChildView(std::make_unique<views::Label>());
+    extension_status_label_->SetAccessibleName(u"Extension management state");
+    extension_status_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    extension_layout->SetFlexForView(extension_status_label_, 1);
+    const std::string management_mode = GetExtensionManagementMode();
+    for (const auto& status :
+         GetExtensionStatuses(web_contents()->GetBrowserContext())) {
+      auto* state_label =
+          extension_bar->AddChildView(std::make_unique<views::Label>(
+              base::UTF8ToUTF16(status.id.substr(0, 8) + " " + status.state)));
+      state_label->SetAccessibleName(base::UTF8ToUTF16(
+          "Extension " + status.id + " state " + status.state));
+      if (management_mode != kExtensionManagementRestart) {
+        continue;
+      }
+      if (status.state == "loaded") {
+        AddManagementButton(extension_bar.get(), status.id,
+                            u"Disable on restart", ExtensionMutation::kDisable);
+        AddManagementButton(extension_bar.get(), status.id,
+                            u"Remove on restart", ExtensionMutation::kRemove);
+      } else if (status.state == "disabled_restart" ||
+                 status.state == "removed_restart") {
+        AddManagementButton(extension_bar.get(), status.id,
+                            u"Enable on restart", ExtensionMutation::kEnable);
+      }
+    }
+    for (const auto& snapshot : GetExtensionActions(web_contents())) {
+      auto* action_button =
+          extension_bar->AddChildView(std::make_unique<views::MdTextButton>(
+              base::BindRepeating(&OperatorControls::ActivateExtension,
+                                  base::Unretained(this), snapshot.id),
+              ActionButtonText(snapshot)));
+      action_button->SetAccessibleName(
+          base::UTF8ToUTF16("Extension action " + snapshot.title));
+      action_buttons_.push_back({snapshot.id, action_button});
+      if (!snapshot.options_url.is_empty()) {
+        auto* options_button =
+            extension_bar->AddChildView(std::make_unique<views::MdTextButton>(
+                base::BindRepeating(&OperatorControls::OpenExtensionOptions,
+                                    base::Unretained(this), snapshot.id),
+                u"Options"));
+        options_button->SetAccessibleName(
+            base::UTF8ToUTF16("Extension options " + snapshot.title));
+        options_buttons_.push_back({snapshot.id, options_button});
+      }
+    }
+    root->AddChildView(std::move(extension_bar));
+
     origin_label_ = root->AddChildView(std::make_unique<views::Label>());
     origin_label_->SetAccessibleName(u"Committed origin security status");
     origin_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -160,6 +359,8 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
   void AttachToWidget(views::Widget* widget) {
+    widget_ = widget;
+    widget_observation_.Observe(widget);
     focus_manager_ = widget->GetFocusManager();
     CHECK(focus_manager_);
     focus_manager_->AddFocusChangeListener(this);
@@ -169,6 +370,17 @@ class OperatorControls final : public content::WebContentsObserver,
     RegisterAccelerator(ui::VKEY_F5, ui::EF_NONE);
     RegisterAccelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN);
     RegisterAccelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN);
+    RegisterAccelerator(ui::VKEY_F4, ui::EF_ALT_DOWN);
+    RegisterAccelerator(ui::VKEY_A, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_C, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_X, ui::EF_CONTROL_DOWN);
+    extension_surface_ = std::make_unique<OperatorExtensionSurface>(widget);
+    action_refresh_timer_.Start(
+        FROM_HERE, base::Seconds(1),
+        base::BindRepeating(&OperatorControls::RefreshExtensionState,
+                            base::Unretained(this)));
+    RefreshExtensionState();
   }
 
   // content::WebContentsObserver:
@@ -177,12 +389,15 @@ class OperatorControls final : public content::WebContentsObserver,
     if (navigation_handle->HasCommitted() &&
         navigation_handle->IsInPrimaryMainFrame()) {
       renderer_failed_ = false;
-      UpdateState();
+      // A committed main-frame navigation is authoritative even if the Views
+      // focus transfer from SubmitAddress() has not completed yet. In
+      // particular, redirects must replace the typed pre-redirect URL.
+      UpdateState(/*force_address=*/true);
     }
   }
 
   void NavigationEntryCommitted(const content::LoadCommittedDetails&) override {
-    UpdateState();
+    UpdateState(/*force_address=*/true);
   }
 
   void NavigationEntryChanged(const content::EntryChangedDetails&) override {
@@ -226,8 +441,43 @@ class OperatorControls final : public content::WebContentsObserver,
     focus_manager_ = nullptr;
   }
 
+  // views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget*) override {
+    action_refresh_timer_.Stop();
+    if (extension_surface_) {
+      extension_surface_->DetachParent();
+    }
+    if (focus_manager_) {
+      focus_manager_->RemoveFocusChangeListener(this);
+      focus_manager_->UnregisterAccelerators(this);
+      focus_manager_ = nullptr;
+    }
+    // Widget destroys its owned View tree before OnWidgetDestroyed. Release
+    // every non-owning child handle while those Views are still alive so the
+    // allocator can verify the native-close path without dangling raw_ptrs.
+    web_view_ = nullptr;
+    back_button_ = nullptr;
+    forward_button_ = nullptr;
+    reload_stop_button_ = nullptr;
+    address_ = nullptr;
+    origin_label_ = nullptr;
+    extension_status_label_ = nullptr;
+    action_buttons_.clear();
+    options_buttons_.clear();
+    widget_ = nullptr;
+  }
+
+  void OnWidgetDestroyed(views::Widget*) override {
+    widget_observation_.Reset();
+  }
+
   // ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+    if (accelerator == ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN)) {
+      LOG(INFO) << "CARBONYL_OPERATOR_WINDOW close accelerator";
+      widget_->Close();
+      return true;
+    }
     if (accelerator == ui::Accelerator(ui::VKEY_L, ui::EF_CONTROL_DOWN)) {
       address_->RequestFocus();
       address_->SelectAll(false);
@@ -246,6 +496,20 @@ class OperatorControls final : public content::WebContentsObserver,
       GoForward();
       return true;
     }
+    if (address_->HasFocus() && accelerator.IsCtrlDown()) {
+      switch (accelerator.key_code()) {
+        case ui::VKEY_A:
+        case ui::VKEY_C:
+        case ui::VKEY_V:
+        case ui::VKEY_X:
+          VLOG(1) << "CARBONYL_OPERATOR_EDIT key="
+                  << static_cast<int>(accelerator.key_code())
+                  << " selected=" << address_->GetSelectedText().size();
+          return address_->AcceleratorPressed(accelerator);
+        default:
+          break;
+      }
+    }
     return false;
   }
 
@@ -254,6 +518,109 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
  private:
+  void AddManagementButton(views::View* parent,
+                           const std::string& extension_id,
+                           std::u16string label,
+                           ExtensionMutation mutation) {
+    const std::u16string accessible_label =
+        label + u" extension " + base::UTF8ToUTF16(extension_id);
+    auto* button = parent->AddChildView(std::make_unique<views::MdTextButton>(
+        base::BindRepeating(&OperatorControls::RequestManagementMutation,
+                            base::Unretained(this), extension_id, mutation),
+        label));
+    button->SetAccessibleName(accessible_label);
+  }
+
+  void RequestManagementMutation(const std::string& extension_id,
+                                 ExtensionMutation mutation) {
+    std::string result;
+    const bool accepted = carbonyl::RequestExtensionMutation(
+        web_contents()->GetBrowserContext(), extension_id, mutation, &result);
+    management_notice_ = result;
+    if (accepted) {
+      LOG(INFO) << "CARBONYL_EXTENSION_MANAGEMENT id=" << extension_id
+                << " result=" << result;
+    } else {
+      LOG(ERROR) << "CARBONYL_EXTENSION_MANAGEMENT id=" << extension_id
+                 << " code=" << result;
+    }
+    RefreshExtensionState();
+  }
+
+  static std::u16string ActionButtonText(
+      const ExtensionActionSnapshot& snapshot) {
+    std::string text =
+        snapshot.title.empty() ? snapshot.id.substr(0, 8) : snapshot.title;
+    if (!snapshot.badge.empty()) {
+      text += " [" + snapshot.badge + "]";
+    }
+    return base::UTF8ToUTF16(text);
+  }
+
+  void RefreshExtensionState() {
+    if (!web_contents() || !extension_status_label_) {
+      return;
+    }
+    const std::vector<ExtensionStatus> statuses =
+        GetExtensionStatuses(web_contents()->GetBrowserContext());
+    std::string status_text = "Extensions: " + GetExtensionManagementMode() +
+                              " (" + base::NumberToString(statuses.size()) +
+                              ")";
+    if (!management_notice_.empty()) {
+      status_text += " " + management_notice_;
+    }
+    extension_status_label_->SetText(base::UTF8ToUTF16(status_text));
+    const std::vector<ExtensionActionSnapshot> actions =
+        GetExtensionActions(web_contents());
+    std::string action_state;
+    for (const auto& action : actions) {
+      action_state += action.id + ":" + (action.enabled ? "1" : "0") + ":" +
+                      (action.popup_url.is_empty() ? "0" : "1") + ":" +
+                      (action.options_url.is_empty() ? "0" : "1") + ";";
+    }
+    if (action_state != last_action_state_) {
+      LOG(INFO) << "CARBONYL_EXTENSION_ACTION_STATE " << action_state;
+      last_action_state_ = std::move(action_state);
+    }
+    for (const auto& [id, button] : action_buttons_) {
+      auto it = std::ranges::find(actions, id, &ExtensionActionSnapshot::id);
+      button->SetEnabled(it != actions.end() && it->enabled);
+      if (it != actions.end()) {
+        button->SetText(ActionButtonText(*it));
+      }
+    }
+    for (const auto& [id, button] : options_buttons_) {
+      auto it = std::ranges::find(actions, id, &ExtensionActionSnapshot::id);
+      button->SetEnabled(it != actions.end() && !it->options_url.is_empty());
+    }
+  }
+
+  void ActivateExtension(const std::string& extension_id) {
+    std::string error;
+    const GURL popup =
+        ActivateExtensionAction(web_contents(), extension_id, &error);
+    if (!error.empty()) {
+      LOG(ERROR) << "CARBONYL_EXTENSION_ACTION code=" << error
+                 << " id=" << extension_id;
+      return;
+    }
+    if (!popup.is_empty()) {
+      extension_surface_->Open(web_contents()->GetBrowserContext(), popup,
+                               u"Extension popup");
+    }
+  }
+
+  void OpenExtensionOptions(const std::string& extension_id) {
+    const std::vector<ExtensionActionSnapshot> actions =
+        GetExtensionActions(web_contents());
+    auto it =
+        std::ranges::find(actions, extension_id, &ExtensionActionSnapshot::id);
+    if (it != actions.end() && !it->options_url.is_empty()) {
+      extension_surface_->Open(web_contents()->GetBrowserContext(),
+                               it->options_url, u"Extension options");
+    }
+  }
+
   void RegisterAccelerator(ui::KeyboardCode key_code, int modifiers) {
     // These browser controls are the isolated case for high-priority
     // accelerators: a handled browser command must not also reach page script.
@@ -311,7 +678,7 @@ class OperatorControls final : public content::WebContentsObserver,
     const bool allowed = fixed.SchemeIsHTTPOrHTTPS() || fixed.SchemeIsFile() ||
                          fixed.SchemeIs(url::kAboutScheme) ||
                          fixed.SchemeIs("chrome");
-    const std::string scheme_prefix = fixed.scheme() + ":";
+    const std::string scheme_prefix = std::string(fixed.scheme()) + ":";
     const bool explicit_scheme =
         !fixed.scheme().empty() &&
         base::StartsWith(typed, scheme_prefix,
@@ -379,25 +746,37 @@ class OperatorControls final : public content::WebContentsObserver,
     } else if (!origin.opaque()) {
       committed_origin = origin.Serialize();
     } else if (committed_url.has_scheme()) {
-      committed_origin = committed_url.scheme() + ":";
+      committed_origin = std::string(committed_url.scheme()) + ":";
     }
     const OperatorSecurityPresentation presentation =
         BuildOperatorSecurityPresentation(signals, committed_origin);
     origin_label_->SetText(base::UTF8ToUTF16(presentation.label));
-    VLOG(1) << "CARBONYL_OPERATOR_CONTROLS back=" << controller.CanGoBack()
-            << " forward=" << controller.CanGoForward()
-            << " loading=" << web_contents()->IsLoading()
-            << " security=" << presentation.label;
+    LOG(INFO) << "CARBONYL_OPERATOR_CONTROLS back=" << controller.CanGoBack()
+              << " forward=" << controller.CanGoForward()
+              << " loading=" << web_contents()->IsLoading()
+              << " security=" << presentation.label;
   }
 
   raw_ptr<views::WebView> web_view_;
+  raw_ptr<views::Widget> widget_ = nullptr;
   raw_ptr<views::MdTextButton> back_button_ = nullptr;
   raw_ptr<views::MdTextButton> forward_button_ = nullptr;
   raw_ptr<views::MdTextButton> reload_stop_button_ = nullptr;
   raw_ptr<views::Textfield> address_ = nullptr;
   raw_ptr<views::Label> origin_label_ = nullptr;
+  raw_ptr<views::Label> extension_status_label_ = nullptr;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
+  std::vector<std::pair<std::string, raw_ptr<views::MdTextButton>>>
+      action_buttons_;
+  std::vector<std::pair<std::string, raw_ptr<views::MdTextButton>>>
+      options_buttons_;
+  std::unique_ptr<OperatorExtensionSurface> extension_surface_;
+  base::RepeatingTimer action_refresh_timer_;
+  std::string last_action_state_;
+  std::string management_notice_;
   bool renderer_failed_ = false;
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 };
 
 // The Views WebView owns continuous content resizing and native event
@@ -447,6 +826,11 @@ class OperatorWidgetObserver final : public views::WidgetObserver {
         widget->IsActive()) {
       web_contents_->RestoreFocus();
     }
+  }
+
+  void OnWidgetDestroying(views::Widget*) override {
+    web_contents_.reset();
+    web_view_ = nullptr;
   }
 
   void OnWidgetDestroyed(views::Widget*) override {
@@ -514,7 +898,24 @@ std::unique_ptr<OperatorWindow> OperatorWindow::Create(
 
 OperatorWindow::OperatorWindow() = default;
 
-OperatorWindow::~OperatorWindow() = default;
+OperatorWindow::~OperatorWindow() {
+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(SUPPORTS_OZONE_X11)
+  if (!impl_) {
+    return;
+  }
+  // CLIENT_OWNS_WIDGET makes ~Widget close its NativeWidget asynchronously.
+  // During browser shutdown that can leave compositor task namespaces alive
+  // until after VizProcessTransportFactory begins tearing down. Close the
+  // native widget synchronously while the UI message loop and WebContents are
+  // still available. The observer must be detached first so an owner-driven
+  // shutdown cannot enqueue a second HeadlessShell::ShutdownSoon callback.
+  impl_->observer.reset();
+  if (impl_->widget) {
+    impl_->widget->CloseNow();
+  }
+  impl_->widget.reset();
+#endif
+}
 
 bool OperatorWindow::Initialize(content::WebContents* web_contents,
                                 const gfx::Size& initial_size,
@@ -557,6 +958,15 @@ bool OperatorWindow::Initialize(content::WebContents* web_contents,
   params.wm_class_class = "carbonyl";
   params.wm_class_name = "Carbonyl";
   impl_->widget->Init(std::move(params));
+
+  // Headless content can create ClipboardNonBacked before Ozone initializes
+  // its X11 platform clipboard. The per-thread instance is sticky, so replace
+  // it now that Widget::Init has completed native platform initialization.
+  // Explicit operator mode then interoperates with the desktop CLIPBOARD and
+  // PRIMARY selections instead of writing into a process-local stub.
+  ui::Clipboard::DestroyClipboardForCurrentThread();
+  CHECK(ui::Clipboard::GetForCurrentThread());
+
   impl_->controls->AttachToWidget(impl_->widget.get());
   impl_->observer = std::make_unique<OperatorWidgetObserver>(
       impl_->widget.get(), web_contents, web_view_ptr,

@@ -1,5 +1,6 @@
 chrome.runtime.sendMessage({type: "carbonyl-fixture-ping"}, response => {
   document.documentElement.dataset.carbonylExtensionContent = "loaded";
+  document.body.style.background = "rgb(80, 32, 160)";
   document.documentElement.dataset.carbonylExtensionWorker = response?.worker;
   document.documentElement.dataset.carbonylExtensionStorage = String(
     response?.launchCount,

@@ -8,6 +8,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/one_shot_event.h"
+#include "carbonyl/src/extensions/management.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_system_provider.h"
 
@@ -35,6 +36,7 @@ class CarbonylExtensionSystem : public ExtensionSystem {
   CarbonylExtensionSystem& operator=(const CarbonylExtensionSystem&) = delete;
 
   bool LoadConfiguredExtensions(std::string* error);
+  std::vector<carbonyl::ExtensionStatus> extension_statuses() const;
 
   void Shutdown() override;
   void InitForRegularProfile(bool extensions_enabled) override;

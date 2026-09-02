@@ -51,6 +51,11 @@
       if (Math.abs(innerWidth - initialSize[0]) >= 100 ||
           Math.abs(innerHeight - initialSize[1]) >= 100) {
         resizeMarker.style.background = '#aa00aa';
+        // The marker proves the native surface resized, but it sits outside
+        // the small top-left viewport emitted by the terminal test. Change
+        // the page background too so the same trusted resize has an
+        // observable terminal-side effect.
+        document.body.style.background = '#440066';
       }
     });
     addEventListener('contextmenu', event => {

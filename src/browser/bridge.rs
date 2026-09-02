@@ -223,21 +223,32 @@ fn main() -> io::Result<Option<i32>> {
             .arg("--disable-threaded-animation");
     }
 
-    let output = command
+    command
         .args(cmd.args)
         .env(EnvVar::ShellMode, "1")
         .env_remove("CARBONYL_BASIC_AUTH")
         .env_remove("CARBONYL_FILE_DIALOG_PATH")
         .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::piped())
-        .output()?;
+        .stdout(Stdio::inherit());
+
+    // Debug diagnostics are an operator-facing live stream. Buffering the
+    // child's stderr until it exits hides navigation, security, and lifecycle
+    // state for the entire session and makes a hung process impossible to
+    // diagnose. Normal mode still captures stderr so successful sessions can
+    // forward only the versioned storage-flush acknowledgement below.
+    if cmd.debug {
+        let status = command.stderr(Stdio::inherit()).status()?;
+        terminal.teardown();
+        return Ok(Some(status.code().unwrap_or(127)));
+    }
+
+    let output = command.stderr(Stdio::piped()).output()?;
 
     terminal.teardown();
 
     let code = output.status.code().unwrap_or(127);
 
-    if code != 0 || cmd.debug {
+    if code != 0 {
         io::stderr().write_all(&output.stderr)?;
     } else {
         // The outer terminal process intentionally suppresses routine

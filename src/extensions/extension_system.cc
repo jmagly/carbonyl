@@ -7,15 +7,20 @@
 #include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "carbonyl/src/extensions/extension_loader.h"
+#include "carbonyl/src/extensions/management.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
-#include "components/user_prefs/user_prefs.h"
 #include "components/update_client/update_client.h"
+#include "components/user_prefs/user_prefs.h"
 #include "components/value_store/value_store_factory_impl.h"
 #include "content/public/browser/browser_context.h"
+#include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
+#include "extensions/browser/api/web_request/web_request_api.h"
+#include "extensions/browser/api/web_request/web_request_event_router_factory.h"
+#include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extension_registry_factory.h"
@@ -62,6 +67,12 @@ void CarbonylExtensionSystem::InitForRegularProfile(bool extensions_enabled) {
 
 bool CarbonylExtensionSystem::LoadConfiguredExtensions(std::string* error) {
   return loader_ && loader_->LoadConfiguredExtensions(error);
+}
+
+std::vector<carbonyl::ExtensionStatus>
+CarbonylExtensionSystem::extension_statuses() const {
+  return loader_ ? loader_->statuses()
+                 : std::vector<carbonyl::ExtensionStatus>();
 }
 
 void CarbonylExtensionSystem::Shutdown() {
@@ -174,6 +185,7 @@ std::unique_ptr<PrefService> CreateExtensionProfilePrefs(
   extensions::ExtensionPrefs::RegisterProfilePrefs(registry.get());
   extensions::PermissionsManager::RegisterProfilePrefs(registry.get());
   update_client::RegisterProfilePrefs(registry.get());
+  RegisterExtensionManagementPrefs(registry.get());
 
   PrefServiceFactory factory;
   factory.set_user_prefs(store);
@@ -184,10 +196,32 @@ std::unique_ptr<PrefService> CreateExtensionProfilePrefs(
 
 bool InitializeExtensionContext(content::BrowserContext* browser_context,
                                 std::string* error) {
+  // The DNR WebContents helper lazily obtains RulesMonitorService, but that is
+  // too late for an embedder which loads its configured extensions before the
+  // first WebContents exists. Materialize the observer before registration so
+  // it receives OnExtensionLoaded and installs the extension's ruleset.
+  CHECK(extensions::declarative_net_request::RulesMonitorService::Get(
+      browser_context));
+  // WebRequestAPI owns the count which tells ContentBrowserClient to install
+  // the URLLoaderFactory proxy. Headless does not construct eager extension
+  // keyed APIs, so it too must observe the load rather than being created by
+  // the first request after registration.
+  CHECK(extensions::BrowserContextKeyedAPIFactory<
+        extensions::WebRequestAPI>::Get(browser_context));
+  // Carbonyl's network hook can lazily create WebRequestAPI. Chromium 150's
+  // WebRequestAPI::Shutdown() unconditionally looks up the per-context
+  // WebRequestEventRouter, so materialize that nominally eager dependency
+  // before navigation and keep its shutdown ordering deterministic.
+  CHECK(extensions::WebRequestEventRouterFactory::GetForBrowserContext(
+      browser_context));
   auto* system = static_cast<extensions::CarbonylExtensionSystem*>(
       extensions::ExtensionSystem::Get(browser_context));
   system->InitForRegularProfile(/*extensions_enabled=*/true);
-  return system->LoadConfiguredExtensions(error);
+  if (!system->LoadConfiguredExtensions(error)) {
+    return false;
+  }
+  LogExtensionStatuses(browser_context);
+  return ApplyCommandLineExtensionMutation(browser_context, error);
 }
 
 }  // namespace carbonyl

@@ -20,13 +20,19 @@
 #include "extensions/browser/api/core_extensions_browser_api_provider.h"
 #include "extensions/browser/api/declarative_net_request/web_contents_helper.h"
 #include "extensions/browser/api/extensions_api_client.h"
+#include "extensions/browser/api/messaging/messaging_delegate.h"
 #include "extensions/browser/api/runtime/runtime_api_delegate.h"
 #include "extensions/browser/browser_context_keyed_service_factories.h"
+#include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_function_registry.h"
 #include "extensions/browser/extension_host_delegate.h"
 #include "extensions/browser/extension_management_client.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_interface_binders.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/extensions_browser_api_provider.h"
+#include "extensions/browser/kiosk/kiosk_delegate.h"
 #include "extensions/browser/safe_browsing_delegate.h"
 #include "extensions/browser/updater/null_extension_cache.h"
 #include "extensions/browser/url_request_util.h"
@@ -41,6 +47,121 @@
 
 namespace extensions {
 namespace {
+
+class CarbonylMessagingDelegate final : public MessagingDelegate {
+ public:
+  CarbonylMessagingDelegate() = default;
+  ~CarbonylMessagingDelegate() override = default;
+
+  PolicyPermission IsNativeMessagingHostAllowed(
+      content::BrowserContext*, const std::string&) override {
+    return PolicyPermission::DISALLOW;
+  }
+  std::optional<base::DictValue> MaybeGetTabInfo(
+      content::WebContents*) override {
+    return std::nullopt;
+  }
+  content::WebContents* GetWebContentsByTabId(content::BrowserContext*,
+                                              int) override {
+    return nullptr;
+  }
+  std::unique_ptr<MessagePort> CreateReceiverForNativeApp(
+      content::BrowserContext*,
+      base::WeakPtr<MessagePort::ChannelDelegate>,
+      content::RenderFrameHost*,
+      const ExtensionId&,
+      const PortId&,
+      const std::string&,
+      bool,
+      std::string*) override {
+    return nullptr;
+  }
+  void QueryIncognitoConnectability(
+      content::BrowserContext*,
+      const Extension*,
+      content::WebContents*,
+      const GURL&,
+      base::OnceCallback<void(bool)> callback) override {
+    std::move(callback).Run(false);
+  }
+};
+
+class CarbonylExtensionsAPIClient final : public ExtensionsAPIClient {
+ public:
+  CarbonylExtensionsAPIClient() = default;
+  ~CarbonylExtensionsAPIClient() override = default;
+
+  MessagingDelegate* GetMessagingDelegate() override {
+    return &messaging_delegate_;
+  }
+
+ private:
+  CarbonylMessagingDelegate messaging_delegate_;
+};
+
+class CarbonylActionSetTitleFunction final : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.setTitle", ACTION_SETTITLE)
+
+ protected:
+  ~CarbonylActionSetTitleFunction() override = default;
+
+  ResponseAction Run() override {
+    const base::DictValue* details =
+        args().size() == 1 ? args().front().GetIfDict() : nullptr;
+    const std::string* title = details ? details->FindString("title") : nullptr;
+    if (!title || (details && details->Find("tabId"))) {
+      return RespondNow(Error("Carbonyl supports only default action titles"));
+    }
+    auto* action = ExtensionActionManager::Get(browser_context())
+                       ->GetExtensionAction(*extension());
+    if (!action) {
+      return RespondNow(Error("Extension has no action"));
+    }
+    action->SetTitle(ExtensionAction::kDefaultTabId, *title);
+    return RespondNow(NoArguments());
+  }
+};
+
+class CarbonylActionSetBadgeTextFunction final : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("action.setBadgeText", ACTION_SETBADGETEXT)
+
+ protected:
+  ~CarbonylActionSetBadgeTextFunction() override = default;
+
+  ResponseAction Run() override {
+    const base::DictValue* details =
+        args().size() == 1 ? args().front().GetIfDict() : nullptr;
+    if (!details || details->Find("tabId")) {
+      return RespondNow(Error("Carbonyl supports only default action badges"));
+    }
+    auto* action = ExtensionActionManager::Get(browser_context())
+                       ->GetExtensionAction(*extension());
+    if (!action) {
+      return RespondNow(Error("Extension has no action"));
+    }
+    if (const std::string* text = details->FindString("text")) {
+      action->SetBadgeText(ExtensionAction::kDefaultTabId, *text);
+    } else {
+      action->ClearBadgeText(ExtensionAction::kDefaultTabId);
+    }
+    return RespondNow(NoArguments());
+  }
+};
+
+class CarbonylExtensionsBrowserAPIProvider final
+    : public ExtensionsBrowserAPIProvider {
+ public:
+  CarbonylExtensionsBrowserAPIProvider() = default;
+  ~CarbonylExtensionsBrowserAPIProvider() override = default;
+
+  void RegisterExtensionFunctions(
+      ExtensionFunctionRegistry* registry) override {
+    registry->RegisterFunction<CarbonylActionSetTitleFunction>();
+    registry->RegisterFunction<CarbonylActionSetBadgeTextFunction>();
+  }
+};
 
 // Carbonyl deliberately does not provide browser-owned update, navigation, or
 // device-restart surfaces to extensions. A concrete delegate is still
@@ -174,15 +295,26 @@ class CarbonylExtensionWebContentsObserver
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(CarbonylExtensionWebContentsObserver);
 
+class CarbonylKioskDelegate final : public KioskDelegate {
+ public:
+  CarbonylKioskDelegate() = default;
+  ~CarbonylKioskDelegate() override = default;
+
+  bool IsAutoLaunchedKioskApp(const ExtensionId&) const override {
+    return false;
+  }
+};
+
 class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
  public:
   CarbonylExtensionsBrowserClient()
-      : api_client_(std::make_unique<ExtensionsAPIClient>()),
+      : api_client_(std::make_unique<CarbonylExtensionsAPIClient>()),
         extension_cache_(std::make_unique<NullExtensionCache>()),
         safe_browsing_delegate_(std::make_unique<SafeBrowsingDelegate>()),
         management_client_(
             std::make_unique<CarbonylExtensionManagementClient>()) {
     AddAPIProvider(std::make_unique<CoreExtensionsBrowserAPIProvider>());
+    AddAPIProvider(std::make_unique<CarbonylExtensionsBrowserAPIProvider>());
   }
   ~CarbonylExtensionsBrowserClient() override = default;
 
@@ -402,7 +534,7 @@ class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
     return CarbonylExtensionWebContentsObserver::FromWebContents(web_contents);
   }
 
-  KioskDelegate* GetKioskDelegate() override { return nullptr; }
+  KioskDelegate* GetKioskDelegate() override { return &kiosk_delegate_; }
   SafeBrowsingDelegate* GetSafeBrowsingDelegate() override {
     return safe_browsing_delegate_.get();
   }
@@ -443,6 +575,7 @@ class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
   std::unique_ptr<ExtensionCache> extension_cache_;
   std::unique_ptr<SafeBrowsingDelegate> safe_browsing_delegate_;
   std::unique_ptr<ExtensionManagementClient> management_client_;
+  CarbonylKioskDelegate kiosk_delegate_;
 };
 
 CarbonylExtensionsBrowserClient* g_client = nullptr;
@@ -454,9 +587,13 @@ namespace carbonyl {
 
 void InstallExtensionsBrowserClient() {
   if (!extensions::g_client) {
-    extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();
     extensions::g_client = new extensions::CarbonylExtensionsBrowserClient();
     extensions::ExtensionsBrowserClient::Set(extensions::g_client);
+    // Chromium 150 keyed-service factories consult the process-global
+    // ExtensionsBrowserClient from their DependsOn() declarations. Install
+    // Carbonyl's client before building those factories, matching Chrome's
+    // pre-profile initialization order.
+    extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();
     extensions::g_client->Init();
   }
 }

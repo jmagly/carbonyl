@@ -230,6 +230,9 @@ jobs:
               echo "[validate] checking the opt-in MV3 runtime contract and fixtures..."
               bash "${CARBONYL_ROOT}/scripts/test-extension-runtime-contract.sh"
 
+              echo "[validate] checking extension management and action contracts..."
+              bash "${CARBONYL_ROOT}/scripts/test-extension-management-contract.sh"
+
               echo ""
               echo "✅ All $(ls "${PATCH_DIR}"/*.patch | wc -l) patches applied cleanly"
             '

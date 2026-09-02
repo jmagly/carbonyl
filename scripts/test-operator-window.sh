@@ -56,15 +56,26 @@ FIXTURE="$CARBONYL_ROOT/tests/fixtures/operator-window.html"
 OPERATOR_PATCH="$CARBONYL_ROOT/chromium/patches/chromium/0037-carbonyl-host-webcontents-in-experimental-operator-.patch"
 [ -f "$OPERATOR_PATCH" ] || {
     echo "FAIL: operator patch missing: $OPERATOR_PATCH"; exit 1; }
-python3 - "$OPERATOR_PATCH" <<'PY'
+SHUTDOWN_PATCH="$CARBONYL_ROOT/chromium/patches/chromium/0046-carbonyl-route-shutdown-input-through-shell.patch"
+[ -f "$SHUTDOWN_PATCH" ] || {
+    echo "FAIL: shutdown routing patch missing: $SHUTDOWN_PATCH"; exit 1; }
+python3 - "$OPERATOR_PATCH" "$SHUTDOWN_PATCH" <<'PY'
 import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
-reset = text.find("+  operator_window_.reset();")
+reset = text.find("operator_window_.reset();")
+deferred = text.find("browser_->BrowserMainThread()->PostDelayedTask(", reset)
 shutdown = text.find("browser_.ExtractAsDangling()->Shutdown();", reset)
-if reset < 0 or shutdown < 0 or reset > shutdown:
+delay = text.find("base::Milliseconds(250)", deferred)
+if (
+    reset < 0
+    or deferred < 0
+    or delay < 0
+    or shutdown < 0
+    or not reset < deferred < delay < shutdown
+):
     raise SystemExit(
-        "OperatorWindow must be destroyed before HeadlessBrowser contexts"
+        "OperatorWindow teardown must precede deferred HeadlessBrowser shutdown"
     )
 operator_mode = text.find("+  const bool use_operator_window =")
 real_ime = text.find("+      !use_operator_window) {", operator_mode)
@@ -72,6 +83,14 @@ ozone_x11 = text.find('use_operator_window ? "x11" : "headless"', real_ime)
 if operator_mode < 0 or real_ime < 0 or ozone_x11 < 0:
     raise SystemExit(
         "Operator browser must omit --headless and select Ozone X11 for IME"
+    )
+shutdown_text = open(sys.argv[2], encoding="utf-8").read()
+registration = shutdown_text.find("SetShutdownInputCallback(")
+dispatch = shutdown_text.find("shutdown_input_callback_.Run();")
+fallback = shutdown_text.find("Shutdown();", dispatch)
+if registration < 0 or dispatch < 0 or fallback < 0 or dispatch > fallback:
+    raise SystemExit(
+        "Carbonyl shutdown input must route through HeadlessShell before fallback"
     )
 PY
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-operator-test.XXXXXX")"
@@ -117,11 +136,26 @@ with open(sys.argv[1], "rb") as stream:
 PY
 }
 
+release_synthetic_modifiers() {
+    local key_name
+    for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
+        xdotool keyup "$key_name" 2>/dev/null || true
+    done
+}
+
 cleanup() {
-    if [ -n "${CARBONYL_PID:-}" ]; then
+    if [ -n "${CARBONYL_PID:-}" ] && kill -0 "$CARBONYL_PID" 2>/dev/null; then
+        if [ -n "${WINDOW_ID:-}" ]; then
+            xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+            release_synthetic_modifiers
+            for _ in $(seq 1 50); do
+                kill -0 "$CARBONYL_PID" 2>/dev/null || break
+                sleep 0.1
+            done
+        fi
         kill -TERM "$CARBONYL_PID" 2>/dev/null || true
-        wait "$CARBONYL_PID" 2>/dev/null || true
     fi
+    [ -z "${CARBONYL_PID:-}" ] || wait "$CARBONYL_PID" 2>/dev/null || true
     if [ -z "${KEEP_WORK_DIR:-}" ]; then
         rm -rf -- "$WORK_DIR"
     fi
@@ -130,6 +164,7 @@ trap cleanup EXIT
 
 CARBONYL_CMD=(
     "$CARBONYL_BIN"
+    --debug
     --ozone-platform=x11
     "--user-data-dir=$WORK_DIR/profile"
     --viewport=1280x720
@@ -143,7 +178,8 @@ fi
 CARBONYL_CMD+=("file://$FIXTURE")
 printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
 
-COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" &
+COLORTERM=truecolor script -q -f -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
+    </dev/null >/dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=""
@@ -322,21 +358,23 @@ done
 [ "$keyboard_ready" = 1 ] || {
     echo "FAIL: trusted keyboard visual marker missing"; exit 1; }
 
-# Minimize the window only after the input has focus, assert that the WM really
-# unmapped it, then restore and type without another page click. The final
-# marker therefore proves the stored page focus was recovered.
-xdotool windowminimize "$WINDOW_ID"
-minimized=0
+# Hide the window only after the input has focus, assert that X11 really
+# unmapped it, then restore and type without another page click. The browser-QA
+# guest intentionally runs bare Xorg, so there is no window manager to honor a
+# _NET_WM_STATE_HIDDEN request. The final marker therefore proves the stored
+# page focus was recovered across the actual unmap/map lifecycle.
+xdotool windowunmap --sync "$WINDOW_ID"
+unmapped=0
 for _ in $(seq 1 "${MINIMIZE_ATTEMPTS:-50}"); do
     if xwininfo -id "$WINDOW_ID" 2>/dev/null |
         grep -q 'Map State: IsUnMapped'; then
-        minimized=1
+        unmapped=1
         break
     fi
     sleep "${MINIMIZE_INTERVAL:-0.1}"
 done
-[ "$minimized" = 1 ] || {
-    echo "FAIL: window manager did not minimize/unmap operator window"; exit 1; }
+[ "$unmapped" = 1 ] || {
+    echo "FAIL: X11 did not unmap operator window"; exit 1; }
 
 xdotool windowmap --sync "$WINDOW_ID"
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
@@ -432,9 +470,14 @@ if [ "$quadrants" -lt "${MIN_QUADRANT_RUNS:-50}" ]; then
     exit 1
 fi
 
-# A native WM close request must tear down the shell rather than leave an
-# invisible Carbonyl process behind.
-xdotool windowclose "$WINDOW_ID"
+# The bare-Xorg guest has no window manager to translate _NET_CLOSE_WINDOW.
+# Deliver the native Alt+F4 accelerator instead; it must tear down the shell
+# rather than leave an invisible Carbonyl process behind. Carbonyl may destroy
+# the window before xdotool sends KeyRelease, which makes xdotool report an
+# expected BadWindow race; the process-exit and status checks below are the
+# authoritative result.
+xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+release_synthetic_modifiers
 closed=0
 for _ in $(seq 1 "${CLOSE_ATTEMPTS:-100}"); do
     if ! kill -0 "$CARBONYL_PID" 2>/dev/null; then
@@ -444,15 +487,15 @@ for _ in $(seq 1 "${CLOSE_ATTEMPTS:-100}"); do
     sleep "${CLOSE_INTERVAL:-0.1}"
 done
 [ "$closed" = 1 ] || {
-    echo "FAIL: native close did not terminate Carbonyl"; exit 1; }
+    echo "FAIL: native Alt+F4 did not terminate Carbonyl"; exit 1; }
 if wait "$CARBONYL_PID"; then
     :
 else
     close_status=$?
     CARBONYL_PID=""
-    echo "FAIL: Carbonyl exited with status $close_status after native close"
+    echo "FAIL: Carbonyl exited with status $close_status after native Alt+F4"
     exit 1
 fi
 CARBONYL_PID=""
 
-echo "PASS: resize, post-resize terminal progress, XTEST input, focus recovery, and native close"
+echo "PASS: resize, post-resize terminal progress, XTEST input, focus recovery, and native Alt+F4 close"

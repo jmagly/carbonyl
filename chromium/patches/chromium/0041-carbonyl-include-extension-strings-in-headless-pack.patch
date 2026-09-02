@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000041 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Tue, 1 Sep 2026 21:02:00 -0400
+Subject: [PATCH 41/41] carbonyl: include extension strings in headless pack
+
+Carbonyl's opt-in unpacked MV3 loader uses localized validation and permission
+messages from //extensions/strings. The stock headless resource bundle omits
+that pack, causing ResourceBundle to abort when extension validation requests
+one of those IDs. Merge the English extension strings into the headless string
+pack whenever extension core support is enabled.
+
+---
+ headless/BUILD.gn | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/headless/BUILD.gn b/headless/BUILD.gn
+index 45af71f..ec0e924 100644
+--- a/headless/BUILD.gn
++++ b/headless/BUILD.gn
+@@ -6,6 +6,7 @@ import("//build/config/c++/c++.gni")
+ import("//build/config/chrome_build.gni")
+ import("//build/config/python.gni")
+ import("//build/util/lastchange.gni")
++import("//extensions/buildflags/buildflags.gni")
+ import("//build/util/process_version.gni")
+ import("//headless/headless.gni")
+ import("//mojo/public/tools/bindings/mojom.gni")
+@@ -98,6 +99,13 @@ repack("resource_pack_strings") {
+     "//ui/strings",
+   ]
+ 
++  if (enable_extensions_core) {
++    sources += [
++      "$root_gen_dir/extensions/strings/extensions_strings_en-US.pak",
++    ]
++    deps += [ "//extensions/strings" ]
++  }
++
+   if (!is_fuchsia) {
+     sources +=
+         [ "$root_gen_dir/content/browser/devtools/devtools_resources.pak" ]
+-- 
+2.51.0

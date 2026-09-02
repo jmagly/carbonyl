@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000045 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Tue, 1 Sep 2026 23:12:00 -0400
+Subject: [PATCH] carbonyl: fail extension startup after context registration
+
+---
+ headless/app/headless_shell.cc                       | 8 ++++++++
+ headless/lib/browser/headless_browser_context_impl.cc | 2 +-
+ headless/lib/browser/headless_browser_context_impl.h  | 4 ++++
+ 3 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/headless/app/headless_shell.cc b/headless/app/headless_shell.cc
+--- a/headless/app/headless_shell.cc
++++ b/headless/app/headless_shell.cc
+@@ -28,5 +28,6 @@
+ #include "content/public/app/content_main.h"
+ #include "content/public/common/content_switches.h"
++#include "headless/lib/browser/headless_browser_context_impl.h"
+ #include "headless/lib/browser/headless_browser_impl.h"
+ #include "headless/lib/browser/headless_web_contents_impl.h"
+ #include "headless/lib/headless_content_main_delegate.h"
+@@ -110,6 +111,13 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+   HeadlessBrowserContext* browser_context = context_builder.Build();
+   browser_->SetDefaultBrowserContext(browser_context);
+ 
++  if (HeadlessBrowserContextImpl::From(browser_context)
++          ->extension_initialization_failed()) {
++    static_cast<HeadlessBrowserImpl*>(browser)->ShutdownWithExitCode(
++        EXIT_FAILURE);
++    return;
++  }
++
+   const bool devtools_enabled = static_cast<HeadlessBrowserImpl*>(browser)
+                                     ->options()
+                                     ->DevtoolsServerEnabled();
+diff --git a/headless/lib/browser/headless_browser_context_impl.cc b/headless/lib/browser/headless_browser_context_impl.cc
+--- a/headless/lib/browser/headless_browser_context_impl.cc
++++ b/headless/lib/browser/headless_browser_context_impl.cc
+@@ -92,7 +92,7 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
+   std::string extension_error;
+   if (!carbonyl::InitializeExtensionContext(this, &extension_error)) {
+     LOG(ERROR) << "CARBONYL_EXTENSION_ERROR " << extension_error;
+-    browser_->ShutdownWithExitCode(EXIT_FAILURE);
++    extension_initialization_failed_ = true;
+   }
+ }
+ 
+diff --git a/headless/lib/browser/headless_browser_context_impl.h b/headless/lib/browser/headless_browser_context_impl.h
+--- a/headless/lib/browser/headless_browser_context_impl.h
++++ b/headless/lib/browser/headless_browser_context_impl.h
+@@ -93,6 +93,9 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+       const content::WebContents* web_contents);
+ 
+   HeadlessBrowserImpl* browser() const;
++  bool extension_initialization_failed() const {
++    return extension_initialization_failed_;
++  }
+   const HeadlessBrowserContextOptions* options() const;
+ 
+   void ConfigureNetworkContextParams(
+@@ -131,6 +133,7 @@ class HEADLESS_EXPORT HeadlessBrowserContextImpl final
+   std::unique_ptr<HeadlessDownloadManagerDelegate> download_manager_delegate_;
+ 
+   // Outlives every extension BrowserContext keyed service.
++  bool extension_initialization_failed_ = false;
+   std::unique_ptr<PrefService> extension_prefs_;
+ };
+ 
+-- 
+2.51.0
