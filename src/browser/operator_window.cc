@@ -47,6 +47,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -335,6 +336,10 @@ class OperatorControls final : public content::WebContentsObserver,
     RegisterAccelerator(ui::VKEY_F5, ui::EF_NONE);
     RegisterAccelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN);
     RegisterAccelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN);
+    RegisterAccelerator(ui::VKEY_A, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_C, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_X, ui::EF_CONTROL_DOWN);
     extension_surface_ = std::make_unique<OperatorExtensionSurface>(widget);
     action_refresh_timer_.Start(
         FROM_HERE, base::Seconds(1),
@@ -420,6 +425,24 @@ class OperatorControls final : public content::WebContentsObserver,
     if (accelerator == ui::Accelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN)) {
       GoForward();
       return true;
+    }
+    if (address_->HasFocus() && accelerator.IsCtrlDown()) {
+      switch (accelerator.key_code()) {
+        case ui::VKEY_A:
+          address_->ExecuteTextEditCommand(ui::TextEditCommand::SELECT_ALL);
+          return true;
+        case ui::VKEY_C:
+          address_->ExecuteTextEditCommand(ui::TextEditCommand::COPY);
+          return true;
+        case ui::VKEY_V:
+          address_->ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
+          return true;
+        case ui::VKEY_X:
+          address_->ExecuteTextEditCommand(ui::TextEditCommand::CUT);
+          return true;
+        default:
+          break;
+      }
     }
     return false;
   }
