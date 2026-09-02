@@ -188,6 +188,14 @@ impl CommandLine {
                 "-z" | "--zoom" => set_f32!(zoom = zoom / 100.0),
                 "-d" | "--debug" => set!(debug, Debug),
                 "-b" | "--bitmap" => set!(bitmap, Bitmap),
+                // The native operator surface displays Blink's real raster.
+                // Carbonyl's non-bitmap path replaces every page font with a
+                // terminal-cell-sized monospace face, which is correct for
+                // extracted terminal text but makes native text microscopic.
+                // Treat operator mode as bitmap mode in every Chromium
+                // subprocess so native CSS typography is preserved while the
+                // terminal continues to receive quadrant pixels.
+                "--carbonyl-operator-window" => set!(bitmap, Bitmap),
                 "--sixel" => {
                     sixel_mode = value
                         .and_then(|value| parse_sixel_mode(value))
@@ -1326,7 +1334,11 @@ mod tests {
     }
 
     #[test]
-    fn experimental_operator_switch_reaches_chromium() {
+    fn experimental_operator_switch_preserves_native_fonts_and_reaches_chromium() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let original_bitmap = std::env::var(EnvVar::Bitmap).ok();
+        std::env::remove_var(EnvVar::Bitmap);
+
         let argv = vec![
             "--ozone-platform=x11".to_string(),
             "--carbonyl-operator-window".to_string(),
@@ -1335,7 +1347,11 @@ mod tests {
         let cmd = CommandLine::parse_args(argv.clone());
 
         assert!(matches!(cmd.program, CommandLineProgram::Main));
+        assert!(cmd.bitmap);
+        assert_eq!(std::env::var(EnvVar::Bitmap).as_deref(), Ok("1"));
         assert_eq!(cmd.args, argv);
+
+        restore_env(EnvVar::Bitmap.as_str(), original_bitmap);
     }
 
     #[test]

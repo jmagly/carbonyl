@@ -239,9 +239,22 @@ def count_near(target, tolerance=3):
                for actual, expected in zip(color, target))
     )
 
+typography_pixels = [
+    (index % image.width, index // image.width)
+    for index, color in enumerate(image.getdata())
+    if all(abs(actual - expected) <= 3
+           for actual, expected in zip(color, (0, 255, 119)))
+]
+typography_height = (
+    max(y for _, y in typography_pixels) - min(y for _, y in typography_pixels) + 1
+    if typography_pixels else 0
+)
+
 raise SystemExit(
     0 if count_near((170, 0, 0)) >= 1000
-    and count_near((0, 51, 102)) >= 1000 else 1
+    and count_near((0, 51, 102)) >= 1000
+    and len(typography_pixels) >= 200
+    and typography_height >= 24 else 1
 )
 PY
     then
@@ -251,7 +264,7 @@ PY
     sleep "${INITIAL_INTERVAL:-0.1}"
 done
 [ "$initial_ready" = 1 ] || {
-    echo "FAIL: initial page pixels never reached operator window"; exit 1; }
+    echo "FAIL: initial page pixels or native CSS typography never reached operator window"; exit 1; }
 
 # The Widget client bounds are the viewport source of truth. A native WM
 # resize must flow through WebView into the existing WebContents, without
