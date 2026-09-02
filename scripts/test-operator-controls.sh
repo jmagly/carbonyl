@@ -220,6 +220,7 @@ xdotool key alt+Right
 wait_for_color 34 170 238 "keyboard Forward"
 
 two_requests_before="$(grep -c '^GET /two$' "$SERVER_LOG" || true)"
+reload_stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
 xdotool key ctrl+r
 for _ in $(seq 1 100); do
     two_requests_after="$(grep -c '^GET /two$' "$SERVER_LOG" || true)"
@@ -228,6 +229,16 @@ for _ in $(seq 1 100); do
 done
 [ "$two_requests_after" -gt "$two_requests_before" ] || {
     echo "FAIL: Reload did not issue a new request"; exit 1; }
+reload_stopped_after="$reload_stopped_before"
+for _ in $(seq 1 100); do
+    reload_stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+    [ "$reload_stopped_after" -gt "$reload_stopped_before" ] && break
+    sleep 0.1
+done
+[ "$reload_stopped_after" -gt "$reload_stopped_before" ] || {
+    echo "FAIL: Reload did not reach browser load-stop state"
+    exit 1
+}
 
 # Clipboard input exercises native Unicode editing without xdotool's ASCII-only
 # type command. URL fixup must encode the path and retain browser ownership of
