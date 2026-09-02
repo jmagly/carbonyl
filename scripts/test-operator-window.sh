@@ -61,9 +61,16 @@ import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
 reset = text.find("operator_window_.reset();")
-deferred = text.find("browser_->BrowserMainThread()->PostTask(", reset)
+deferred = text.find("browser_->BrowserMainThread()->PostDelayedTask(", reset)
 shutdown = text.find("browser_.ExtractAsDangling()->Shutdown();", reset)
-if reset < 0 or deferred < 0 or shutdown < 0 or not reset < deferred < shutdown:
+delay = text.find("base::Milliseconds(250)", deferred)
+if (
+    reset < 0
+    or deferred < 0
+    or delay < 0
+    or shutdown < 0
+    or not reset < deferred < delay < shutdown
+):
     raise SystemExit(
         "OperatorWindow teardown must precede deferred HeadlessBrowser shutdown"
     )

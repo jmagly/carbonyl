@@ -12,11 +12,11 @@ Issue: https://git.integrolabs.net/roctinam/carbonyl/issues/285
 ---
  content/browser/compositor/viz_process_transport_factory.cc | 2 +-
  headless/BUILD.gn                                       |  1 +
- headless/app/headless_shell.cc                          | 22 ++++++++++++++++++++++
+ headless/app/headless_shell.cc                          | 26 ++++++++++++++++++++++++++
  headless/lib/browser/headless_content_browser_client.cc | 29 +++++++++++++++++++++++++----
  headless/lib/browser/headless_platform_delegate_aura.cc | 11 +++++++++++
  headless/lib/headless_content_main_delegate.cc          | 16 +++++++++++++---
- 6 files changed, 73 insertions(+), 8 deletions(-)
+ 6 files changed, 77 insertions(+), 8 deletions(-)
 
 diff --git a/content/browser/compositor/viz_process_transport_factory.cc b/content/browser/compositor/viz_process_transport_factory.cc
 index 95182065b322a..1bd765a773afa 100644
@@ -179,7 +179,14 @@ index 33b6292..2be6f47 100644
  #include "carbonyl/src/browser/renderer.h"
  
  #include <memory>
-@@ -91,6 +92,7 @@ class HeadlessShell {
+@@ -22,5 +23,6 @@
+ #include "base/logging.h"
+ #include "base/task/thread_pool.h"
++#include "base/time/time.h"
+ #include "base/version_info/version_info.h"
+ #include "build/branding_buildflags.h"
+ #include "build/build_config.h"
+@@ -91,6 +93,7 @@ class HeadlessShell {
    void Shutdown();
  
    raw_ptr<HeadlessBrowser> browser_ = nullptr;
@@ -187,7 +194,7 @@ index 33b6292..2be6f47 100644
  };
  
  void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
-@@ -141,6 +143,19 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
+@@ -141,6 +144,19 @@ void HeadlessShell::OnBrowserStart(HeadlessBrowser* browser) {
      ShutdownSoon();
    }
  
@@ -207,13 +214,16 @@ index 33b6292..2be6f47 100644
    // Carbonyl issue #88: install the --dump-text observer on the freshly
    // built WebContents. No-op unless --carbonyl-dump-text is on the
    // command line (set by the Rust CLI when the user passed --dump-text).
-@@ -207,3 +222,10 @@
+@@ -207,3 +223,13 @@
  void HeadlessShell::Shutdown() {
 +  if (operator_window_) {
 +    operator_window_.reset();
-+    browser_->BrowserMainThread()->PostTask(
++    // Aura/X11 compositor destruction posts cleanup work. Give those tasks a
++    // bounded drain window before BrowserMainLoop tears down Viz.
++    browser_->BrowserMainThread()->PostDelayedTask(
 +        FROM_HERE,
-+        base::BindOnce(&HeadlessShell::Shutdown, base::Unretained(this)));
++        base::BindOnce(&HeadlessShell::Shutdown, base::Unretained(this)),
++        base::Milliseconds(250));
 +    return;
 +  }
    browser_.ExtractAsDangling()->Shutdown();
