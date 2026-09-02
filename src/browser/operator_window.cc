@@ -327,6 +327,7 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
   void AttachToWidget(views::Widget* widget) {
+    widget_ = widget;
     focus_manager_ = widget->GetFocusManager();
     CHECK(focus_manager_);
     focus_manager_->AddFocusChangeListener(this);
@@ -336,6 +337,7 @@ class OperatorControls final : public content::WebContentsObserver,
     RegisterAccelerator(ui::VKEY_F5, ui::EF_NONE);
     RegisterAccelerator(ui::VKEY_LEFT, ui::EF_ALT_DOWN);
     RegisterAccelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN);
+    RegisterAccelerator(ui::VKEY_F4, ui::EF_ALT_DOWN);
     RegisterAccelerator(ui::VKEY_A, ui::EF_CONTROL_DOWN);
     RegisterAccelerator(ui::VKEY_C, ui::EF_CONTROL_DOWN);
     RegisterAccelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN);
@@ -408,6 +410,11 @@ class OperatorControls final : public content::WebContentsObserver,
 
   // ui::AcceleratorTarget:
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override {
+    if (accelerator == ui::Accelerator(ui::VKEY_F4, ui::EF_ALT_DOWN)) {
+      LOG(INFO) << "CARBONYL_OPERATOR_WINDOW close accelerator";
+      widget_->Close();
+      return true;
+    }
     if (accelerator == ui::Accelerator(ui::VKEY_L, ui::EF_CONTROL_DOWN)) {
       address_->RequestFocus();
       address_->SelectAll(false);
@@ -432,9 +439,9 @@ class OperatorControls final : public content::WebContentsObserver,
         case ui::VKEY_C:
         case ui::VKEY_V:
         case ui::VKEY_X:
-          LOG(INFO) << "CARBONYL_OPERATOR_EDIT key="
-                    << static_cast<int>(accelerator.key_code())
-                    << " selected=" << address_->GetSelectedText().size();
+          VLOG(1) << "CARBONYL_OPERATOR_EDIT key="
+                  << static_cast<int>(accelerator.key_code())
+                  << " selected=" << address_->GetSelectedText().size();
           return address_->AcceleratorPressed(accelerator);
         default:
           break;
@@ -688,6 +695,7 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
   raw_ptr<views::WebView> web_view_;
+  raw_ptr<views::Widget> widget_ = nullptr;
   raw_ptr<views::MdTextButton> back_button_ = nullptr;
   raw_ptr<views::MdTextButton> forward_button_ = nullptr;
   raw_ptr<views::MdTextButton> reload_stop_button_ = nullptr;

@@ -148,7 +148,7 @@ wait_for_color() {
     # Close through the native lifecycle before returning failure. Besides
     # exercising the browser-owned shutdown path, this lets Carbonyl's outer
     # terminal wrapper forward the inner process diagnostics into TERM_LOG.
-    xdotool windowclose "$WINDOW_ID" 2>/dev/null || true
+    xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
     for _ in $(seq 1 50); do
         ! kill -0 "$CARBONYL_PID" 2>/dev/null && break
         sleep 0.1
@@ -317,7 +317,7 @@ done
 [ "$error_ready" = 1 ] || {
     echo "FAIL: committed error-page security state missing"; exit 1; }
 
-xdotool windowclose "$WINDOW_ID"
+xdotool key --window "$WINDOW_ID" alt+F4
 for _ in $(seq 1 100); do
     kill -0 "$CARBONYL_PID" 2>/dev/null || break
     sleep 0.1
