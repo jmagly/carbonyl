@@ -91,6 +91,7 @@ PY
 
 command=(
   "$CARBONYL_BIN"
+  --debug
   --ozone-platform=x11
   --disable-gpu
   --carbonyl-operator-window
@@ -104,7 +105,7 @@ command=(
   "http://127.0.0.1:$PORT/runtime-page.html"
 )
 printf -v quoted '%q ' "${command[@]}"
-COLORTERM=truecolor script -q -c "$quoted" "$TEST_ROOT/terminal.log" \
+COLORTERM=truecolor script -q -f -c "$quoted" "$TEST_ROOT/terminal.log" \
   </dev/null &
 CARBONYL_PID=$!
 
@@ -143,7 +144,17 @@ OPTIONS_WINDOW="$(xdotool search --class '^carbonyl-extension$' 2>/dev/null | he
 [ -n "$OPTIONS_WINDOW" ] || { echo "options window not found" >&2; exit 1; }
 xdotool windowsize --sync "$OPTIONS_WINDOW" 520 420
 wait_for_color "$TEST_ROOT/options.png" 32 96 160 "options surface"
-xdotool windowclose "$OPTIONS_WINDOW"
+xdotool windowactivate --sync "$OPTIONS_WINDOW" 2>/dev/null ||
+  xdotool windowfocus --sync "$OPTIONS_WINDOW"
+xdotool key shift+Tab Return
+for _ in $(seq 1 100); do
+  xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 || break
+  sleep 0.1
+done
+xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
+  echo "options close control did not close its surface" >&2
+  exit 1
+}
 
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
   xdotool windowfocus --sync "$WINDOW_ID"
@@ -165,7 +176,17 @@ wait_for_color "$TEST_ROOT/popup-clicked.png" 32 160 80 "popup action"
 
 grep -q 'CARBONYL_EXTENSION_STATUS state=loaded' "$TEST_ROOT/terminal.log"
 grep -q 'data-carbonyl-extension-content="loaded"' "$TEST_ROOT/terminal.log"
-xdotool windowclose "$POPUP_WINDOW"
+xdotool windowactivate --sync "$POPUP_WINDOW" 2>/dev/null ||
+  xdotool windowfocus --sync "$POPUP_WINDOW"
+xdotool key shift+Tab Return
+for _ in $(seq 1 100); do
+  xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 || break
+  sleep 0.1
+done
+xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
+  echo "popup close control did not close its surface" >&2
+  exit 1
+}
 xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
   xdotool windowfocus --sync "$WINDOW_ID"
 # From the address field, forward traversal reaches the first restart-only
@@ -180,7 +201,9 @@ grep -q 'CARBONYL_EXTENSION_MANAGEMENT id=.* result=restart_required' \
   "$TEST_ROOT/terminal.log"
 grep -q 'CARBONYL_EXTENSION_ACTION_STATE [a-p]\{32\}:1:1:1;' \
   "$TEST_ROOT/terminal.log"
-xdotool windowclose "$WINDOW_ID"
+xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
+  xdotool windowfocus --sync "$WINDOW_ID"
+xdotool key alt+F4
 for _ in $(seq 1 100); do
   kill -0 "$CARBONYL_PID" 2>/dev/null || break
   sleep 0.1
@@ -191,4 +214,6 @@ kill -0 "$CARBONYL_PID" 2>/dev/null && {
 }
 wait "$CARBONYL_PID"
 CARBONYL_PID=
+grep -q 'CARBONYL_STORAGE_FLUSH_RESULT result=complete' \
+  "$TEST_ROOT/terminal.log"
 echo "PASS: extension action, popup, options, focus, resize, and diagnostics"

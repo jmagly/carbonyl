@@ -78,15 +78,25 @@ run_browser() {
   local profile=$1
   local host=$2
   local output=$3
+  local status
   shift 3
-  timeout 30s "$CARBONYL_BIN" \
-    --ozone-platform=x11 \
-    --disable-gpu \
-    --user-data-dir="$profile" \
-    --dump-text=dom \
-    --virtual-time-budget=5000 \
-    "$@" \
-    "http://$host:$PORT/runtime-page.html" >"$output" 2>&1
+  if timeout 30s "$CARBONYL_BIN" \
+      --ozone-platform=x11 \
+      --disable-gpu \
+      --user-data-dir="$profile" \
+      --dump-text=dom \
+      --virtual-time-budget=5000 \
+      "$@" \
+      "http://$host:$PORT/runtime-page.html" >"$output" 2>&1; then
+    return 0
+  else
+    status=$?
+  fi
+  if [ "$status" -ne 1 ]; then
+    echo "browser exited with unexpected status $status for $profile" >&2
+    exit 1
+  fi
+  return 1
 }
 
 assert_contains() {
