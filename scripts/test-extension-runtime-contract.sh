@@ -31,6 +31,8 @@ required_source_checks=(
   'src/extensions/browser_client.cc:CarbonylExtensionWebContentsObserver'
   'src/extensions/renderer_client.cc:RunScriptsAtDocumentStart'
   'src/extensions/renderer_client.cc:CarbonylRenderFrameObserver'
+  'src/extensions/renderer_client.cc:ExtensionsWillEvaluateServiceWorker'
+  'src/extensions/renderer_client.cc:ExtensionsWillDestroyServiceWorker'
   'src/extensions/renderer_client.cc:ExtensionsWebViewCreated'
   'src/extensions/content_browser_client_hooks.cc:CreateExtensionWorkerMainResourceURLLoaderFactory'
   'src/extensions/content_browser_client_hooks.cc:RegisterExtensionAssociatedServiceWorkerBinders'
@@ -54,6 +56,10 @@ done
 rg -q --fixed-strings -- \
   'extensions/strings/extensions_strings_en-US.pak' \
   "$CARBONYL_ROOT/chromium/patches/chromium/0041-carbonyl-include-extension-strings-in-headless-pack.patch"
+
+rg -q --fixed-strings -- \
+  'DestroyBrowserContextServices' \
+  "$CARBONYL_ROOT/chromium/patches/chromium/0042-carbonyl-complete-extension-worker-lifecycle.patch"
 
 for fixture_contract in \
   'content_script.js:chrome.runtime.sendMessage' \

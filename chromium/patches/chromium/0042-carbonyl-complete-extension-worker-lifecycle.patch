@@ -1,0 +1,132 @@
+From 0000000000000000000000000000000000000042 Mon Sep 17 00:00:00 2001
+From: Carbonyl Maintainers <maintainers@carbonyl.local>
+Date: Tue, 1 Sep 2026 21:20:00 -0400
+Subject: [PATCH 42/42] carbonyl: complete extension worker lifecycle
+
+Forward service-worker renderer lifecycle callbacks to the extension
+dispatcher so MV3 workers receive their chrome.* bindings. Also destroy
+BrowserContext keyed services before storage partitions, matching Chrome's
+profile shutdown ordering and keeping ServiceWorkerTaskQueue observers valid
+through keyed-service teardown.
+
+---
+ headless/lib/browser/headless_browser_context_impl.cc |  4 ++--
+ headless/lib/renderer/headless_content_renderer_client.cc | 48 ++++++++++++++++
+ headless/lib/renderer/headless_content_renderer_client.h  | 24 ++++++++
+ 3 files changed, 74 insertions(+), 2 deletions(-)
+
+diff --git a/headless/lib/browser/headless_browser_context_impl.cc b/headless/lib/browser/headless_browser_context_impl.cc
+index f1b8c99..9ea98de 100644
+--- a/headless/lib/browser/headless_browser_context_impl.cc
++++ b/headless/lib/browser/headless_browser_context_impl.cc
+@@ -113,12 +113,12 @@ HeadlessBrowserContextImpl::~HeadlessBrowserContextImpl() {
+   if (content::RenderProcessHost::run_renderer_in_process())
+     content::RenderProcessHost::ShutDownInProcessRenderer();
+ 
+-  ShutdownStoragePartitions();
+-
+   BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
+       this);
+   carbonyl::UnregisterExtensionContext(this);
+   extension_prefs_->CommitPendingWrite();
++
++  ShutdownStoragePartitions();
+ }
+ 
+ // static
+diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headless/lib/renderer/headless_content_renderer_client.cc
+index 0000000..1111111 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.cc
++++ b/headless/lib/renderer/headless_content_renderer_client.cc
+@@ -137,6 +137,54 @@ void HeadlessContentRendererClient::RunScriptsAtDocumentIdle(
+   carbonyl::RunExtensionScriptsAtDocumentIdle(render_frame);
+ }
+ 
++bool HeadlessContentRendererClient::AllowScriptExtensionForServiceWorker(
++    const url::Origin& script_origin) {
++  return carbonyl::AllowExtensionScriptForServiceWorker(script_origin);
++}
++
++void HeadlessContentRendererClient::
++    DidInitializeServiceWorkerContextOnWorkerThread(
++        blink::WebServiceWorkerContextProxy* context_proxy,
++        const GURL& service_worker_scope,
++        const GURL& script_url) {
++  carbonyl::ExtensionsDidInitializeServiceWorkerContext(
++      context_proxy, service_worker_scope, script_url);
++}
++
++void HeadlessContentRendererClient::WillEvaluateServiceWorkerOnWorkerThread(
++    blink::WebServiceWorkerContextProxy* context_proxy,
++    v8::Local<v8::Context> v8_context,
++    int64_t service_worker_version_id,
++    const GURL& service_worker_scope,
++    const GURL& script_url,
++    const blink::ServiceWorkerToken& service_worker_token) {
++  carbonyl::ExtensionsWillEvaluateServiceWorker(
++      context_proxy, v8_context, service_worker_version_id,
++      service_worker_scope, script_url, service_worker_token);
++}
++
++void HeadlessContentRendererClient::DidStartServiceWorkerContextOnWorkerThread(
++    int64_t service_worker_version_id,
++    const GURL& service_worker_scope,
++    const GURL& script_url,
++    const blink::ServiceWorkerToken& service_worker_token) {
++  carbonyl::ExtensionsDidStartServiceWorker(
++      service_worker_version_id, service_worker_scope, script_url,
++      service_worker_token);
++}
++
++void HeadlessContentRendererClient::
++    WillDestroyServiceWorkerContextOnWorkerThread(
++        v8::Local<v8::Context> context,
++        int64_t service_worker_version_id,
++        const GURL& service_worker_scope,
++        const GURL& script_url,
++        const blink::ServiceWorkerToken& service_worker_token) {
++  carbonyl::ExtensionsWillDestroyServiceWorker(
++      context, service_worker_version_id, service_worker_scope, script_url,
++      service_worker_token);
++}
++
+ bool HeadlessContentRendererClient::IsDecoderSupportedVideoType(
+     const media::VideoType& type) {
+   const bool allowed_by_flags =
+diff --git a/headless/lib/renderer/headless_content_renderer_client.h b/headless/lib/renderer/headless_content_renderer_client.h
+index 0000000..2222222 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.h
++++ b/headless/lib/renderer/headless_content_renderer_client.h
+@@ -31,6 +31,30 @@ class HeadlessContentRendererClient : public content::ContentRendererClient {
+   void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
+   void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
+   void RunScriptsAtDocumentIdle(content::RenderFrame* render_frame) override;
++  bool AllowScriptExtensionForServiceWorker(
++      const url::Origin& script_origin) override;
++  void DidInitializeServiceWorkerContextOnWorkerThread(
++      blink::WebServiceWorkerContextProxy* context_proxy,
++      const GURL& service_worker_scope,
++      const GURL& script_url) override;
++  void WillEvaluateServiceWorkerOnWorkerThread(
++      blink::WebServiceWorkerContextProxy* context_proxy,
++      v8::Local<v8::Context> v8_context,
++      int64_t service_worker_version_id,
++      const GURL& service_worker_scope,
++      const GURL& script_url,
++      const blink::ServiceWorkerToken& service_worker_token) override;
++  void DidStartServiceWorkerContextOnWorkerThread(
++      int64_t service_worker_version_id,
++      const GURL& service_worker_scope,
++      const GURL& script_url,
++      const blink::ServiceWorkerToken& service_worker_token) override;
++  void WillDestroyServiceWorkerContextOnWorkerThread(
++      v8::Local<v8::Context> context,
++      int64_t service_worker_version_id,
++      const GURL& service_worker_scope,
++      const GURL& script_url,
++      const blink::ServiceWorkerToken& service_worker_token) override;
+   std::unique_ptr<blink::URLLoaderThrottleProvider>
+   CreateURLLoaderThrottleProvider(
+       blink::URLLoaderThrottleProviderType provider_type) override;
+-- 
+2.51.0
