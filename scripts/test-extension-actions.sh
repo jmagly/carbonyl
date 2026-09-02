@@ -89,6 +89,18 @@ PY
   return 1
 }
 
+focus_window() {
+  local window_id=$1 label=$2
+  for _ in $(seq 1 100); do
+    if xdotool windowfocus --sync "$window_id" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "$label window did not accept X11 focus" >&2
+  return 1
+}
+
 command=(
   "$CARBONYL_BIN"
   --debug
@@ -116,8 +128,7 @@ for _ in $(seq 1 150); do
   sleep 0.1
 done
 [ -n "$WINDOW_ID" ] || { echo "operator window not found" >&2; exit 1; }
-xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
-  xdotool windowfocus --sync "$WINDOW_ID"
+focus_window "$WINDOW_ID" "operator"
 
 for _ in $(seq 1 100); do
   rg -q 'CARBONYL_EXTENSION_ACTION_STATE [a-p]{32}:1:1:1;' \
@@ -144,8 +155,7 @@ OPTIONS_WINDOW="$(xdotool search --class '^carbonyl-extension$' 2>/dev/null | he
 [ -n "$OPTIONS_WINDOW" ] || { echo "options window not found" >&2; exit 1; }
 xdotool windowsize --sync "$OPTIONS_WINDOW" 520 420
 wait_for_color "$TEST_ROOT/options.png" 32 96 160 "options surface"
-xdotool windowactivate --sync "$OPTIONS_WINDOW" 2>/dev/null ||
-  xdotool windowfocus --sync "$OPTIONS_WINDOW"
+focus_window "$OPTIONS_WINDOW" "options"
 xdotool key shift+Tab Return
 for _ in $(seq 1 100); do
   xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 || break
@@ -156,8 +166,7 @@ xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
   exit 1
 }
 
-xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
-  xdotool windowfocus --sync "$WINDOW_ID"
+focus_window "$WINDOW_ID" "operator"
 xdotool key shift+Tab Return
 for _ in $(seq 1 100); do
   grep -q 'CARBONYL_EXTENSION_SURFACE opened .* kind=popup' \
@@ -168,16 +177,14 @@ grep -q 'CARBONYL_EXTENSION_SURFACE opened .* kind=popup' \
   "$TEST_ROOT/terminal.log"
 POPUP_WINDOW="$(xdotool search --class '^carbonyl-extension$' 2>/dev/null | head -1 || true)"
 [ -n "$POPUP_WINDOW" ] || { echo "popup window not found" >&2; exit 1; }
-xdotool windowactivate --sync "$POPUP_WINDOW" 2>/dev/null ||
-  xdotool windowfocus --sync "$POPUP_WINDOW"
+focus_window "$POPUP_WINDOW" "popup"
 wait_for_color "$TEST_ROOT/popup.png" 160 64 32 "popup surface"
 xdotool key Tab Return
 wait_for_color "$TEST_ROOT/popup-clicked.png" 32 160 80 "popup action"
 
 grep -q 'CARBONYL_EXTENSION_STATUS state=loaded' "$TEST_ROOT/terminal.log"
 grep -q 'data-carbonyl-extension-content="loaded"' "$TEST_ROOT/terminal.log"
-xdotool windowactivate --sync "$POPUP_WINDOW" 2>/dev/null ||
-  xdotool windowfocus --sync "$POPUP_WINDOW"
+focus_window "$POPUP_WINDOW" "popup"
 xdotool key shift+Tab Return
 for _ in $(seq 1 100); do
   xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 || break
@@ -187,8 +194,7 @@ xdotool search --class '^carbonyl-extension$' >/dev/null 2>&1 && {
   echo "popup close control did not close its surface" >&2
   exit 1
 }
-xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
-  xdotool windowfocus --sync "$WINDOW_ID"
+focus_window "$WINDOW_ID" "operator"
 # From the address field, forward traversal reaches the first restart-only
 # management control. The accepted request must not unload the live action.
 xdotool key ctrl+l Tab Return
@@ -201,8 +207,7 @@ grep -q 'CARBONYL_EXTENSION_MANAGEMENT id=.* result=restart_required' \
   "$TEST_ROOT/terminal.log"
 grep -q 'CARBONYL_EXTENSION_ACTION_STATE [a-p]\{32\}:1:1:1;' \
   "$TEST_ROOT/terminal.log"
-xdotool windowactivate --sync "$WINDOW_ID" 2>/dev/null ||
-  xdotool windowfocus --sync "$WINDOW_ID"
+focus_window "$WINDOW_ID" "operator"
 xdotool key alt+F4
 for _ in $(seq 1 100); do
   kill -0 "$CARBONYL_PID" 2>/dev/null || break

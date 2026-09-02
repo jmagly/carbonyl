@@ -257,9 +257,10 @@ wait_for_load_stop_after "$reload_stopped_before" "Reload"
 # type command. URL fixup must encode the path and retain browser ownership of
 # submission.
 UNICODE_URL="$BASE_URL/✓"
-# Keep clipboard ownership in this shell instead of allowing xclip's default
-# daemon to outlive the test and retain an orchestrator/tee file descriptor.
-printf '%s' "$UNICODE_URL" | xclip -selection clipboard -silent &
+# Quiet mode remains in the foreground, unlike xclip's default/silent mode,
+# which forks a clipboard owner that can outlive the test and retain an
+# orchestrator/tee file descriptor after the test has passed.
+printf '%s' "$UNICODE_URL" | xclip -selection clipboard -quiet &
 XCLIP_PID=$!
 unicode_stopped_before="$(load_stop_count)"
 xdotool key ctrl+l
