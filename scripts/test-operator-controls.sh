@@ -157,7 +157,11 @@ wait_for_color() {
 }
 
 load_stop_count() {
-    grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true
+    # `script` records terminal painting and diagnostics in the same stream, so
+    # multiple state records may share one physical line. Count matched records,
+    # not lines, or a fast navigation can be invisible to the synchronization.
+    grep -aoE 'CARBONYL_OPERATOR_CONTROLS back=[01] forward=[01] loading=0' \
+        "$TERM_LOG" | wc -l || true
 }
 
 wait_for_load_stop_after() {
@@ -291,15 +295,9 @@ for _ in $(seq 1 100); do
 done
 grep -q '^GET /slow$' "$SERVER_LOG" || {
     echo "FAIL: slow fixture did not start"; exit 1; }
-stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+stopped_before="$(load_stop_count)"
 xdotool key ctrl+r
-for _ in $(seq 1 100); do
-    stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
-    [ "$stopped_after" -gt "$stopped_before" ] && break
-    sleep 0.1
-done
-[ "$stopped_after" -gt "$stopped_before" ] || {
-    echo "FAIL: Stop did not end the incomplete navigation"; exit 1; }
+wait_for_load_stop_after "$stopped_before" "Stop"
 
 # Renderer/network failure state remains browser-owned and explicit.
 kill -TERM "$SERVER_PID"
