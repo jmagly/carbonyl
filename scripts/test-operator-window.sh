@@ -445,8 +445,11 @@ fi
 
 # The bare-Xorg guest has no window manager to translate _NET_CLOSE_WINDOW.
 # Deliver the native Alt+F4 accelerator instead; it must tear down the shell
-# rather than leave an invisible Carbonyl process behind.
-xdotool key --window "$WINDOW_ID" alt+F4
+# rather than leave an invisible Carbonyl process behind. Carbonyl may destroy
+# the window before xdotool sends KeyRelease, which makes xdotool report an
+# expected BadWindow race; the process-exit and status checks below are the
+# authoritative result.
+xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
 closed=0
 for _ in $(seq 1 "${CLOSE_ATTEMPTS:-100}"); do
     if ! kill -0 "$CARBONYL_PID" 2>/dev/null; then
