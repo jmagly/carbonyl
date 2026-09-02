@@ -184,6 +184,7 @@ done
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
 xdotool mousemove --sync --window "$WINDOW_ID" 500 20 click 1
+sleep 0.1
 xdotool key ctrl+a
 capture_frame "$WORK_DIR/clipboard-focus.png"
 copied_address=""
