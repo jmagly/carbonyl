@@ -89,6 +89,25 @@ for path in "${carbonyl_files[@]}"; do
     fi
 done
 
+browser_client_source="$CARBONYL_ROOT/src/extensions/browser_client.cc"
+client_create_line=$(rg -n -F \
+    'extensions::g_client = new extensions::CarbonylExtensionsBrowserClient();' \
+    "$browser_client_source" | cut -d: -f1)
+client_set_line=$(rg -n -F \
+    'extensions::ExtensionsBrowserClient::Set(extensions::g_client);' \
+    "$browser_client_source" | cut -d: -f1)
+factory_build_line=$(rg -n -F \
+    'extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();' \
+    "$browser_client_source" | cut -d: -f1)
+if [[ -n "$client_create_line" && -n "$client_set_line" && \
+      -n "$factory_build_line" ]] && \
+    (( client_create_line < client_set_line && \
+       client_set_line < factory_build_line )); then
+    pass "ExtensionsBrowserClient is installed before keyed-service factories"
+else
+    fail "ExtensionsBrowserClient must precede keyed-service factory construction"
+fi
+
 if [ -e "$CHROMIUM_SRC/extensions/shell" ]; then
     fail "extensions/shell unexpectedly exists; review the ADR before reusing it"
 else

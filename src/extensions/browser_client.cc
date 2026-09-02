@@ -454,9 +454,13 @@ namespace carbonyl {
 
 void InstallExtensionsBrowserClient() {
   if (!extensions::g_client) {
-    extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();
     extensions::g_client = new extensions::CarbonylExtensionsBrowserClient();
     extensions::ExtensionsBrowserClient::Set(extensions::g_client);
+    // Chromium 150 keyed-service factories consult the process-global
+    // ExtensionsBrowserClient from their DependsOn() declarations. Install
+    // Carbonyl's client before building those factories, matching Chrome's
+    // pre-profile initialization order.
+    extensions::EnsureBrowserContextKeyedServiceFactoriesBuilt();
     extensions::g_client->Init();
   }
 }
