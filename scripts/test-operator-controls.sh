@@ -93,7 +93,7 @@ fi
 CARBONYL_CMD+=("$BASE_URL/one")
 printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
 COLORTERM=truecolor script -q -f -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
-    </dev/null &
+    </dev/null >/dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=""

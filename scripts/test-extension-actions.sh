@@ -118,7 +118,7 @@ command=(
 )
 printf -v quoted '%q ' "${command[@]}"
 COLORTERM=truecolor script -q -f -c "$quoted" "$TEST_ROOT/terminal.log" \
-  </dev/null &
+  </dev/null >/dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=
