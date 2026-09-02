@@ -180,11 +180,11 @@ sandboxing or site isolation.
 ### Geometry, focus, and input contract
 
 Operator mode has one geometry path. The native `views::Widget` client bounds
-size its fill-layout `views::WebView`; WebView continuously resizes the already
-hosted `WebContents`. Aura/Ozone applies device scale and translates native
-coordinates into content coordinates. The terminal rows/columns remain a
-separate presentation of the same compositor damage and never resize the
-native page. There is no raw-Xlib input-forwarding path.
+size a vertical Views layout whose flexible `views::WebView` continuously
+resizes the already hosted `WebContents`. Aura/Ozone applies device scale and
+translates native coordinates into content coordinates. The terminal
+rows/columns remain a separate presentation of the same compositor damage and
+never resize the native page. There is no raw-Xlib input-forwarding path.
 
 The window uses normal window-manager decorations and size controls. Native
 activation restores the page's last focused view; deactivation stores it.
@@ -203,18 +203,58 @@ forwards key events but cannot commit XKB/IME text. Renderer and utility child
 processes retain their normal headless marker, and the GPU child uses the X11
 UI message pump required by this explicit mode.
 
+### Carbonyl-owned browser controls
+
+Operator mode places native Carbonyl controls above the page-owned WebView.
+The first row provides Back, Forward, Reload/Stop, and an address/search field;
+the second row displays the committed origin and a conservative security
+classification. Because both rows are separate Views children rather than a
+page overlay, page content cannot paint over or supply text shown in the
+browser-owned display area.
+
+The security line never uses a page title or page-provided string. It derives
+only from the last committed `NavigationEntry`, its actual URL, page type, SSL
+status, certificate flags, and mixed-content flags. Labels distinguish Secure,
+Not secure, Local, Local file, Certificate error, Internal, and Error page.
+HTTPS is labeled Secure only after SSL state is initialized and no certificate
+or insecure-content signal is present.
+
+Address entry accepts Unicode and uses Chromium's user-typed URL fixer only for
+explicitly allowed `http`, `https`, `file`, `about`, and `chrome` destinations.
+Domain-, localhost-, and IP-shaped input navigates directly. Other text is
+escaped into a DuckDuckGo HTTPS query; schemes such as `javascript` are treated
+as search text rather than executed. Enter submits, Escape cancels, and native
+Textfield behavior supplies selection, copy, and paste.
+
+Native operator shortcuts are:
+
+- `Ctrl+L`: focus and select the address field
+- `Alt+Left` / `Alt+Right`: history back / forward
+- `Ctrl+R` or `F5`: activate Reload/Stop
+
+They are registered at the high-priority Views accelerator tier specifically
+so a consumed browser command is not also delivered to page script. These
+shortcuts apply only while the native operator widget has focus. Terminal-mode
+navigation and inspection bindings remain on the PTY path and are unchanged.
+
+`scripts/test-operator-controls.sh` exercises these controls only when
+`CARBONYL_UI_TEST_GUEST=1` is explicitly set inside the disposable Ubuntu
+26.04 UI-test VM. It uses that guest's local Xorg display; it must not be aimed
+at a developer workstation display or Wayland compatibility socket.
+
 Shutdown destroys the shell-owned `OperatorWindow` before
 `HeadlessBrowserImpl::Shutdown()` clears BrowserContexts and WebContents. The
 widget observer also holds a `WebContents::GetWeakPtr()` handle so queued native
 activation notifications cannot outlive the page during the shutdown drain.
 
-The regression harness independently asserts native resize, post-resize
+The regression harnesses independently assert native resize, post-resize
 terminal progress, primary and context-menu clicks, wheel and keyboard input,
-stored-focus recovery across a real WM minimize/restore, native pixels, and
-close-triggered process exit. Composed Unicode/IME, monitor-scale changes, and
-kernel uinput remain isolated-worker graduation checks: support depends on the
-host XKB/IME and window-manager configuration and is not claimed from an
-Xvfb-only run.
+stored-focus recovery across a real WM minimize/restore, browser-owned
+history/reload/stop/address behavior, redirect and error-page state, shortcut
+isolation, native pixels, and close-triggered process exit. Composed
+Unicode/IME, monitor-scale changes, and kernel uinput remain isolated-worker
+graduation checks: support depends on the guest XKB/IME and window-manager
+configuration and is not claimed from an Xvfb-only run.
 
 This is an architecture prototype, not yet the production operator mode. In
 particular, do not open a user-data directory concurrently in operator and

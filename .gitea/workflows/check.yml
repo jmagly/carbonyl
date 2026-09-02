@@ -121,9 +121,21 @@ jobs:
       - name: Shell smoke syntax
         run: |
           cd "${GITHUB_WORKSPACE}/.repo-clone"
-          bash -n scripts/test-cdp.sh
+          bash -n \
+            scripts/test-cdp.sh \
+            scripts/test-operator-controls-model.sh \
+            scripts/test-operator-controls.sh
           bash -n scripts/resolve-ninja-jobs.sh scripts/test-resolve-ninja-jobs.sh
           bash scripts/test-resolve-ninja-jobs.sh
+
+      - name: Operator controls policy test (in container)
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "${GITHUB_WORKSPACE}/.repo-clone:/workspace:ro" \
+            -w /workspace \
+            "${BUILDER_IMAGE}" \
+            scripts/test-operator-controls-model.sh
 
       - name: Verify pinned toolchain (in container)
         run: |

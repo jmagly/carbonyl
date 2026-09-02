@@ -99,11 +99,11 @@ the existing Carbonyl/HeadlessScreen value. `WebView` owns Aura reparenting and
 content bounds inside the widget. The terminal renderer samples the same
 physical compositor raster.
 
-Production resize, controls insets, monitor-scale changes, terminal cell
-mapping, and trusted-input coordinate transforms are intentionally assigned to
-#287. That issue must establish a single versioned transform rather than allow
-the native widget, terminal renderer, and uinput path to maintain independent
-geometry.
+Production resize, monitor-scale changes, terminal cell mapping, and
+trusted-input coordinate transforms are assigned to #287. Browser-owned
+control insets and their unspoofable committed-origin display are assigned to
+#288. Both issues preserve one transform rather than let the native widget,
+terminal renderer, and uinput path maintain independent geometry.
 
 ## Profile and lifecycle contract
 
@@ -217,6 +217,12 @@ SHA-256 `5ad3a4d30140977593bb611b839a50fd7e6bdf8e65c38cc64bf38212826a91ee`.
   prototype is not authorization to open one directory concurrently.
 - Native-window diagnostics expose only widget IDs and dimensions, never URLs,
   cookies, storage values, or profile contents.
+- The browser-owned committed-origin line lives outside the WebView and derives
+  only from Chromium navigation/SSL state; page content cannot overlap it or
+  supply its text.
+- Operator address input allows only browser-navigation schemes. Disallowed
+  schemes become escaped HTTPS search text and are never executed as page
+  script.
 
 ## Consequences and implementation sequence
 
