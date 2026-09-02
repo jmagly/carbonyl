@@ -47,6 +47,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
+#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -862,6 +863,15 @@ bool OperatorWindow::Initialize(content::WebContents* web_contents,
   params.wm_class_class = "carbonyl";
   params.wm_class_name = "Carbonyl";
   impl_->widget->Init(std::move(params));
+
+  // Headless content can create ClipboardNonBacked before Ozone initializes
+  // its X11 platform clipboard. The per-thread instance is sticky, so replace
+  // it now that Widget::Init has completed native platform initialization.
+  // Explicit operator mode then interoperates with the desktop CLIPBOARD and
+  // PRIMARY selections instead of writing into a process-local stub.
+  ui::Clipboard::DestroyClipboardForCurrentThread();
+  CHECK(ui::Clipboard::GetForCurrentThread());
+
   impl_->controls->AttachToWidget(impl_->widget.get());
   impl_->observer = std::make_unique<OperatorWidgetObserver>(
       impl_->widget.get(), web_contents, web_view_ptr,
