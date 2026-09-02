@@ -236,6 +236,7 @@ fi
 
 runtime_contract_checks=(
     'src/extensions/browser_client.cc:CarbonylRuntimeAPIDelegate'
+    'src/extensions/browser_client.cc:CarbonylKioskDelegate'
     'src/extensions/browser_client.cc:CarbonylExtensionWebContentsObserver'
     'src/extensions/extension_system.cc:StateStore::BackendType::RULES'
     'src/extensions/extension_loader.cc:IndexAndPersistRulesOnInstall'

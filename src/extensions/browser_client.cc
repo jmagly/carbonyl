@@ -27,6 +27,7 @@
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_interface_binders.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/kiosk/kiosk_delegate.h"
 #include "extensions/browser/safe_browsing_delegate.h"
 #include "extensions/browser/updater/null_extension_cache.h"
 #include "extensions/browser/url_request_util.h"
@@ -173,6 +174,16 @@ class CarbonylExtensionWebContentsObserver
 };
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(CarbonylExtensionWebContentsObserver);
+
+class CarbonylKioskDelegate final : public KioskDelegate {
+ public:
+  CarbonylKioskDelegate() = default;
+  ~CarbonylKioskDelegate() override = default;
+
+  bool IsAutoLaunchedKioskApp(const ExtensionId&) const override {
+    return false;
+  }
+};
 
 class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
  public:
@@ -402,7 +413,7 @@ class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
     return CarbonylExtensionWebContentsObserver::FromWebContents(web_contents);
   }
 
-  KioskDelegate* GetKioskDelegate() override { return nullptr; }
+  KioskDelegate* GetKioskDelegate() override { return &kiosk_delegate_; }
   SafeBrowsingDelegate* GetSafeBrowsingDelegate() override {
     return safe_browsing_delegate_.get();
   }
@@ -443,6 +454,7 @@ class CarbonylExtensionsBrowserClient : public ExtensionsBrowserClient {
   std::unique_ptr<ExtensionCache> extension_cache_;
   std::unique_ptr<SafeBrowsingDelegate> safe_browsing_delegate_;
   std::unique_ptr<ExtensionManagementClient> management_client_;
+  CarbonylKioskDelegate kiosk_delegate_;
 };
 
 CarbonylExtensionsBrowserClient* g_client = nullptr;
