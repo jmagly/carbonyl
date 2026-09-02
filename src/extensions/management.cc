@@ -150,15 +150,11 @@ std::vector<ExtensionActionSnapshot> GetExtensionActions(
     if (!IsOwnExtensionUrl(options_url, extension->id())) {
       options_url = GURL();
     }
-    const bool visible = action->GetIsVisible(tab_id);
-    LOG(INFO) << "CARBONYL_EXTENSION_ACTION_EVALUATION id=" << extension->id()
-              << " visible=" << visible
-              << " host_access=" << has_action_access;
     snapshots.push_back({
         .id = extension->id(),
         .title = action->GetTitle(tab_id),
         .badge = action->GetDisplayBadgeText(tab_id),
-        .enabled = visible && has_action_access,
+        .enabled = action->GetIsVisible(tab_id) && has_action_access,
         .popup_url = std::move(popup_url),
         .options_url = std::move(options_url),
     });
