@@ -342,6 +342,12 @@ if kill -0 "$CARBONYL_PID" 2>/dev/null; then
 fi
 wait "$CARBONYL_PID"
 CARBONYL_PID=""
+# Ensure XTEST has delivered the releases associated with the close
+# accelerator before another browser process takes focus on this display.
+for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
+    xdotool keyup "$key_name" 2>/dev/null || true
+done
+sleep 0.25
 grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' "$TERM_LOG" || {
     echo "FAIL: native close did not complete the storage flush"
     exit 1

@@ -38,6 +38,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# XTEST key releases can outlive the window that handled the corresponding
+# press. Clear the modifiers used by the preceding UI test before creating a
+# new browser window, otherwise a delayed Alt+F4 can close this process during
+# its first navigation.
+for key_name in Alt_L Alt_R F4 Control_L Control_R Shift_L Shift_R; do
+  xdotool keyup "$key_name" 2>/dev/null || true
+done
+sleep 0.25
+
 cp -a -- "$CARBONYL_ROOT/tests/fixtures/extensions/mv3-runtime" \
   "$TEST_ROOT/extension"
 EXTENSION_PATH="$(realpath -- "$TEST_ROOT/extension")"
