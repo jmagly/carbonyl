@@ -156,12 +156,27 @@ wait_for_color() {
     return 1
 }
 
+load_stop_count() {
+    grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true
+}
+
+wait_for_load_stop_after() {
+    local before=$1 label=$2 after=$1
+    for _ in $(seq 1 100); do
+        after="$(load_stop_count)"
+        if [ "$after" -gt "$before" ]; then return 0; fi
+        sleep 0.1
+    done
+    echo "FAIL: $label did not reach browser load-stop state"
+    return 1
+}
+
 wait_for_color 17 204 68 "page one"
 grep -q "security=Local - $BASE_URL" "$TERM_LOG" || {
     echo "FAIL: trustworthy local-origin state missing"; exit 1; }
 
 # Address submission and redirect synchronization.
-redirect_stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+redirect_stopped_before="$(load_stop_count)"
 xdotool key ctrl+l
 xdotool type --delay 10 "$BASE_URL/redirect"
 xdotool key Return
@@ -170,16 +185,7 @@ grep -q '^GET /redirect$' "$SERVER_LOG" || {
     echo "FAIL: address submission did not reach redirect fixture"; exit 1; }
 grep -q '^GET /two$' "$SERVER_LOG" || {
     echo "FAIL: redirect destination was not committed"; exit 1; }
-redirect_stopped_after="$redirect_stopped_before"
-for _ in $(seq 1 100); do
-    redirect_stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
-    [ "$redirect_stopped_after" -gt "$redirect_stopped_before" ] && break
-    sleep 0.1
-done
-[ "$redirect_stopped_after" -gt "$redirect_stopped_before" ] || {
-    echo "FAIL: redirect destination did not reach browser load-stop state"
-    exit 1
-}
+wait_for_load_stop_after "$redirect_stopped_before" "redirect destination"
 
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
@@ -208,19 +214,27 @@ xdotool key Escape
 
 # Stable DIP geometry makes the browser-owned pointer targets deterministic:
 # Back center=(38,20), Forward center=(114,20) in the widget client.
+pointer_back_stopped_before="$(load_stop_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" 38 20 click 1
 wait_for_color 17 204 68 "pointer Back"
+wait_for_load_stop_after "$pointer_back_stopped_before" "pointer Back"
+pointer_forward_stopped_before="$(load_stop_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" 114 20 click 1
 wait_for_color 34 170 238 "pointer Forward"
+wait_for_load_stop_after "$pointer_forward_stopped_before" "pointer Forward"
 
 # Keyboard history controls must work and must not leak to page JavaScript.
+keyboard_back_stopped_before="$(load_stop_count)"
 xdotool key alt+Left
 wait_for_color 17 204 68 "keyboard Back"
+wait_for_load_stop_after "$keyboard_back_stopped_before" "keyboard Back"
+keyboard_forward_stopped_before="$(load_stop_count)"
 xdotool key alt+Right
 wait_for_color 34 170 238 "keyboard Forward"
+wait_for_load_stop_after "$keyboard_forward_stopped_before" "keyboard Forward"
 
 two_requests_before="$(grep -c '^GET /two$' "$SERVER_LOG" || true)"
-reload_stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+reload_stopped_before="$(load_stop_count)"
 xdotool key ctrl+r
 for _ in $(seq 1 100); do
     two_requests_after="$(grep -c '^GET /two$' "$SERVER_LOG" || true)"
@@ -229,23 +243,14 @@ for _ in $(seq 1 100); do
 done
 [ "$two_requests_after" -gt "$two_requests_before" ] || {
     echo "FAIL: Reload did not issue a new request"; exit 1; }
-reload_stopped_after="$reload_stopped_before"
-for _ in $(seq 1 100); do
-    reload_stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
-    [ "$reload_stopped_after" -gt "$reload_stopped_before" ] && break
-    sleep 0.1
-done
-[ "$reload_stopped_after" -gt "$reload_stopped_before" ] || {
-    echo "FAIL: Reload did not reach browser load-stop state"
-    exit 1
-}
+wait_for_load_stop_after "$reload_stopped_before" "Reload"
 
 # Clipboard input exercises native Unicode editing without xdotool's ASCII-only
 # type command. URL fixup must encode the path and retain browser ownership of
 # submission.
 UNICODE_URL="$BASE_URL/✓"
 printf '%s' "$UNICODE_URL" | xclip -selection clipboard
-unicode_stopped_before="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
+unicode_stopped_before="$(load_stop_count)"
 xdotool key ctrl+l
 xdotool key ctrl+v
 xdotool key Return
@@ -256,18 +261,11 @@ for _ in $(seq 1 100); do
 done
 grep -q '^GET /%E2%9C%93$' "$SERVER_LOG" || {
     echo "FAIL: Unicode address was not encoded and submitted"; exit 1; }
-unicode_stopped_after="$unicode_stopped_before"
-for _ in $(seq 1 100); do
-    unicode_stopped_after="$(grep -c 'CARBONYL_OPERATOR_CONTROLS.*loading=0' "$TERM_LOG" || true)"
-    [ "$unicode_stopped_after" -gt "$unicode_stopped_before" ] && break
-    sleep 0.1
-done
-[ "$unicode_stopped_after" -gt "$unicode_stopped_before" ] || {
-    echo "FAIL: Unicode address did not reach browser load-stop state"
-    exit 1
-}
+wait_for_load_stop_after "$unicode_stopped_before" "Unicode address"
+unicode_back_stopped_before="$(load_stop_count)"
 xdotool key alt+Left
 wait_for_color 34 170 238 "return from Unicode address"
+wait_for_load_stop_after "$unicode_back_stopped_before" "return from Unicode address"
 
 # Escape cancels address editing and returns focus to the page's prior input.
 xdotool key ctrl+l
