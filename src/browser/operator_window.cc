@@ -416,12 +416,33 @@ class OperatorControls final : public content::WebContentsObserver,
   }
 
   // views::WidgetObserver:
-  void OnWidgetDestroyed(views::Widget*) override {
-    widget_observation_.Reset();
-    widget_ = nullptr;
+  void OnWidgetDestroying(views::Widget*) override {
+    action_refresh_timer_.Stop();
     if (extension_surface_) {
       extension_surface_->DetachParent();
     }
+    if (focus_manager_) {
+      focus_manager_->RemoveFocusChangeListener(this);
+      focus_manager_->UnregisterAccelerators(this);
+      focus_manager_ = nullptr;
+    }
+    // Widget destroys its owned View tree before OnWidgetDestroyed. Release
+    // every non-owning child handle while those Views are still alive so the
+    // allocator can verify the native-close path without dangling raw_ptrs.
+    web_view_ = nullptr;
+    back_button_ = nullptr;
+    forward_button_ = nullptr;
+    reload_stop_button_ = nullptr;
+    address_ = nullptr;
+    origin_label_ = nullptr;
+    extension_status_label_ = nullptr;
+    action_buttons_.clear();
+    options_buttons_.clear();
+    widget_ = nullptr;
+  }
+
+  void OnWidgetDestroyed(views::Widget*) override {
+    widget_observation_.Reset();
   }
 
   // ui::AcceleratorTarget:
@@ -779,6 +800,11 @@ class OperatorWidgetObserver final : public views::WidgetObserver {
         widget->IsActive()) {
       web_contents_->RestoreFocus();
     }
+  }
+
+  void OnWidgetDestroying(views::Widget*) override {
+    web_contents_.reset();
+    web_view_ = nullptr;
   }
 
   void OnWidgetDestroyed(views::Widget*) override {
