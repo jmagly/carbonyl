@@ -118,10 +118,17 @@ PY
 }
 
 cleanup() {
-    if [ -n "${CARBONYL_PID:-}" ]; then
+    if [ -n "${CARBONYL_PID:-}" ] && kill -0 "$CARBONYL_PID" 2>/dev/null; then
+        if [ -n "${WINDOW_ID:-}" ]; then
+            xdotool key --window "$WINDOW_ID" alt+F4 2>/dev/null || true
+            for _ in $(seq 1 50); do
+                kill -0 "$CARBONYL_PID" 2>/dev/null || break
+                sleep 0.1
+            done
+        fi
         kill -TERM "$CARBONYL_PID" 2>/dev/null || true
-        wait "$CARBONYL_PID" 2>/dev/null || true
     fi
+    [ -z "${CARBONYL_PID:-}" ] || wait "$CARBONYL_PID" 2>/dev/null || true
     if [ -z "${KEEP_WORK_DIR:-}" ]; then
         rm -rf -- "$WORK_DIR"
     fi
@@ -130,6 +137,7 @@ trap cleanup EXIT
 
 CARBONYL_CMD=(
     "$CARBONYL_BIN"
+    --debug
     --ozone-platform=x11
     "--user-data-dir=$WORK_DIR/profile"
     --viewport=1280x720
@@ -143,8 +151,8 @@ fi
 CARBONYL_CMD+=("file://$FIXTURE")
 printf -v CARBONYL_CMD_QUOTED '%q ' "${CARBONYL_CMD[@]}"
 
-COLORTERM=truecolor script -q -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
-    </dev/null &
+COLORTERM=truecolor script -q -f -c "$CARBONYL_CMD_QUOTED" "$TERM_LOG" \
+    </dev/null >/dev/null &
 CARBONYL_PID=$!
 
 WINDOW_ID=""
