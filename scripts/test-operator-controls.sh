@@ -183,12 +183,12 @@ done
 
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
-xdotool key ctrl+l
+xdotool mousemove --sync --window "$WINDOW_ID" 500 20 click 1
+xdotool key ctrl+a
 copied_address=""
 for _ in $(seq 1 50); do
-    # FocusManager applies the Ctrl+L focus change asynchronously. Reissue
-    # copy while it converges instead of polling an empty clipboard produced
-    # by a Ctrl+C delivered in the same event turn.
+    # Reissue copy while native pointer focus settles instead of polling an
+    # empty clipboard produced by a Ctrl+C in the same event turn.
     sleep 0.05
     xdotool key ctrl+c
     copied_address="$(xclip -selection clipboard -o 2>/dev/null || true)"
