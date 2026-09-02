@@ -195,7 +195,8 @@ for _ in $(seq 1 50); do
     [ "$copied_address" = "$BASE_URL/two" ] && break
 done
 [ "$copied_address" = "$BASE_URL/two" ] || {
-    echo "FAIL: copied address is not the committed redirect destination"
+    printf 'FAIL: copied address is not the committed redirect destination (got %q)\n' \
+        "$copied_address"
     exit 1
 }
 xdotool key Escape
