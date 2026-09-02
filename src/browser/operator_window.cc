@@ -175,6 +175,11 @@ class OperatorExtensionSurface final : public content::WebContentsObserver {
     allowed_extension_id_.clear();
   }
 
+  void DetachParent() {
+    Close();
+    parent_ = nullptr;
+  }
+
  private:
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override {
@@ -200,6 +205,7 @@ class OperatorExtensionSurface final : public content::WebContentsObserver {
 class OperatorControls final : public content::WebContentsObserver,
                                public views::TextfieldController,
                                public views::FocusChangeListener,
+                               public views::WidgetObserver,
                                public ui::AcceleratorTarget {
  public:
   OperatorControls(content::WebContents* web_contents, views::WebView* web_view)
@@ -328,6 +334,7 @@ class OperatorControls final : public content::WebContentsObserver,
 
   void AttachToWidget(views::Widget* widget) {
     widget_ = widget;
+    widget_observation_.Observe(widget);
     focus_manager_ = widget->GetFocusManager();
     CHECK(focus_manager_);
     focus_manager_->AddFocusChangeListener(this);
@@ -406,6 +413,15 @@ class OperatorControls final : public content::WebContentsObserver,
 
   void OnFocusManagerDestroying(views::FocusManager*) override {
     focus_manager_ = nullptr;
+  }
+
+  // views::WidgetObserver:
+  void OnWidgetDestroyed(views::Widget*) override {
+    widget_observation_.Reset();
+    widget_ = nullptr;
+    if (extension_surface_) {
+      extension_surface_->DetachParent();
+    }
   }
 
   // ui::AcceleratorTarget:
@@ -712,6 +728,8 @@ class OperatorControls final : public content::WebContentsObserver,
   std::string last_action_state_;
   std::string management_notice_;
   bool renderer_failed_ = false;
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
 };
 
 // The Views WebView owns continuous content resizing and native event
