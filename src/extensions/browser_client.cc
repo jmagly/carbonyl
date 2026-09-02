@@ -158,8 +158,8 @@ class CarbonylExtensionsBrowserAPIProvider final
 
   void RegisterExtensionFunctions(
       ExtensionFunctionRegistry* registry) override {
-    registry->Register<CarbonylActionSetTitleFunction>();
-    registry->Register<CarbonylActionSetBadgeTextFunction>();
+    registry->RegisterFunction<CarbonylActionSetTitleFunction>();
+    registry->RegisterFunction<CarbonylActionSetBadgeTextFunction>();
   }
 };
 
