@@ -247,6 +247,9 @@ wait_for_zoom_percent_after "$zoom_before" 110 "pointer zoom in"
 zoom_before="$(zoom_event_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" "$((operator_width - 78))" 20 click 1
 wait_for_zoom_percent_after "$zoom_before" 100 "pointer zoom reset"
+# Pointer activation must not move focus away from the page's active input.
+xdotool type --delay 20 'zoom-focus'
+wait_for_color 119 51 170 "zoom pointer focus preservation"
 
 # Address submission and redirect synchronization.
 redirect_stopped_before="$(load_stop_count)"

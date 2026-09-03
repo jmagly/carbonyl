@@ -56,6 +56,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -313,6 +314,7 @@ class OperatorControls final : public content::WebContentsObserver,
             u"-"));
     zoom_out_button_->SetAccessibleName(u"Zoom out");
     zoom_out_button_->SetTooltipText(u"Zoom out (Ctrl+-)");
+    zoom_out_button_->SetRequestFocusOnPress(false);
     zoom_out_button_->SetPreferredSize(gfx::Size(36, 32));
 
     zoom_reset_button_ =
@@ -322,6 +324,7 @@ class OperatorControls final : public content::WebContentsObserver,
                                 content::PAGE_ZOOM_RESET),
             u"100%"));
     zoom_reset_button_->SetTooltipText(u"Reset page zoom (Ctrl+0)");
+    zoom_reset_button_->SetRequestFocusOnPress(false);
     zoom_reset_button_->SetPreferredSize(gfx::Size(64, 32));
 
     zoom_in_button_ =
@@ -331,6 +334,7 @@ class OperatorControls final : public content::WebContentsObserver,
             u"+"));
     zoom_in_button_->SetAccessibleName(u"Zoom in");
     zoom_in_button_->SetTooltipText(u"Zoom in (Ctrl++)");
+    zoom_in_button_->SetRequestFocusOnPress(false);
     zoom_in_button_->SetPreferredSize(gfx::Size(36, 32));
 
     root->AddChildView(std::move(toolbar));
@@ -749,6 +753,7 @@ class OperatorControls final : public content::WebContentsObserver,
       zoom_reset_button_->SetEnabled(false);
       zoom_reset_button_->SetText(u"Zoom");
       zoom_reset_button_->SetAccessibleName(u"Page zoom unavailable");
+      zoom_reset_button_->GetViewAccessibility().RemoveValue();
       zoom_in_button_->SetEnabled(false);
       return;
     }
@@ -760,6 +765,7 @@ class OperatorControls final : public content::WebContentsObserver,
     zoom_reset_button_->SetAccessibleName(
         u"Reset page zoom, current zoom " +
         base::UTF8ToUTF16(base::NumberToString(percent)) + u" percent");
+    zoom_reset_button_->GetViewAccessibility().SetValue(percent_text);
 
     const double current_level = zoom_controller_->GetZoomLevel();
     const std::vector<double> levels = zoom::PageZoom::PresetZoomLevels(

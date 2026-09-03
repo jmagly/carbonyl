@@ -31,13 +31,16 @@ const input = document.querySelector('#page-input');
 const inputMarker = document.querySelector('#input-marker');
 const leakMarker = document.querySelector('#leak-marker');
 input.addEventListener('input', event => {{
-  if (event.isTrusted && input.value.endsWith('page-input')) {{
+  if (event.isTrusted &&
+      (input.value.endsWith('page-input') ||
+       input.value.endsWith('zoom-focus'))) {{
     inputMarker.style.background = '#7733aa';
   }}
 }});
 addEventListener('keydown', event => {{
   if (event.isTrusted &&
-      ((event.ctrlKey && (event.key === 'l' || event.key === 'r')) ||
+      ((event.ctrlKey &&
+        ['l', 'r', '+', '=', '-', '0'].includes(event.key)) ||
        (event.altKey && (event.key === 'ArrowLeft' ||
                         event.key === 'ArrowRight')))) {{
     leakMarker.style.background = '#aa0011';
