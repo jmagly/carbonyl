@@ -807,6 +807,7 @@ mod tests {
 
     #[test]
     fn dump_frame_cli_selects_program() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let original = std::env::var("CARBONYL_DUMP_FRAME").ok();
         std::env::remove_var("CARBONYL_DUMP_FRAME");
 
@@ -841,6 +842,7 @@ mod tests {
 
     #[test]
     fn dump_text_takes_precedence_over_dump_frame() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let cmd = CommandLine::parse_args(vec!["--dump".to_string(), "--dump-text".to_string()]);
         assert!(matches!(
             cmd.program,
@@ -879,6 +881,7 @@ mod tests {
 
     #[test]
     fn bare_hostname_urls_default_to_https() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let cmd = CommandLine::parse_args(vec![
             "--user-agent=Custom UA 1.0".to_string(),
             "example.com/path?q=1".to_string(),
@@ -895,6 +898,7 @@ mod tests {
 
     #[test]
     fn url_normalization_keeps_explicit_schemes_and_local_paths() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let argv = vec![
             "http://example.com".to_string(),
             "https://example.org".to_string(),
@@ -912,6 +916,7 @@ mod tests {
 
     #[test]
     fn url_normalization_runs_before_basic_auth() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let cmd = CommandLine::parse_args(vec![
             "--basic-auth=user:pass".to_string(),
             "example.com/path".to_string(),
@@ -972,6 +977,7 @@ mod tests {
 
     #[test]
     fn tab_focus_defaults_off_and_cli_enables_it() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let original = std::env::var("CARBONYL_TAB_FOCUS").ok();
         std::env::remove_var("CARBONYL_TAB_FOCUS");
 
@@ -1136,6 +1142,7 @@ mod tests {
 
     #[test]
     fn basic_auth_rewrites_first_http_url_and_consumes_flag() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let argv = vec![
             "--basic-auth=user:pass".to_string(),
             "--user-agent=Custom UA 1.0".to_string(),
@@ -1155,6 +1162,7 @@ mod tests {
 
     #[test]
     fn basic_auth_percent_encodes_userinfo() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let argv = vec![
             "--basic-auth=user name:p@ss:word".to_string(),
             "http://example.com".to_string(),
@@ -1169,6 +1177,7 @@ mod tests {
 
     #[test]
     fn basic_auth_does_not_rewrite_existing_userinfo_or_non_http_urls() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let cmd = CommandLine::parse_args(vec![
             "--basic-auth=user:pass".to_string(),
             "https://already:there@example.com".to_string(),
@@ -1184,6 +1193,7 @@ mod tests {
 
     #[test]
     fn download_dir_cli_is_preserved_as_chromium_switch() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let cmd = CommandLine::parse_args(vec![
             "--download-dir=/tmp/carbonyl-downloads".to_string(),
             "https://example.com".to_string(),
@@ -1234,6 +1244,7 @@ mod tests {
 
     #[test]
     fn file_dialog_path_cli_is_preserved_as_chromium_switch() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let cmd = CommandLine::parse_args(vec![
             "--file-dialog-path=/tmp/upload.txt".to_string(),
             "https://example.com".to_string(),
@@ -1298,10 +1309,11 @@ mod tests {
     // survive verbatim in `args`, in order, so `bridge.rs::main()` can forward
     // them to the in-process Chromium child. This guards the passthrough
     // invariant against a future cleanup of the parse loop silently dropping
-    // unknown flags. Asserting on `args` is env-independent: the field is the
-    // input vector and is never mutated by the parser.
+    // unknown flags. The environment lock prevents unrelated tests from
+    // appending environment-derived Chromium switches during parsing.
     #[test]
     fn chromium_flags_pass_through_verbatim() {
+        let _guard = ENV_LOCK.lock().unwrap();
         let argv = vec![
             "--proxy-server=socks5://127.0.0.1:9050".to_string(),
             "--user-agent=Custom UA 1.0".to_string(),
@@ -1319,6 +1331,7 @@ mod tests {
 
     #[test]
     fn carbonyl_flags_are_consumed_yet_still_forwarded() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // A Carbonyl flag (`--fps`) is parsed into config AND still left on
         // `args` so it reaches Chromium too (which ignores unknown switches).
         // A Chromium flag in the same argv is untouched by the parser. #188.
@@ -1356,6 +1369,7 @@ mod tests {
 
     #[test]
     fn chromium_flag_value_with_extra_equals_is_preserved() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // The parser splits on '=' and keeps only the first value segment, but
         // `args` retains the full original token — so a Chromium flag whose
         // value itself contains '=' is forwarded intact. #188.
