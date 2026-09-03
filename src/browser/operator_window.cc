@@ -32,6 +32,9 @@
 #include "carbonyl/src/browser/operator_controls_model.h"
 #include "carbonyl/src/extensions/browser_client.h"
 #include "carbonyl/src/extensions/management.h"
+#include "components/zoom/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
+#include "components/zoom/zoom_observer.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -232,10 +235,19 @@ class OperatorControls final : public content::WebContentsObserver,
                                public views::TextfieldController,
                                public views::FocusChangeListener,
                                public views::WidgetObserver,
+                               public zoom::ZoomObserver,
                                public ui::AcceleratorTarget {
  public:
   OperatorControls(content::WebContents* web_contents, views::WebView* web_view)
-      : content::WebContentsObserver(web_contents), web_view_(web_view) {}
+      : content::WebContentsObserver(web_contents),
+        web_view_(web_view),
+        zoom_controller_(zoom::ZoomController::FromWebContents(web_contents)) {
+    if (zoom_controller_) {
+      zoom_controller_->AddObserver(this);
+    } else {
+      LOG(ERROR) << "CARBONYL_OPERATOR_ZOOM controller unavailable";
+    }
+  }
 
   OperatorControls(const OperatorControls&) = delete;
   OperatorControls& operator=(const OperatorControls&) = delete;
@@ -243,6 +255,9 @@ class OperatorControls final : public content::WebContentsObserver,
   ~OperatorControls() override {
     action_refresh_timer_.Stop();
     extension_surface_.reset();
+    if (zoom_controller_) {
+      zoom_controller_->RemoveObserver(this);
+    }
     if (focus_manager_) {
       focus_manager_->RemoveFocusChangeListener(this);
       focus_manager_->UnregisterAccelerators(this);
@@ -289,6 +304,34 @@ class OperatorControls final : public content::WebContentsObserver,
     address_->SetAccessibleName(u"Address and search");
     address_->SetPlaceholderText(u"Enter address or search");
     toolbar_layout->SetFlexForView(address_, 1, true);
+
+    zoom_out_button_ =
+        toolbar->AddChildView(std::make_unique<views::MdTextButton>(
+            base::BindRepeating(&OperatorControls::ApplyPageZoom,
+                                base::Unretained(this),
+                                content::PAGE_ZOOM_OUT),
+            u"-"));
+    zoom_out_button_->SetAccessibleName(u"Zoom out");
+    zoom_out_button_->SetTooltipText(u"Zoom out (Ctrl+-)");
+    zoom_out_button_->SetPreferredSize(gfx::Size(36, 32));
+
+    zoom_reset_button_ =
+        toolbar->AddChildView(std::make_unique<views::MdTextButton>(
+            base::BindRepeating(&OperatorControls::ApplyPageZoom,
+                                base::Unretained(this),
+                                content::PAGE_ZOOM_RESET),
+            u"100%"));
+    zoom_reset_button_->SetTooltipText(u"Reset page zoom (Ctrl+0)");
+    zoom_reset_button_->SetPreferredSize(gfx::Size(64, 32));
+
+    zoom_in_button_ =
+        toolbar->AddChildView(std::make_unique<views::MdTextButton>(
+            base::BindRepeating(&OperatorControls::ApplyPageZoom,
+                                base::Unretained(this), content::PAGE_ZOOM_IN),
+            u"+"));
+    zoom_in_button_->SetAccessibleName(u"Zoom in");
+    zoom_in_button_->SetTooltipText(u"Zoom in (Ctrl++)");
+    zoom_in_button_->SetPreferredSize(gfx::Size(36, 32));
 
     root->AddChildView(std::move(toolbar));
 
@@ -375,6 +418,14 @@ class OperatorControls final : public content::WebContentsObserver,
     RegisterAccelerator(ui::VKEY_C, ui::EF_CONTROL_DOWN);
     RegisterAccelerator(ui::VKEY_V, ui::EF_CONTROL_DOWN);
     RegisterAccelerator(ui::VKEY_X, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_OEM_PLUS, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_OEM_PLUS,
+                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+    RegisterAccelerator(ui::VKEY_ADD, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_OEM_MINUS, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_SUBTRACT, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_0, ui::EF_CONTROL_DOWN);
+    RegisterAccelerator(ui::VKEY_NUMPAD0, ui::EF_CONTROL_DOWN);
     extension_surface_ = std::make_unique<OperatorExtensionSurface>(widget);
     action_refresh_timer_.Start(
         FROM_HERE, base::Seconds(1),
@@ -410,6 +461,23 @@ class OperatorControls final : public content::WebContentsObserver,
   void PrimaryMainFrameRenderProcessGone(base::TerminationStatus) override {
     renderer_failed_ = true;
     UpdateState();
+  }
+
+  // zoom::ZoomObserver:
+  void OnZoomChanged(
+      const zoom::ZoomController::ZoomChangedEventData& data) override {
+    if (data.web_contents == web_contents()) {
+      UpdateZoomControls();
+    }
+  }
+
+  void OnZoomControllerDestroyed(
+      zoom::ZoomController* zoom_controller) override {
+    if (zoom_controller_ == zoom_controller) {
+      zoom_controller_->RemoveObserver(this);
+      zoom_controller_ = nullptr;
+      UpdateZoomControls();
+    }
   }
 
   // views::TextfieldController:
@@ -460,6 +528,9 @@ class OperatorControls final : public content::WebContentsObserver,
     forward_button_ = nullptr;
     reload_stop_button_ = nullptr;
     address_ = nullptr;
+    zoom_out_button_ = nullptr;
+    zoom_reset_button_ = nullptr;
+    zoom_in_button_ = nullptr;
     origin_label_ = nullptr;
     extension_status_label_ = nullptr;
     action_buttons_.clear();
@@ -494,6 +565,29 @@ class OperatorControls final : public content::WebContentsObserver,
     }
     if (accelerator == ui::Accelerator(ui::VKEY_RIGHT, ui::EF_ALT_DOWN)) {
       GoForward();
+      return true;
+    }
+    if (accelerator ==
+            ui::Accelerator(ui::VKEY_OEM_PLUS, ui::EF_CONTROL_DOWN) ||
+        accelerator == ui::Accelerator(
+                           ui::VKEY_OEM_PLUS,
+                           ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN) ||
+        accelerator ==
+            ui::Accelerator(ui::VKEY_ADD, ui::EF_CONTROL_DOWN)) {
+      ApplyPageZoom(content::PAGE_ZOOM_IN);
+      return true;
+    }
+    if (accelerator ==
+            ui::Accelerator(ui::VKEY_OEM_MINUS, ui::EF_CONTROL_DOWN) ||
+        accelerator ==
+            ui::Accelerator(ui::VKEY_SUBTRACT, ui::EF_CONTROL_DOWN)) {
+      ApplyPageZoom(content::PAGE_ZOOM_OUT);
+      return true;
+    }
+    if (accelerator == ui::Accelerator(ui::VKEY_0, ui::EF_CONTROL_DOWN) ||
+        accelerator ==
+            ui::Accelerator(ui::VKEY_NUMPAD0, ui::EF_CONTROL_DOWN)) {
+      ApplyPageZoom(content::PAGE_ZOOM_RESET);
       return true;
     }
     if (address_->HasFocus() && accelerator.IsCtrlDown()) {
@@ -629,6 +723,54 @@ class OperatorControls final : public content::WebContentsObserver,
                                         this);
   }
 
+  void ApplyPageZoom(content::PageZoom operation) {
+    if (web_contents() && zoom_controller_) {
+      zoom::PageZoom::Zoom(web_contents(), operation);
+    }
+    // PageZoom notifies observers synchronously after a successful change,
+    // but an at-bound or unavailable command is still browser-owned and must
+    // refresh/consume rather than leaking to page script.
+    UpdateZoomControls();
+    LOG(INFO) << "CARBONYL_OPERATOR_ZOOM operation="
+              << static_cast<int>(operation) << " percent="
+              << (zoom_controller_ ? zoom_controller_->GetZoomPercent() : 0);
+  }
+
+  void UpdateZoomControls() {
+    if (!zoom_out_button_ || !zoom_reset_button_ || !zoom_in_button_) {
+      return;
+    }
+    const bool available = zoom_controller_ && web_contents() &&
+                           !renderer_failed_ &&
+                           zoom_controller_->zoom_mode() !=
+                               zoom::ZoomController::ZOOM_MODE_DISABLED;
+    if (!available) {
+      zoom_out_button_->SetEnabled(false);
+      zoom_reset_button_->SetEnabled(false);
+      zoom_reset_button_->SetText(u"Zoom");
+      zoom_reset_button_->SetAccessibleName(u"Page zoom unavailable");
+      zoom_in_button_->SetEnabled(false);
+      return;
+    }
+
+    const int percent = zoom_controller_->GetZoomPercent();
+    const std::u16string percent_text =
+        base::UTF8ToUTF16(base::NumberToString(percent) + "%");
+    zoom_reset_button_->SetText(percent_text);
+    zoom_reset_button_->SetAccessibleName(
+        u"Reset page zoom, current zoom " +
+        base::UTF8ToUTF16(base::NumberToString(percent)) + u" percent");
+
+    const double current_level = zoom_controller_->GetZoomLevel();
+    const std::vector<double> levels = zoom::PageZoom::PresetZoomLevels(
+        zoom_controller_->GetDefaultZoomLevel());
+    zoom_out_button_->SetEnabled(!levels.empty() &&
+                                 current_level > levels.front());
+    zoom_reset_button_->SetEnabled(!zoom_controller_->IsAtDefaultZoom());
+    zoom_in_button_->SetEnabled(!levels.empty() &&
+                                current_level < levels.back());
+  }
+
   void GoBack() {
     if (web_contents() && web_contents()->GetController().CanGoBack()) {
       std::ignore = web_contents()->GetController().GoBack();
@@ -706,6 +848,7 @@ class OperatorControls final : public content::WebContentsObserver,
     forward_button_->SetEnabled(controller.CanGoForward());
     reload_stop_button_->SetText(web_contents()->IsLoading() ? u"Stop"
                                                              : u"Reload");
+    UpdateZoomControls();
 
     content::NavigationEntry* entry = controller.GetLastCommittedEntry();
     if (!entry) {
@@ -763,9 +906,13 @@ class OperatorControls final : public content::WebContentsObserver,
   raw_ptr<views::MdTextButton> forward_button_ = nullptr;
   raw_ptr<views::MdTextButton> reload_stop_button_ = nullptr;
   raw_ptr<views::Textfield> address_ = nullptr;
+  raw_ptr<views::MdTextButton> zoom_out_button_ = nullptr;
+  raw_ptr<views::MdTextButton> zoom_reset_button_ = nullptr;
+  raw_ptr<views::MdTextButton> zoom_in_button_ = nullptr;
   raw_ptr<views::Label> origin_label_ = nullptr;
   raw_ptr<views::Label> extension_status_label_ = nullptr;
   raw_ptr<views::FocusManager> focus_manager_ = nullptr;
+  raw_ptr<zoom::ZoomController> zoom_controller_ = nullptr;
   std::vector<std::pair<std::string, raw_ptr<views::MdTextButton>>>
       action_buttons_;
   std::vector<std::pair<std::string, raw_ptr<views::MdTextButton>>>

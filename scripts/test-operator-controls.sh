@@ -168,6 +168,28 @@ load_stop_count() {
         "$TERM_LOG" | wc -l || true
 }
 
+zoom_event_count() {
+    grep -aoE 'CARBONYL_OPERATOR_ZOOM operation=[0-9]+ percent=[0-9]+' \
+        "$TERM_LOG" | wc -l || true
+}
+
+wait_for_zoom_percent_after() {
+    local before=$1 expected=$2 label=$3 after=$1 latest=""
+    for _ in $(seq 1 100); do
+        after="$(zoom_event_count)"
+        latest="$(grep -aoE \
+            'CARBONYL_OPERATOR_ZOOM operation=[0-9]+ percent=[0-9]+' \
+            "$TERM_LOG" | tail -1 || true)"
+        if [ "$after" -gt "$before" ] &&
+            [[ "$latest" == *"percent=$expected" ]]; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    echo "FAIL: $label did not report page zoom $expected% (latest: $latest)"
+    return 1
+}
+
 wait_for_load_stop_after() {
     local before=$1 label=$2 after=$1
     for _ in $(seq 1 100); do
@@ -182,6 +204,49 @@ wait_for_load_stop_after() {
 wait_for_color 17 204 68 "page one"
 grep -q "security=Local - $BASE_URL" "$TERM_LOG" || {
     echo "FAIL: trustworthy local-origin state missing"; exit 1; }
+
+# Browser-owned page zoom supports the main-row/shifted/keypad families and is
+# consumed before the page key recorder. Reset restores Chromium's default.
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+equal
+wait_for_zoom_percent_after "$zoom_before" 110 "Ctrl+equal zoom in"
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+0
+wait_for_zoom_percent_after "$zoom_before" 100 "Ctrl+0 zoom reset"
+
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+plus
+wait_for_zoom_percent_after "$zoom_before" 110 "Ctrl+plus zoom in"
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+minus
+wait_for_zoom_percent_after "$zoom_before" 100 "Ctrl+minus zoom out"
+
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+KP_Add
+wait_for_zoom_percent_after "$zoom_before" 110 "keypad zoom in"
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+KP_Subtract
+wait_for_zoom_percent_after "$zoom_before" 100 "keypad zoom out"
+
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+KP_Add
+wait_for_zoom_percent_after "$zoom_before" 110 "keypad zoom before reset"
+zoom_before="$(zoom_event_count)"
+xdotool key ctrl+KP_0
+wait_for_zoom_percent_after "$zoom_before" 100 "keypad zoom reset"
+
+# The rightmost '+' button and adjacent percentage/reset control remain stable
+# pointer targets while the address field flexes with the window.
+operator_width="$(xdotool getwindowgeometry --shell "$WINDOW_ID" |
+    awk -F= '$1 == "WIDTH" { print $2; exit }')"
+[ -n "$operator_width" ] || {
+    echo "FAIL: operator window width unavailable"; exit 1; }
+zoom_before="$(zoom_event_count)"
+xdotool mousemove --sync --window "$WINDOW_ID" "$((operator_width - 24))" 20 click 1
+wait_for_zoom_percent_after "$zoom_before" 110 "pointer zoom in"
+zoom_before="$(zoom_event_count)"
+xdotool mousemove --sync --window "$WINDOW_ID" "$((operator_width - 78))" 20 click 1
+wait_for_zoom_percent_after "$zoom_before" 100 "pointer zoom reset"
 
 # Address submission and redirect synchronization.
 redirect_stopped_before="$(load_stop_count)"
@@ -352,4 +417,4 @@ grep -q 'CARBONYL_STORAGE_FLUSH_RESULT=.*"result":"complete"' "$TERM_LOG" || {
     echo "FAIL: native close did not complete the storage flush"
     exit 1
 }
-echo "PASS: operator controls, history, redirect, origin, focus, and stop"
+echo "PASS: operator controls, zoom, history, redirect, origin, focus, and stop"

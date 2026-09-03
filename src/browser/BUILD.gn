@@ -153,6 +153,7 @@ component("operator_window") {
     deps += [
       "//carbonyl/src/extensions:browser_client",
       "//components/url_formatter",
+      "//components/zoom",
       "//net",
       "//ui/aura",
       "//ui/views",

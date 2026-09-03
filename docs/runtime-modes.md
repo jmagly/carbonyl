@@ -206,7 +206,8 @@ UI message pump required by this explicit mode.
 ### Carbonyl-owned browser controls
 
 Operator mode places native Carbonyl controls above the page-owned WebView.
-The first row provides Back, Forward, Reload/Stop, and an address/search field;
+The first row provides Back, Forward, Reload/Stop, an address/search field, and
+compact page-zoom controls (`-`, the current percentage/reset, and `+`);
 the second row displays the committed origin and a conservative security
 classification. Because both rows are separate Views children rather than a
 page overlay, page content cannot paint over or supply text shown in the
@@ -231,11 +232,19 @@ Native operator shortcuts are:
 - `Ctrl+L`: focus and select the address field
 - `Alt+Left` / `Alt+Right`: history back / forward
 - `Ctrl+R` or `F5`: activate Reload/Stop
+- `Ctrl++` / `Ctrl+-`: step through Chromium's preset page-zoom levels
+- `Ctrl+0`: reset page zoom to Chromium's configured/default level
 
 They are registered at the high-priority Views accelerator tier specifically
 so a consumed browser command is not also delivered to page script. These
 shortcuts apply only while the native operator widget has focus. Terminal-mode
 navigation and inspection bindings remain on the PTY path and are unchanged.
+
+Interactive page zoom scales the active page rendered into both the native
+window and terminal output. It does not alter the startup `--zoom` terminal
+layout factor, CSS viewport, device scale, native bounds, or terminal cell
+geometry. The on-screen percentage is also a reset button for pointer and
+keyboard users who do not want to rely on shortcut key combinations.
 
 `scripts/test-operator-controls.sh` exercises these controls only when
 `CARBONYL_UI_TEST_GUEST=1` is explicitly set inside the disposable Ubuntu
