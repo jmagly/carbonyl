@@ -47,6 +47,8 @@ WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/carbonyl-controls-test.XXXXXX")"
 SERVER_LOG="$WORK_DIR/server.log"
 TERM_LOG="$WORK_DIR/terminal.log"
 FRAME_PNG="$WORK_DIR/frame.png"
+: >"$SERVER_LOG"
+: >"$TERM_LOG"
 
 cleanup() {
     if [ -n "${XCLIP_PID:-}" ]; then
@@ -66,6 +68,14 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+
+mapfile -t PREEXISTING_WINDOWS < <(
+    {
+        xdotool search --name '^Carbonyl(OperatorWindow)?$'
+        xdotool search --class '^carbonyl$'
+        xdotool search --classname '^Carbonyl$'
+    } 2>/dev/null | awk '!seen[$0]++' || true
+)
 
 python3 tests/fixtures/operator-controls-server.py >"$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
@@ -106,6 +116,11 @@ for _ in $(seq 1 150); do
         } 2>/dev/null | awk '!seen[$0]++' || true
     )
     for candidate in "${window_candidates[@]}"; do
+        for existing in "${PREEXISTING_WINDOWS[@]}"; do
+            if [ "$candidate" = "$existing" ]; then
+                continue 2
+            fi
+        done
         if xdotool getwindowgeometry "$candidate" >/dev/null 2>&1; then
             WINDOW_ID="$candidate"
             break
@@ -132,12 +147,96 @@ from PIL import Image
 path, red, green, blue, minimum = sys.argv[1:]
 target = (int(red), int(green), int(blue))
 image = Image.open(path).convert("RGB")
-count = sum(
-    1 for color in image.getdata()
-    if all(abs(actual - expected) <= 3
-           for actual, expected in zip(color, target))
-)
+count = sum(count for count, color in image.getcolors(
+    maxcolors=image.width * image.height
+) if all(abs(actual - expected) <= 3
+         for actual, expected in zip(color, target)))
 raise SystemExit(0 if count >= int(minimum) else 1)
+PY
+}
+
+send_ctrl_key() {
+    # xdotool may synthesize unrelated modifiers for keypad keysyms under the
+    # minimal Xorg keymap. Resolve and inject the physical X11 keycodes so the
+    # acceptance path matches a real Ctrl+key chord without sticky modifiers.
+    python3 - "$DISPLAY" "$1" <<'PY'
+import ctypes
+import sys
+
+display_name, target_name = sys.argv[1:]
+x11 = ctypes.CDLL("libX11.so.6")
+xtst = ctypes.CDLL("libXtst.so.6")
+x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+x11.XOpenDisplay.restype = ctypes.c_void_p
+x11.XStringToKeysym.argtypes = [ctypes.c_char_p]
+x11.XStringToKeysym.restype = ctypes.c_ulong
+x11.XKeysymToKeycode.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+x11.XKeysymToKeycode.restype = ctypes.c_uint
+x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+x11.XDefaultRootWindow.restype = ctypes.c_ulong
+x11.XQueryPointer.argtypes = [
+    ctypes.c_void_p, ctypes.c_ulong,
+    ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong),
+    ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+    ctypes.POINTER(ctypes.c_uint),
+]
+x11.XQueryPointer.restype = ctypes.c_int
+x11.XFlush.argtypes = [ctypes.c_void_p]
+x11.XFlush.restype = ctypes.c_int
+x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+x11.XCloseDisplay.restype = ctypes.c_int
+xtst.XTestFakeKeyEvent.argtypes = [
+    ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong
+]
+
+display = x11.XOpenDisplay(display_name.encode())
+if not display:
+    raise SystemExit(f"cannot open X display {display_name}")
+control = x11.XKeysymToKeycode(display, x11.XStringToKeysym(b"Control_L"))
+target = x11.XKeysymToKeycode(
+    display, x11.XStringToKeysym(target_name.encode())
+)
+if not control or not target:
+    raise SystemExit(f"cannot resolve X11 keycode for {target_name}")
+
+events = []
+restore_num_lock = False
+if target_name == "KP_0":
+    root = x11.XDefaultRootWindow(display)
+    root_return = ctypes.c_ulong()
+    child_return = ctypes.c_ulong()
+    root_x = ctypes.c_int()
+    root_y = ctypes.c_int()
+    win_x = ctypes.c_int()
+    win_y = ctypes.c_int()
+    modifier_mask = ctypes.c_uint()
+    if not x11.XQueryPointer(
+        display, root, ctypes.byref(root_return), ctypes.byref(child_return),
+        ctypes.byref(root_x), ctypes.byref(root_y), ctypes.byref(win_x),
+        ctypes.byref(win_y), ctypes.byref(modifier_mask)
+    ):
+        raise SystemExit("cannot query X11 modifier state")
+    # NumLock is the X11 Mod2 mask in the guest keymap. Enable it only when
+    # needed so KP_0 is delivered as KP_0 instead of KP_Insert, then restore it.
+    if not modifier_mask.value & (1 << 4):
+        num_lock = x11.XKeysymToKeycode(
+            display, x11.XStringToKeysym(b"Num_Lock")
+        )
+        if not num_lock:
+            raise SystemExit("cannot resolve X11 keycode for Num_Lock")
+        events.extend(((num_lock, True), (num_lock, False)))
+        restore_num_lock = True
+
+events.extend(((control, True), (target, True), (target, False),
+               (control, False)))
+if restore_num_lock:
+    events.extend(((num_lock, True), (num_lock, False)))
+for keycode, pressed in events:
+    if not xtst.XTestFakeKeyEvent(display, keycode, pressed, 0):
+        raise SystemExit(f"failed to inject X11 keycode {keycode}")
+x11.XFlush(display)
+x11.XCloseDisplay(display)
 PY
 }
 
@@ -168,17 +267,17 @@ load_stop_count() {
         "$TERM_LOG" | wc -l || true
 }
 
-zoom_event_count() {
-    grep -aoE 'CARBONYL_OPERATOR_ZOOM operation=[0-9]+ percent=[0-9]+' \
+zoom_state_count() {
+    grep -aoE 'CARBONYL_OPERATOR_ZOOM_STATE percent=[0-9]+' \
         "$TERM_LOG" | wc -l || true
 }
 
 wait_for_zoom_percent_after() {
     local before=$1 expected=$2 label=$3 after=$1 latest=""
     for _ in $(seq 1 100); do
-        after="$(zoom_event_count)"
+        after="$(zoom_state_count)"
         latest="$(grep -aoE \
-            'CARBONYL_OPERATOR_ZOOM operation=[0-9]+ percent=[0-9]+' \
+            'CARBONYL_OPERATOR_ZOOM_STATE percent=[0-9]+' \
             "$TERM_LOG" | tail -1 || true)"
         if [ "$after" -gt "$before" ] &&
             [[ "$latest" == *"percent=$expected" ]]; then
@@ -207,32 +306,32 @@ grep -q "security=Local - $BASE_URL" "$TERM_LOG" || {
 
 # Browser-owned page zoom supports the main-row/shifted/keypad families and is
 # consumed before the page key recorder. Reset restores Chromium's default.
-zoom_before="$(zoom_event_count)"
+zoom_before="$(zoom_state_count)"
 xdotool key ctrl+equal
 wait_for_zoom_percent_after "$zoom_before" 110 "Ctrl+equal zoom in"
-zoom_before="$(zoom_event_count)"
+zoom_before="$(zoom_state_count)"
 xdotool key ctrl+0
 wait_for_zoom_percent_after "$zoom_before" 100 "Ctrl+0 zoom reset"
 
-zoom_before="$(zoom_event_count)"
+zoom_before="$(zoom_state_count)"
 xdotool key ctrl+plus
 wait_for_zoom_percent_after "$zoom_before" 110 "Ctrl+plus zoom in"
-zoom_before="$(zoom_event_count)"
+zoom_before="$(zoom_state_count)"
 xdotool key ctrl+minus
 wait_for_zoom_percent_after "$zoom_before" 100 "Ctrl+minus zoom out"
 
-zoom_before="$(zoom_event_count)"
-xdotool key ctrl+KP_Add
+zoom_before="$(zoom_state_count)"
+send_ctrl_key KP_Add
 wait_for_zoom_percent_after "$zoom_before" 110 "keypad zoom in"
-zoom_before="$(zoom_event_count)"
-xdotool key ctrl+KP_Subtract
+zoom_before="$(zoom_state_count)"
+send_ctrl_key KP_Subtract
 wait_for_zoom_percent_after "$zoom_before" 100 "keypad zoom out"
 
-zoom_before="$(zoom_event_count)"
-xdotool key ctrl+KP_Add
+zoom_before="$(zoom_state_count)"
+send_ctrl_key KP_Add
 wait_for_zoom_percent_after "$zoom_before" 110 "keypad zoom before reset"
-zoom_before="$(zoom_event_count)"
-xdotool key ctrl+KP_0
+zoom_before="$(zoom_state_count)"
+send_ctrl_key KP_0
 wait_for_zoom_percent_after "$zoom_before" 100 "keypad zoom reset"
 
 # The rightmost '+' button and adjacent percentage/reset control remain stable
@@ -241,10 +340,10 @@ operator_width="$(xdotool getwindowgeometry --shell "$WINDOW_ID" |
     awk -F= '$1 == "WIDTH" { print $2; exit }')"
 [ -n "$operator_width" ] || {
     echo "FAIL: operator window width unavailable"; exit 1; }
-zoom_before="$(zoom_event_count)"
+zoom_before="$(zoom_state_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" "$((operator_width - 24))" 20 click 1
 wait_for_zoom_percent_after "$zoom_before" 110 "pointer zoom in"
-zoom_before="$(zoom_event_count)"
+zoom_before="$(zoom_state_count)"
 xdotool mousemove --sync --window "$WINDOW_ID" "$((operator_width - 78))" 20 click 1
 wait_for_zoom_percent_after "$zoom_before" 100 "pointer zoom reset"
 # Pointer activation must not move focus away from the page's active input.

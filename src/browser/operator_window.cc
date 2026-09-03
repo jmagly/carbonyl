@@ -472,6 +472,8 @@ class OperatorControls final : public content::WebContentsObserver,
       const zoom::ZoomController::ZoomChangedEventData& data) override {
     if (data.web_contents == web_contents()) {
       UpdateZoomControls();
+      LOG(INFO) << "CARBONYL_OPERATOR_ZOOM_STATE percent="
+                << (zoom_controller_ ? zoom_controller_->GetZoomPercent() : 0);
     }
   }
 
