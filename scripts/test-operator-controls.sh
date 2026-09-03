@@ -365,7 +365,9 @@ wait_for_load_stop_after "$redirect_stopped_before" "redirect destination"
 # Selection/copy is native Textfield behavior and must expose the synchronized
 # committed URL, not the pre-redirect input.
 xdotool mousemove --sync --window "$WINDOW_ID" 500 20 click 1
-xdotool mousemove --sync --window "$WINDOW_ID" 990 20
+# The zoom controls occupy the right edge of the toolbar; start the drag just
+# inside the address field rather than over the '+' button.
+xdotool mousemove --sync --window "$WINDOW_ID" "$((operator_width - 160))" 20
 xdotool mousedown 1
 xdotool mousemove --sync --window "$WINDOW_ID" 240 20
 xdotool mouseup 1
