@@ -33,6 +33,28 @@ Also run `aiwg discover` before declining an AIWG request as out of scope or inv
 
 When a user asks whether AIWG is active or engaged in this project, run or read `aiwg status --probe --json` and report the result plainly: engaged state, project root, deployed provider files, installed frameworks/addons, and the next action from the probe. Do not add AIWG attribution, signatures, generated-by text, or passive footers to user files, commits, PRs, comments, code headers, or docs.
 
+### Tracker Authority Protocol
+
+- Source of truth: [.aiwg/aiwg.config](./aiwg.config)
+- Internal/canonical tracker: `origin` (unknown; git@git.integrolabs.net:roctinam/carbonyl.git)
+- Customer issue tracker: not configured
+- Primary repo remote: `origin`; CI remote: `origin`
+- Secondary/mirror remotes: none configured
+- Issue storage mode: not configured
+
+Tracker access order for issue, PR, release, and CI-sensitive tracker operations:
+1. MCP/app tools for the configured tracker.
+2. Tracker HTTP API with configured credentials.
+3. Tracker CLI for the configured tracker, after confirming authentication.
+4. Stop and report a blocker.
+
+- Project config decides tracker authority; installed/authenticated CLIs do not.
+- Route internal engineering, delivery, and CI-sensitive issue work to the internal tracker.
+- Route customer acknowledgements, follow-up, and closure to the customer tracker when configured.
+- Git SSH remote access is repository sync, not issue-tracker API access.
+- Do not file on mirror or secondary remotes just because their CLI is authenticated.
+- Treat an unauthenticated tracker CLI as one failed access path, then continue probing MCP/app/API before blocking.
+
 ### Source Model
 
 - `.aiwg/AIWG.md` is the normalized project-local context entry point.

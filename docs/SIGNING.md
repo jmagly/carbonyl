@@ -1,4 +1,37 @@
-# Carbonyl release signing
+# Carbonyl commit and release signing
+
+## Commit signing policy
+
+Every repository commit must be OpenPGP-signed with Joseph Magly's maintainer
+commit-signing key. Unsigned commits and signatures made with bot, release, or
+other project keys do not satisfy this policy.
+
+| Field | Value |
+|-------|-------|
+| Git author | Joseph Magly |
+| Email | `1159087+jmagly@users.noreply.github.com` |
+| Algorithm | ed25519 |
+| Fingerprint | `6229 7562 B1C7 0530 88F4 05DB 0117 DAAA 677A 5BF2` |
+| Key ID (long) | `0117DAAA677A5BF2` |
+
+The repository must have `commit.gpgsign=true` and `user.signingkey` set to the
+full fingerprint above. Agents and maintainers must stop before committing if
+the key or configured signing bridge is unavailable; `--no-gpg-sign` is not an
+acceptable fallback.
+
+Verify configuration and the resulting commit before delivery:
+
+```bash
+git config --get commit.gpgsign
+git config --get user.signingkey
+git verify-commit HEAD
+git log -1 --show-signature
+```
+
+This maintainer key signs git commits. Release artifacts use the separate key
+documented below; neither key may be silently substituted for the other.
+
+## Release artifact signing
 
 Carbonyl release artifacts are GPG-signed with a **dedicated release key** (separate
 from the maintainer's git-commit key). This file is the authoritative record of which
