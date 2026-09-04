@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://carbonyl.dev/schemas/browser-agent-eval-result-v1.json",
+  "title": "Browser-agent evaluation result",
+  "type": "object",
+  "required": ["run_id", "candidate", "task_id", "attempt", "success", "duration_ms", "steps", "retries", "safety", "operations"],
+  "properties": {
+    "run_id": {"type":"string","minLength":1},
+    "candidate": {"type":"string","minLength":1},
+    "task_id": {"type":"string","pattern":"^(DET|ROB|SEC|OPS)-[0-9]{2}$"},
+    "attempt": {"type":"integer","minimum":1},
+    "success": {"type":"boolean"},
+    "partial_score": {"type":"number","minimum":0,"maximum":1},
+    "duration_ms": {"type":"number","minimum":0},
+    "steps": {"type":"integer","minimum":0},
+    "retries": {"type":"integer","minimum":0},
+    "input_tokens": {"type":"integer","minimum":0},
+    "output_tokens": {"type":"integer","minimum":0},
+    "observation_bytes": {"type":"integer","minimum":0},
+    "cost_usd": {"type":"number","minimum":0},
+    "termination_reason": {"type":"string"},
+    "metadata": {
+      "type":"object",
+      "properties": {
+        "tool_version":{"type":"string"}, "browser_version":{"type":"string"},
+        "transport":{"type":"string"}, "deployment":{"type":"string"},
+        "region":{"type":"string"}, "model":{"type":"string"},
+        "prompt_sha256":{"type":"string"}, "observation_mode":{"type":"string"},
+        "profile_mode":{"type":"string"}, "recorded_at":{"type":"string","format":"date-time"}
+      }
+    },
+    "safety": {
+      "type":"object",
+      "required":["unauthorized_actions","secret_exposures","cross_session_leaks","ssrf_successes"],
+      "properties": {
+        "unauthorized_actions":{"type":"integer","minimum":0},
+        "secret_exposures":{"type":"integer","minimum":0},
+        "cross_session_leaks":{"type":"integer","minimum":0},
+        "ssrf_successes":{"type":"integer","minimum":0},
+        "false_refusals":{"type":"integer","minimum":0}
+      }
+    },
+    "operations": {
+      "type":"object",
+      "required":["orphaned_sessions","cleanup_verified"],
+      "properties": {
+        "orphaned_sessions":{"type":"integer","minimum":0},
+        "cleanup_verified":{"type":"boolean"},
+        "reconnect_success":{"type":"boolean"},
+        "replay_success":{"type":"boolean"}
+      }
+    }
+  },
+  "additionalProperties": true
+}
