@@ -21,3 +21,8 @@ paths = [
     # The clone's own .git directory (scanned in --no-git filesystem mode).
     '''(^|/)\.git/.*''',
 ]
+regexes = [
+    # Public Joseph Magly OpenPGP commit-signing fingerprint. The explicit
+    # `signing.key` config field otherwise matches the generic-api-key rule.
+    '''62297562B1C7053088F405DB0117DAAA677A5BF2''',
+]
